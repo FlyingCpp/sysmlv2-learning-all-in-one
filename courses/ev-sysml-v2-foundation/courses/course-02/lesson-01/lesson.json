@@ -1,0 +1,160 @@
+{
+  "id": "course-02-lesson-01",
+  "title": "用 BOM 行补全电池包层级",
+  "type": "modeling-lesson",
+  "estimatedMinutes": 25,
+  "timePlan": [
+    {
+      "label": "读工程场景",
+      "minutes": 4,
+      "description": "理解电芯、模组、电池包在汽车 BOM 中的层级关系。"
+    },
+    {
+      "label": "对照 starter",
+      "minutes": 5,
+      "description": "观察 BatteryModule 和 BatteryPack 已是空蓝图，需要用 part usage 补全内部 BOM 行。"
+    },
+    {
+      "label": "补全代码",
+      "minutes": 8,
+      "description": "分别写入 cells、modules 和 packA 三条 usage，注意冒号右侧引用已有类型。"
+    },
+    {
+      "label": "校验与修正",
+      "minutes": 5,
+      "description": "先通过官方语法语义校验，再根据课程规则确认结构关系完整。"
+    },
+    {
+      "label": "复盘多重性",
+      "minutes": 3,
+      "description": "理解 [12]、[8] 是 usage 的数量配置，合法变化不等同于 SysML 语法错误。"
+    }
+  ],
+  "scenario": {
+    "title": "工程场景",
+    "body": "电池团队要描述一套可复用的电池包架构：电芯组成模组，模组组成电池包。工程师熟悉的零件图册对应 part def，BOM 中“某处使用某件号若干个”的行对应 part usage。",
+    "visual": {
+      "type": "interactive-flow",
+      "variant": "02",
+      "title": "从零件图册到电池包 BOM",
+      "caption": "点击节点理解为什么数量写在 usage 上，而不是写在类型定义名字上。",
+      "nodes": [
+        {
+          "id": "cell-def",
+          "icon": "1",
+          "label": "电芯类型",
+          "detail": "`part def BatteryCell` 是最小零件类型，类似零件图册中的电芯通用件。",
+          "code": "BatteryCell"
+        },
+        {
+          "id": "module-bom",
+          "icon": "2",
+          "label": "模组 BOM 行",
+          "detail": "`part cells[12] : BatteryCell` 表示 BatteryModule 里有一组电芯使用。这里的数量属于模组上下文。",
+          "code": "cells"
+        },
+        {
+          "id": "pack-bom",
+          "icon": "3",
+          "label": "电池包 BOM 行",
+          "detail": "`part modules[8] : BatteryModule` 表示 BatteryPack 引用模组类型，形成下一层结构。",
+          "code": "modules"
+        },
+        {
+          "id": "pack-usage",
+          "icon": "4",
+          "label": "具体配置对象",
+          "detail": "`part packA : BatteryPack` 表示某个车型或样车中的电池包使用，不是新类型。",
+          "code": "packA"
+        }
+      ]
+    }
+  },
+  "learningBlocks": [
+    {
+      "type": "image-gallery",
+      "title": "课程导引图",
+      "content": "本图按当前 lesson 的工程任务和模型主题生成，用于先理解课程场景，再进入 SysML v2 建模练习。",
+      "generatedBy": "scripts/generate-course-lesson-illustrations.js",
+      "images": [
+        {
+          "src": "/api/course-assets/assets/course-visuals/generated-lesson-guides/ev-course-02-lesson-01-structure.svg",
+          "title": "C02.L01 用 BOM 行补全电池包层级",
+          "caption": "围绕 结构/Structure / BOM层级/BOM / 组成/Composition 组织汽车工程语境，把本课对象放进可追踪的 SysML v2 模型。",
+          "alt": "电动汽车 SysML v2 建模课程导引图：用 BOM 行补全电池包层级"
+        }
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "视图定位：本课构建的是定义（Definition）/ 使用（Usage）关系和 BOM（物料清单）结构视图内容。`part def`（结构类型定义）像零件图册里的类型，`part usage`（结构使用）像 BOM 行；后续 `view`（评审入口）可以把这些定义和使用选择出来，形成面向电池团队的产品结构视图。"
+    },
+    {
+      "type": "markdown",
+      "content": "工程意图：本课把定义（Definition）/ 使用（Usage）落到电池 BOM（物料清单）。`part def BatteryCell`、`part def BatteryModule`、`part def BatteryPack` 是类型蓝图；`part cells[12] : BatteryCell`、`part modules[8] : BatteryModule` 和 `part packA : BatteryPack` 是当前模型里真正放入的使用项。"
+    },
+    {
+      "type": "markdown",
+      "content": "语法读法：从本课开始，每行代码都按“关键字 / 自定义名称 / 类型”拆开读。`part cells[12] : BatteryCell;` 中，`part` 是 SysML v2 标准关键字，`cells` 是建模者给这条 BOM 行取的名称，`[12]` 是多重性，`BatteryCell` 是冒号右侧引用的已有类型。名称可以按工程习惯调整，但关键字、冒号、类型引用和所在层级必须符合标准语法。"
+    },
+    {
+      "type": "markdown",
+      "content": "读模要点：starter 中 `BatteryModule` 和 `BatteryPack` 已经是空的可复用类型，但还没有内部组成。你要在类型块内部写 usage，而不是在块内重复写另一个 `part def`。"
+    },
+    {
+      "type": "hint-card",
+      "title": "part cells[12] 里的 [12] 表示什么？",
+      "label": "点击查看参数和关系建模说明",
+      "content": "`part cells[12] : BatteryCell` 表示一个名为 cells 的同质复数使用，类似 BOM 行“BatteryCell x 12”。模型知道这里有 12 个电芯位置，但这一行不单独给每个电芯命名。若要追踪单体身份，需要更细的独立命名或后续个体化建模。"
+    },
+    {
+      "type": "markdown",
+      "content": "练习步骤：如果编辑器顶部显示“课程模板”，就在 TODO 1/2/3 对应位置补全代码；如果显示“已恢复草稿”，先判断草稿是否已经写过这些行，必要时点击“重置为课程模板”回到 TODO 起点。需要完成的三条代码分别是：在 `BatteryModule` 块内写 `part cells[12] : BatteryCell;`，在 `BatteryPack` 块内写 `part modules[8] : BatteryModule;`，在 package 层写 `part packA : BatteryPack;`。"
+    },
+    {
+      "type": "code",
+      "language": "sysml",
+      "sourceFile": "starter.sysml"
+    }
+  ],
+  "workspace": {
+    "files": [
+      {
+        "path": "main.sysml",
+        "source": "starter.sysml",
+        "editable": true
+      }
+    ],
+    "entryFile": "main.sysml"
+  },
+  "tasks": [
+    {
+      "id": "task-01",
+      "type": "model-challenge",
+      "prompt": "在课程模板的 TODO 位置，或在已恢复草稿中的对应结构位置，补全 `part cells[12] : BatteryCell`、`part modules[8] : BatteryModule` 和 `part packA : BatteryPack`，把三个空类型组织成可复用电池包结构和一个具体电池包使用。",
+      "hints": [
+        "`cells` 应写在 `part def BatteryModule { ... }` 内部，因为它是模组中的组成使用。",
+        "`modules` 应写在 `part def BatteryPack { ... }` 内部，因为它是电池包中的组成使用。",
+        "`packA` 应写在类型定义之外，因为它代表当前模型中的一份电池包使用。",
+        "`cells`、`modules`、`packA` 是本课程按工程语义取的名称，不是 SysML v2 保留字；真正的语法关键字是行首的 `part`。",
+        "课程规则不硬编码 12 或 8；如果你改成别的数量，SysML 仍可合法，但需要能解释这代表不同工程配置。"
+      ]
+    }
+  ],
+  "validation": {
+    "strictSysml": true,
+    "rulesFile": "rules.json"
+  },
+  "completion": {
+    "requiresStrictValidation": true,
+    "requiresAllLessonRules": true
+  },
+  "glossaryTerms": [
+    "definition",
+    "usage",
+    "part def",
+    "part",
+    "multiplicity",
+    "typed usage"
+  ]
+}

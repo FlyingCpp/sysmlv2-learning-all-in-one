@@ -1,0 +1,90 @@
+{
+  "id": "course-09-lesson-02",
+  "title": "验证成熟度 2：执行、处理并独立判定",
+  "type": "modeling-lesson",
+  "estimatedMinutes": 55,
+  "timePlan": [
+    { "label": "冻结证据来源", "minutes": 10, "description": "确认 480 需求、490 预测和 488 道路观测来自不同对象。" },
+    { "label": "实现执行链", "minutes": 30, "description": "建立 collectData、processData、evaluateData 行为链。" },
+    { "label": "审查 verdict", "minutes": 15, "description": "确认 PassIf 只比较处理后的 measurement 与 requirement。" }
+  ],
+  "scenario": {
+    "title": "工程场景：道路测试证据进入判定",
+    "body": "验证计划已批准，配置 revision 220、样件 7 的道路测试得到 488.0 km。分析预测为 490.0 km，需求阈值为 480.0 km。验证链必须采集、处理并独立评价观测值；预测只作为计划参考，不进入 PassIf 条件。",
+    "visual": {
+      "type": "interactive-flow",
+      "variant": "09-maturity-execution",
+      "title": "验证执行链",
+      "nodes": [
+        { "id": "collect", "label": "采集", "detail": "488 km 道路观测", "code": "collectData" },
+        { "id": "process", "label": "处理", "detail": "可审计 processedRangeKm", "code": "processData" },
+        { "id": "evaluate", "label": "评价", "detail": "processed >= 480", "code": "evaluateData + PassIf" }
+      ]
+    }
+  },
+  "learningBlocks": [
+    {
+      "type": "image-gallery",
+      "title": "课程导引图",
+      "images": [
+        {
+          "src": "/api/course-assets/assets/course-visuals/generated-lesson-guides/ev-course-09-lesson-02-verification.svg",
+          "title": "验证执行",
+          "caption": "从原始道路观测到可追溯 verdict。",
+          "alt": "电动汽车验证执行教学图"
+        }
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "工程意图：`collectData -> processData -> evaluateData` 把测量证据来源、处理和判定显式分开。`executedRangeRoadTest.predictedRangeKm` 绑定 490.0 km 分析预测；`measuredRangeKm` 绑定独立 `rangeRoadTestEvidence.measuredRangeKm = 488.0`。PassIf 只比较 processedRangeKm 与 480.0 km requiredRangeKm。"
+    },
+    {
+      "type": "hint-card",
+      "title": "为什么不能用 prediction 做 PassIf？",
+      "label": "独立性",
+      "content": "预测来自设计参数和分析假设；测量来自配置化样车与道路试验。让预测参与验证判定会造成自证循环，破坏独立性。"
+    },
+    {
+      "type": "hint-card",
+      "title": "processData 只有透传还有价值吗？",
+      "label": "审计接口",
+      "content": "教学示例先建立明确接口；真实项目可在此增加无效样本剔除、单位换算、不确定度或统计处理，同时不改变 collect/evaluate 的责任边界。"
+    },
+    {
+      "type": "markdown",
+      "content": "权威依据：官方 `Verification Case Definition Example.sysml` 使用 collectData、processData、evaluateData、VerdictKind、PassIf 和 case return；VerificationCases 标准库定义 pass/fail/inconclusive/error。"
+    },
+    {
+      "type": "markdown",
+      "content": "练习步骤：在“课程模板”中按 TODO 1 添加 measurement out，按 TODO 2 完成处理输入/输出，按 TODO 3-4 完成评价输入与 VerdictKind out，按 TODO 5 返回 evaluateData.verdict。使用“已恢复草稿”时核对 488 测量未被 490 预测替换；需要恢复时点击“重置为课程模板”。"
+    },
+    { "type": "code", "language": "sysml", "sourceFile": "starter.sysml" }
+  ],
+  "workspace": {
+    "files": [
+      { "path": "ev-program-baseline.sysml", "source": "../../../shared/ev-program-baseline.sysml", "editable": false },
+      { "path": "ev-requirement-baseline.sysml", "source": "../../../shared/c07-requirement-baseline.sysml", "editable": false },
+      { "path": "ev-range-calc-baseline.sysml", "source": "../../../shared/c08-range-calc-baseline.sysml", "editable": false },
+      { "path": "ev-analysis-baseline.sysml", "source": "../../../shared/c08-analysis-baseline.sysml", "editable": false },
+      { "path": "main.sysml", "source": "starter.sysml", "editable": true }
+    ],
+    "entryFile": "main.sysml"
+  },
+  "tasks": [
+    {
+      "id": "task-01",
+      "type": "model-challenge",
+      "prompt": "把 revision 220 样件 7 的 488 km 道路观测组织成采集、处理、评价和返回完整的验证执行证据链。",
+      "hints": [
+        "collectData 的 out 从 RangeRoadTest::measuredRangeKm 取值。",
+        "processData 接收 collectData.measuredRangeKm 并输出 processedRangeKm。",
+        "evaluateData 同时接收 processedRangeKm 与 requiredRangeKm。",
+        "PassIf 条件不要引用 predictedRangeKm。"
+      ]
+    }
+  ],
+  "validation": { "strictSysml": true, "rulesFile": "rules.json" },
+  "completion": { "requiresStrictValidation": true, "requiresAllLessonRules": true },
+  "glossaryTerms": ["collectData", "processData", "evaluateData", "measurement", "VerdictKind", "PassIf"]
+}

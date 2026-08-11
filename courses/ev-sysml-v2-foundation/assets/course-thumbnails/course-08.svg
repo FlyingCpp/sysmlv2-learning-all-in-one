@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 236" role="img" aria-labelledby="t d">
+  <title id="t">Course 08 Analysis constraints and calculations</title>
+  <desc id="d">Engineering parameters flow into calculation and assert constraint evidence.</desc>
+  <rect width="420" height="236" rx="18" fill="#eef6ff"/>
+  <rect x="34" y="50" width="118" height="132" rx="12" fill="#fff" stroke="#b9d4ee"/>
+  <text x="53" y="82" font-family="Segoe UI,Arial" font-size="15" font-weight="800">attributes</text>
+  <text x="52" y="113" font-family="Consolas,monospace" font-size="13">massKg</text><text x="52" y="139" font-family="Consolas,monospace" font-size="13">energy</text><text x="52" y="165" font-family="Consolas,monospace" font-size="13">drag</text>
+  <rect x="196" y="70" width="92" height="70" rx="14" fill="#1769aa"/><text x="220" y="101" font-family="Segoe UI,Arial" font-size="15" fill="#fff" font-weight="800">calc</text><text x="214" y="122" font-family="Segoe UI,Arial" font-size="13" fill="#fff">range</text>
+  <rect x="318" y="76" width="70" height="58" rx="12" fill="#fff" stroke="#b8dfc8"/><text x="334" y="110" font-family="Segoe UI,Arial" font-size="15" font-weight="800">assert</text>
+  <path d="M152 116h44M288 105h30" stroke="#64748b" stroke-width="4" stroke-linecap="round"/>
+  <path d="M204 171h140" stroke="#147a4d" stroke-width="4" stroke-linecap="round" stroke-dasharray="8 7"/>
+</svg>

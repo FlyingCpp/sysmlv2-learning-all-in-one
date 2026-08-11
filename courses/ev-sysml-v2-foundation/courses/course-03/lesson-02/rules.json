@@ -1,0 +1,173 @@
+{
+  "rules": [
+    {
+      "id": "strict-valid",
+      "type": "strictValidationPassed",
+      "severity": "error",
+      "message": "模型必须通过严格 SysML v2 校验。"
+    },
+    {
+      "id": "cell-capacity-baseline",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "BatteryCell",
+        "kind": "attribute",
+        "name": "capacityAh",
+        "typeName": "ScalarValues::Real",
+        "valueIncludes": "220.0"
+      },
+      "message": "BatteryCell 中需要保留 capacityAh = 220.0，才能与本课程 78kWh 级电池包主线保持一致。"
+    },
+    {
+      "id": "cell-mass-baseline",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "BatteryCell",
+        "kind": "attribute",
+        "name": "massKg",
+        "typeName": "ScalarValues::Real",
+        "valueIncludes": "5.0"
+      },
+      "message": "BatteryCell 中需要保留 massKg = 5.0，作为 220Ah 车用电芯的教学近似质量。"
+    },
+    {
+      "id": "cell-energy-parameter",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "BatteryCell",
+        "kind": "attribute",
+        "name": "energyWh",
+        "typeName": "ScalarValues::Real",
+        "valueIncludes": "nominalVoltageV * capacityAh"
+      },
+      "message": "BatteryCell 中需要保留 energyWh = nominalVoltageV * capacityAh，先在电芯层定义可被上级 usage 汇总的单体能量。"
+    },
+    {
+      "id": "module-cell-count",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "BatteryModule",
+        "kind": "attribute",
+        "name": "cellCount",
+        "typeName": "ScalarValues::Integer"
+      },
+      "message": "BatteryModule 中需要存在 attribute cellCount : ScalarValues::Integer，用参数表达每个模组的电芯数量。"
+    },
+    {
+      "id": "module-cells",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "BatteryModule",
+        "kind": "part",
+        "name": "cells",
+        "typeName": "BatteryCell"
+      },
+      "message": "BatteryModule 中需要存在 part cells : BatteryCell。数量可以按工程配置调整，但必须是结构化 part usage。"
+    },
+    {
+      "id": "module-energy-rollup",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "BatteryModule",
+        "kind": "attribute",
+        "name": "moduleEnergyWh",
+        "typeName": "ScalarValues::Real",
+        "valueIncludes": "sum(cells.energyWh)"
+      },
+      "message": "BatteryModule 中需要用 moduleEnergyWh = sum(cells.energyWh) 显式汇总 cells 这些 BatteryCell usage 的能量。"
+    },
+    {
+      "id": "pack-module-count",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "BatteryPack",
+        "kind": "attribute",
+        "name": "moduleCount",
+        "typeName": "ScalarValues::Integer"
+      },
+      "message": "BatteryPack 中需要存在 attribute moduleCount : ScalarValues::Integer，用参数表达电池包模组数量。"
+    },
+    {
+      "id": "pack-total-cell-count",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "BatteryPack",
+        "kind": "attribute",
+        "name": "totalCellCount",
+        "typeName": "ScalarValues::Integer",
+        "valueIncludes": "moduleCount * cellsPerModule"
+      },
+      "message": "BatteryPack 中需要用 totalCellCount = moduleCount * cellsPerModule 表达从模组到电芯的数量传递。"
+    },
+    {
+      "id": "pack-total-energy",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "BatteryPack",
+        "kind": "attribute",
+        "name": "totalEnergyWh",
+        "typeName": "ScalarValues::Real",
+        "valueIncludes": "sum(modules.moduleEnergyWh)"
+      },
+      "message": "BatteryPack 中需要用 totalEnergyWh = sum(modules.moduleEnergyWh) 显式汇总 modules 这些 BatteryModule usage 的能量。"
+    },
+    {
+      "id": "pack-usable-energy",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "BatteryPack",
+        "kind": "attribute",
+        "name": "usableEnergyKWh",
+        "typeName": "ScalarValues::Real",
+        "valueIncludes": "totalEnergyWh / 1000.0"
+      },
+      "message": "BatteryPack 中需要用 usableEnergyKWh = totalEnergyWh / 1000.0，把 Wh 级能量汇总转换成后续课程使用的 kWh 输入。"
+    },
+    {
+      "id": "pack-modules",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "BatteryPack",
+        "kind": "part",
+        "name": "modules",
+        "typeName": "BatteryModule"
+      },
+      "message": "BatteryPack 中需要存在 part modules : BatteryModule。数量可以按工程配置调整，但必须保留模组层级。"
+    },
+    {
+      "id": "vehicle-target-range",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "ElectricVehicle",
+        "kind": "attribute",
+        "name": "targetRangeKm",
+        "typeName": "ScalarValues::Real",
+        "valueIncludes": "480.0"
+      },
+      "message": "ElectricVehicle 中需要保留 targetRangeKm = 480.0，使 C03 产品结构与后续需求、分析和验证主线一致。"
+    },
+    {
+      "id": "vehicle-battery",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "part",
+        "name": "vehicleBattery",
+        "typeName": "BatteryPack"
+      },
+      "message": "需要存在 part vehicleBattery : BatteryPack，作为当前模型中的电池包配置对象。"
+    }
+  ]
+}

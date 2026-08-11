@@ -1,0 +1,121 @@
+{
+  "rules": [
+    {
+      "id": "strict-valid",
+      "type": "strictValidationPassed",
+      "severity": "error",
+      "message": "模型必须通过严格 SysML v2 校验。"
+    },
+    {
+      "id": "drive-cycle-flow",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "DriveCycle",
+        "childKind": "flow",
+        "sourceName": "readDriverDemand.torqueRequestNm",
+        "targetName": "deliverTorque.torqueRequestNm"
+      },
+      "message": "DriveCycle 内必须把 readDriverDemand.torqueRequestNm flow 到 deliverTorque.torqueRequestNm。"
+    },
+    {
+      "id": "ready-to-driving-transition",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "VehicleOperatingState",
+        "childKind": "transition",
+        "sourceName": "Ready",
+        "targetName": "Driving",
+        "triggerName": "GearDriveSignal",
+        "guardIncludes": "socPercent > 5.0"
+      },
+      "message": "VehicleOperatingState 需要 Ready -> Driving 转移，事件 GearDriveSignal，条件 socPercent > 5.0。"
+    },
+    {
+      "id": "ready-to-charging-transition",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "VehicleOperatingState",
+        "childKind": "transition",
+        "sourceName": "Ready",
+        "targetName": "Charging",
+        "triggerName": "ChargerConnectedSignal"
+      },
+      "message": "VehicleOperatingState 需要 Ready -> Charging 转移，事件 ChargerConnectedSignal。"
+    },
+    {
+      "id": "charging-to-ready-transition",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "VehicleOperatingState",
+        "childKind": "transition",
+        "sourceName": "Charging",
+        "targetName": "Ready",
+        "triggerName": "ChargeCompleteSignal"
+      },
+      "message": "VehicleOperatingState 需要 Charging -> Ready 转移，事件 ChargeCompleteSignal。"
+    },
+    {
+      "id": "driving-to-safe-transition",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "VehicleOperatingState",
+        "childKind": "transition",
+        "sourceName": "Driving",
+        "targetName": "SafeState",
+        "triggerName": "CriticalFaultSignal"
+      },
+      "message": "VehicleOperatingState 需要 Driving -> SafeState 转移，事件 CriticalFaultSignal。"
+    },
+    {
+      "id": "city-range-target",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "cityRange",
+        "childKind": "attribute",
+        "name": "targetRangeKm",
+        "isRedefinition": true,
+        "valueIncludes": "480.0"
+      },
+      "message": "cityRange 必须用 attribute :>> targetRangeKm = 480.0; 重定义需求目标值。"
+    },
+    {
+      "id": "city-range-satisfied",
+      "type": "relationshipExists",
+      "severity": "error",
+      "selector": {
+        "kind": "satisfy",
+        "sourceName": "cityRange",
+        "targetName": "cityVehicle"
+      },
+      "message": "需要建立 satisfy 关系：cityRange -> cityVehicle。"
+    },
+    {
+      "id": "view-exposes-city-range",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "behaviorStateRequirementView",
+        "childKind": "expose",
+        "targetName": "cityRange"
+      },
+      "message": "behaviorStateRequirementView 必须 expose cityRange。"
+    },
+    {
+      "id": "view-exposes-city-vehicle",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "behaviorStateRequirementView",
+        "childKind": "expose",
+        "targetName": "cityVehicle"
+      },
+      "message": "behaviorStateRequirementView 必须 expose cityVehicle。"
+    }
+  ]
+}

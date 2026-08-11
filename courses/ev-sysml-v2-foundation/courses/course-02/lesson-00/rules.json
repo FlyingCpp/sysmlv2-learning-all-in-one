@@ -1,0 +1,120 @@
+{
+  "rules": [
+    {
+      "id": "strict-valid",
+      "type": "strictValidationPassed",
+      "severity": "error",
+      "message": "模型必须通过严格 SysML v2 校验。"
+    },
+    {
+      "id": "battery-pack-def",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "partDef",
+        "name": "BatteryPack"
+      },
+      "message": "全景模型需要定义 part def BatteryPack。"
+    },
+    {
+      "id": "electrical-energy-def",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "itemDef",
+        "name": "ElectricalEnergy"
+      },
+      "message": "全景模型需要定义 item def ElectricalEnergy。"
+    },
+    {
+      "id": "torque-command-def",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "itemDef",
+        "name": "TorqueCommand"
+      },
+      "message": "全景模型需要定义 item def TorqueCommand。"
+    },
+    {
+      "id": "battery-pack-stored-energy",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "BatteryPack",
+        "kind": "item",
+        "name": "storedEnergy",
+        "typeName": "ElectricalEnergy"
+      },
+      "message": "BatteryPack 中需要使用 item storedEnergy : ElectricalEnergy，让电能 item 有明确结构上下文。"
+    },
+    {
+      "id": "controller-drive-command",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "Controller",
+        "kind": "item",
+        "name": "driveCommand",
+        "typeName": "TorqueCommand"
+      },
+      "message": "Controller 中需要使用 item driveCommand : TorqueCommand，让命令 item 有明确控制器上下文。"
+    },
+    {
+      "id": "vehicle-def",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "partDef",
+        "name": "Vehicle"
+      },
+      "message": "全景模型需要定义 part def Vehicle。"
+    },
+    {
+      "id": "vehicle-battery",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "Vehicle",
+        "kind": "part",
+        "name": "battery",
+        "typeName": "BatteryPack"
+      },
+      "message": "Vehicle 中需要使用 part battery : BatteryPack。"
+    },
+    {
+      "id": "vehicle-front-drive",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "Vehicle",
+        "kind": "part",
+        "name": "frontDrive",
+        "typeName": "ElectricDriveUnit"
+      },
+      "message": "Vehicle 中需要使用 part frontDrive : ElectricDriveUnit。"
+    },
+    {
+      "id": "my-ev-usage",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "part",
+        "name": "myEV",
+        "typeName": "Vehicle"
+      },
+      "message": "需要存在 part myEV : Vehicle，表示整车类型的一次使用。"
+    },
+    {
+      "id": "view-exposes-my-ev",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "definitionUsageOverviewView",
+        "kind": "expose",
+        "targetName": "myEV"
+      },
+      "message": "definitionUsageOverviewView 需要 expose myEV，让全景视图包含具体样车使用。"
+    }
+  ]
+}

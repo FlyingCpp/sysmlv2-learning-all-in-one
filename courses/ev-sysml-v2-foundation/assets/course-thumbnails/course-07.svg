@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 236" role="img" aria-labelledby="t d">
+  <title id="t">Course 07 Requirement decomposition and traceability</title>
+  <desc id="d">Requirement tree traced to vehicle design responsibility and view.</desc>
+  <rect width="420" height="236" rx="18" fill="#f8fbff"/>
+  <rect x="144" y="28" width="132" height="52" rx="10" fill="#fff" stroke="#b9d4ee"/><text x="169" y="59" font-family="Segoe UI,Arial" font-size="16" font-weight="800">Range Req</text>
+  <rect x="56" y="122" width="124" height="52" rx="10" fill="#fff" stroke="#b8dfc8"/><text x="77" y="153" font-family="Segoe UI,Arial" font-size="16" font-weight="800">Battery</text>
+  <rect x="240" y="122" width="124" height="52" rx="10" fill="#fff" stroke="#b8dfc8"/><text x="263" y="153" font-family="Segoe UI,Arial" font-size="16" font-weight="800">Vehicle</text>
+  <path d="M178 80l-50 42M242 80l50 42" stroke="#64748b" stroke-width="4" stroke-dasharray="7 7"/>
+  <path d="M118 174c35 28 128 28 184 0" fill="none" stroke="#1769aa" stroke-width="4"/>
+  <text x="121" y="211" font-family="Consolas,monospace" font-size="14" fill="#0f172a">#derivation  satisfy  view</text>
+</svg>

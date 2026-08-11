@@ -1,0 +1,167 @@
+{
+  "rules": [
+    {
+      "id": "strict-valid",
+      "type": "strictValidationPassed",
+      "severity": "error",
+      "message": "模型必须通过严格 SysML v2 校验。"
+    },
+    {
+      "id": "propulsion-state",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "stateDef",
+        "name": "PropulsionState"
+      },
+      "message": "需要存在 state def PropulsionState。"
+    },
+    {
+      "id": "normal-do-action",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "Normal",
+        "kind": "action",
+        "name": "fullTorque",
+        "typeName": "FullTorqueDelivery",
+        "isDo": true
+      },
+      "message": "Normal 状态内需要 do action fullTorque : FullTorqueDelivery。"
+    },
+    {
+      "id": "limited-do-action",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "PowerLimit50",
+        "kind": "action",
+        "name": "limitedTorque",
+        "typeName": "LimitedTorqueDelivery",
+        "isDo": true
+      },
+      "message": "PowerLimit50 状态内需要 do action limitedTorque : LimitedTorqueDelivery。"
+    },
+    {
+      "id": "fault-entry-action",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "Fault",
+        "kind": "action",
+        "name": "shutdown",
+        "typeName": "MotorShutdownAction",
+        "isEntry": true
+      },
+      "message": "Fault 状态需要 entry action shutdown : MotorShutdownAction。"
+    },
+    {
+      "id": "disabled-to-running",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "PropulsionState",
+        "kind": "transition",
+        "sourceName": "Disabled",
+        "targetName": "Running.Normal",
+        "triggerName": "TorqueCommandSignal"
+      },
+      "message": "需要 Disabled -> Running.Normal 转移，事件为 TorqueCommandSignal。"
+    },
+    {
+      "id": "running-to-disabled",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "PropulsionState",
+        "kind": "transition",
+        "sourceName": "Running",
+        "targetName": "Disabled",
+        "triggerName": "TorqueStoppedSignal"
+      },
+      "message": "需要 Running -> Disabled 转移，事件为 TorqueStoppedSignal。"
+    },
+    {
+      "id": "normal-to-limited",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "Running",
+        "kind": "transition",
+        "sourceName": "Normal",
+        "targetName": "Degraded.PowerLimit50",
+        "triggerName": "MotorOvertempSignal",
+        "guardIncludes": "motorTempC"
+      },
+      "message": "需要 Normal -> Degraded.PowerLimit50 转移，事件为 MotorOvertempSignal 且包含 motorTempC 守卫条件。"
+    },
+    {
+      "id": "limited-to-normal",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "Running",
+        "kind": "transition",
+        "sourceName": "Degraded.PowerLimit50",
+        "targetName": "Normal",
+        "triggerName": "MotorTempNormalSignal",
+        "guardIncludes": "motorTempC"
+      },
+      "message": "需要 Degraded.PowerLimit50 -> Normal 恢复转移，并包含 motorTempC 守卫条件。"
+    },
+    {
+      "id": "limit-to-limp",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "Degraded",
+        "kind": "transition",
+        "sourceName": "PowerLimit50",
+        "targetName": "LimpHome",
+        "triggerName": "MotorTooHotSignal",
+        "guardIncludes": "motorTempC"
+      },
+      "message": "需要 PowerLimit50 -> LimpHome 转移，事件为 MotorTooHotSignal 且包含 motorTempC 守卫条件。"
+    },
+    {
+      "id": "running-to-fault",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "PropulsionState",
+        "kind": "transition",
+        "sourceName": "Running",
+        "targetName": "Fault",
+        "triggerName": "MotorHardwareFaultSignal"
+      },
+      "message": "需要 Running -> Fault 的硬件故障转移。"
+    },
+    {
+      "id": "drive-mode",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "driveUnit",
+        "kind": "state",
+        "name": "driveMode",
+        "typeName": "PropulsionState"
+      },
+      "message": "driveUnit 内需要 state driveMode : PropulsionState。"
+    },
+    {
+      "id": "state-view",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parentAnyOf": [
+          "propulsionStateView",
+          "propulsionStateTransitionView"
+        ],
+        "kind": "expose",
+        "name": "PropulsionState",
+        "targetName": "PropulsionState"
+      },
+      "message": "状态视图需要 expose PropulsionState；可以放在 propulsionStateView，也可以放在可选对比的 propulsionStateTransitionView。"
+    }
+  ]
+}

@@ -1,0 +1,179 @@
+{
+  "rules": [
+    {
+      "id": "strict-valid",
+      "type": "strictValidationPassed",
+      "severity": "error",
+      "message": "模型必须通过严格 SysML v2 校验。"
+    },
+    {
+      "id": "regen-input-brake",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "RegenerativeBraking",
+        "kind": "in",
+        "name": "brakeRequest",
+        "typeName": "ScalarValues::Real"
+      },
+      "message": "RegenerativeBraking 需要 in brakeRequest : ScalarValues::Real，表达驾驶员或制动系统请求。"
+    },
+    {
+      "id": "regen-input-speed",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "RegenerativeBraking",
+        "kind": "in",
+        "name": "vehicleSpeedKph",
+        "typeName": "ScalarValues::Real"
+      },
+      "message": "RegenerativeBraking 需要 in vehicleSpeedKph : ScalarValues::Real，表达当前车速。"
+    },
+    {
+      "id": "regen-input-soc",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "RegenerativeBraking",
+        "kind": "in",
+        "name": "stateOfCharge",
+        "typeName": "ScalarValues::Real"
+      },
+      "message": "RegenerativeBraking 需要 in stateOfCharge : ScalarValues::Real，表达电池 SOC 约束。"
+    },
+    {
+      "id": "regen-output-energy",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "RegenerativeBraking",
+        "kind": "out",
+        "name": "recoveredEnergyWh",
+        "typeName": "ScalarValues::Real"
+      },
+      "message": "RegenerativeBraking 需要 out recoveredEnergyWh : ScalarValues::Real，表达回收能量。"
+    },
+    {
+      "id": "regen-output-friction",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "RegenerativeBraking",
+        "kind": "out",
+        "name": "frictionBrakePressureBar",
+        "typeName": "ScalarValues::Real"
+      },
+      "message": "RegenerativeBraking 需要 out frictionBrakePressureBar : ScalarValues::Real，表达摩擦制动补偿。"
+    },
+    {
+      "id": "bind-brake-input",
+      "type": "relationshipExists",
+      "severity": "error",
+      "selector": {
+        "parent": "RegenerativeBraking",
+        "kind": "bind",
+        "sourceName": "decideBrakeSplit.brake",
+        "targetName": "brakeRequest"
+      },
+      "message": "RegenerativeBraking 需要 bind decideBrakeSplit.brake = brakeRequest，把外层制动请求接入内部制动分配步骤。"
+    },
+    {
+      "id": "bind-speed-input",
+      "type": "relationshipExists",
+      "severity": "error",
+      "selector": {
+        "parent": "RegenerativeBraking",
+        "kind": "bind",
+        "sourceName": "decideBrakeSplit.speed",
+        "targetName": "vehicleSpeedKph"
+      },
+      "message": "RegenerativeBraking 需要 bind decideBrakeSplit.speed = vehicleSpeedKph，把外层车速输入接入内部制动分配步骤。"
+    },
+    {
+      "id": "bind-soc-input",
+      "type": "relationshipExists",
+      "severity": "error",
+      "selector": {
+        "parent": "RegenerativeBraking",
+        "kind": "bind",
+        "sourceName": "decideBrakeSplit.soc",
+        "targetName": "stateOfCharge"
+      },
+      "message": "RegenerativeBraking 需要 bind decideBrakeSplit.soc = stateOfCharge，把外层 SOC 输入接入内部制动分配步骤。"
+    },
+    {
+      "id": "regen-torque-flow",
+      "type": "relationshipExists",
+      "severity": "error",
+      "selector": {
+        "parent": "RegenerativeBraking",
+        "kind": "flow",
+        "sourceName": "decideBrakeSplit.regenTorqueNm",
+        "targetName": "convertToElectricalPower.torqueNm"
+      },
+      "message": "RegenerativeBraking 中需要 flow decideBrakeSplit.regenTorqueNm to convertToElectricalPower.torqueNm。"
+    },
+    {
+      "id": "regen-power-flow",
+      "type": "relationshipExists",
+      "severity": "error",
+      "selector": {
+        "parent": "RegenerativeBraking",
+        "kind": "flow",
+        "sourceName": "convertToElectricalPower.electricalPowerKW",
+        "targetName": "storeEnergyInBattery.electricalPowerKW"
+      },
+      "message": "RegenerativeBraking 中需要 flow convertToElectricalPower.electricalPowerKW to storeEnergyInBattery.electricalPowerKW。"
+    },
+    {
+      "id": "bind-energy-output",
+      "type": "relationshipExists",
+      "severity": "error",
+      "selector": {
+        "parent": "RegenerativeBraking",
+        "kind": "bind",
+        "sourceName": "storeEnergyInBattery.storedEnergyWh",
+        "targetName": "recoveredEnergyWh"
+      },
+      "message": "RegenerativeBraking 需要 bind storeEnergyInBattery.storedEnergyWh = recoveredEnergyWh，把内部储能结果接回外层回收能量输出。"
+    },
+    {
+      "id": "bind-friction-output",
+      "type": "relationshipExists",
+      "severity": "error",
+      "selector": {
+        "parent": "RegenerativeBraking",
+        "kind": "bind",
+        "sourceName": "decideBrakeSplit.frictionPressureBar",
+        "targetName": "frictionBrakePressureBar"
+      },
+      "message": "RegenerativeBraking 需要 bind decideBrakeSplit.frictionPressureBar = frictionBrakePressureBar，把内部摩擦制动压力接回外层输出。"
+    },
+    {
+      "id": "controller-performs-regen",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "VehicleController",
+        "kind": "action",
+        "name": "regenControl",
+        "typeName": "RegenerativeBraking",
+        "isPerform": true
+      },
+      "message": "VehicleController 中需要 perform action regenControl : RegenerativeBraking，表达结构承担行为责任。"
+    },
+    {
+      "id": "regen-view-exposes-behavior",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "regenBehaviorView",
+        "kind": "expose",
+        "name": "RegenerativeBraking",
+        "targetName": "RegenerativeBraking"
+      },
+      "message": "regenBehaviorView 中需要 expose RegenerativeBraking，把再生制动行为纳入行为视图。"
+    }
+  ]
+}

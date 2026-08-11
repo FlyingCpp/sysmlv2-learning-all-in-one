@@ -1,0 +1,81 @@
+name: synfeld
+
+services:
+  validator:
+    image: synfeld-validator:0.1.0
+    build:
+      context: .
+      dockerfile: apps/validator/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${VALIDATOR_PORT:-9090}:9090"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:9090/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  api:
+    image: synfeld-api:0.1.0
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: test
+      PORT: "8080"
+      DATA_DIR: /app/data
+      COURSE_PACK: ev-sysml-v2-foundation-c2
+      COURSES_ROOT: /app/courses
+      KNOWLEDGE_PACKS_ROOT: /app/knowledge-packs
+      VALIDATOR_URL: http://validator:9090
+      AI_TEACHER_ENABLED: "false"
+      SYSON_ENABLED: "false"
+      SYSON_FRONTEND_VISIBLE: "false"
+      SYSON_MODEL_GENERATION_ENABLED: "false"
+      SYSON_DIRECT_WRITE_ENABLED: "false"
+      CORS_ORIGIN: http://localhost:${WEB_PORT:-3000}
+      BETTER_AUTH_URL: http://localhost:${API_PORT:-8080}
+      BETTER_AUTH_TRUSTED_ORIGINS: http://localhost:${WEB_PORT:-3000},http://127.0.0.1:${WEB_PORT:-3000}
+    volumes:
+      - ./courses:/app/courses:ro
+      - ./knowledge-packs:/app/knowledge-packs:ro
+      - api_data:/app/data
+    ports:
+      - "127.0.0.1:${API_PORT:-8080}:8080"
+    depends_on:
+      validator:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then(async r=>{const b=await r.json();if(!r.ok||!b.coursePackLoaded||b.validator?.ok!==true)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  web:
+    image: synfeld-web:0.1.0
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    environment:
+      PORT: "3000"
+      API_BASE_URL: http://localhost:${API_PORT:-8080}
+      API_INTERNAL_URL: http://api:8080
+      AI_TEACHER_ENABLED: "false"
+    ports:
+      - "127.0.0.1:${WEB_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+volumes:
+  api_data:

@@ -1,0 +1,77 @@
+{
+  "contractVersion": "1.0",
+  "requestId": "req_fixture_basic",
+  "host": {
+    "hostAppId": "sysmlv2-learning-platform",
+    "hostAppVersion": "0.1.0",
+    "integrationMode": "embedded-panel"
+  },
+  "tenant": {
+    "tenantId": "local-dev",
+    "workspaceId": "default",
+    "userId": "unscoped-user",
+    "dataPolicy": {
+      "allowLLM": false,
+      "allowTelemetry": false,
+      "allowCrossSessionMemory": false
+    }
+  },
+  "course": {
+    "coursePackId": "ev-sysml-v2-foundation",
+    "courseId": "course-01",
+    "lessonId": "course-01-lesson-01",
+    "lessonTitle": "Mock Lesson",
+    "learningGoals": ["Understand the current modeling task"]
+  },
+  "editor": {
+    "language": "sysmlv2",
+    "entryFile": "main.sysml",
+    "activeFilePath": "main.sysml",
+    "files": [
+      {
+        "path": "main.sysml",
+        "content": "package EV { part def ElectricVehicle; }\n",
+        "editable": true,
+        "source": "lesson-workspace"
+      }
+    ],
+    "selection": {
+      "startLine": 1,
+      "startColumn": 1,
+      "endLine": 1,
+      "endColumn": 1,
+      "text": ""
+    },
+    "cursor": {
+      "line": 1,
+      "column": 1
+    }
+  },
+  "model": {
+    "modelElements": [],
+    "symbolsSummary": {
+      "packages": [],
+      "partDefs": [],
+      "actionDefs": [],
+      "requirements": [],
+      "flows": []
+    }
+  },
+  "diagnostics": {
+    "officialValidator": [],
+    "courseRules": [],
+    "lastValidation": null
+  },
+  "courseContext": {
+    "todoItems": [],
+    "glossary": [],
+    "references": [],
+    "conceptExplanations": [],
+    "codeGuideExplanations": []
+  },
+  "question": {
+    "text": "What should I check next?",
+    "intent": "free_question",
+    "hintLevel": "explain"
+  }
+}

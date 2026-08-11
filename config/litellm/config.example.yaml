@@ -1,0 +1,34 @@
+model_list:
+  # Model Deployment: one concrete provider model.
+  - model_name: ai-teacher-fast
+    litellm_params:
+      model: os.environ/PROVIDER_MODEL
+      api_base: os.environ/PROVIDER_API_BASE
+      api_key: os.environ/PROVIDER_API_KEY
+      rpm: 60
+      tpm: 120000
+
+  # Business Model Alias: add another deployment with the same model_name
+  # only after a second Provider Connection has been configured.
+  # - model_name: ai-teacher-fast
+  #   litellm_params:
+  #     model: openai/another-model
+  #     api_base: os.environ/SECOND_PROVIDER_API_BASE
+  #     api_key: os.environ/SECOND_PROVIDER_API_KEY
+  #     rpm: 30
+  #     tpm: 60000
+
+router_settings:
+  routing_strategy: simple-shuffle
+  num_retries: 1
+  allowed_fails: 3
+  cooldown_time: 30
+
+litellm_settings:
+  set_verbose: false
+  json_logs: true
+  turn_off_message_logging: true
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/LITELLM_DATABASE_URL

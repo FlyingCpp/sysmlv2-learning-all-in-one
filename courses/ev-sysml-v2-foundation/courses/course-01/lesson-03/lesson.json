@@ -1,0 +1,149 @@
+{
+  "id": "course-01-lesson-03",
+  "title": "把模型目的连接到需求",
+  "type": "modeling-lesson",
+  "estimatedMinutes": 25,
+  "scenario": {
+    "title": "工程场景",
+    "body": "产品负责人提出“城市续航可用”这一建模目标。系统工程师不能只写一句自然语言说明，而要把需求、分析目的和承担需求的样车对象放进同一个模型里：`subject` 说明需求和分析讨论的是哪类车/哪台样车，`satisfy` 说明哪台样车承担满足需求的责任。",
+    "visual": {
+      "type": "interactive-flow",
+      "variant": "03",
+      "title": "从系统上下文到需求追踪",
+      "caption": "本课沿用 L02 的结构和上下文，在其上增加需求 subject、分析 subject 和 satisfy 追踪关系；官方 PlantUML/SVG 图可能不会把所有语义关系都画成显式连线。",
+      "nodes": [
+        {
+          "id": "baseline",
+          "icon": "1",
+          "label": "保留上下文",
+          "detail": "ElectricVehicle 已包含 battery、driver 和 environment。需求追踪必须建立在这个已有系统上下文上，而不是另起模型。",
+          "code": "ElectricVehicle"
+        },
+        {
+          "id": "requirement",
+          "icon": "2",
+          "label": "需求对象",
+          "detail": "VehicleNeed 是需求类型，usableRange 是具体需求。VehicleNeed 声明 subject vehicle : ElectricVehicle；usableRange 先保持 subject 开放，后续由 satisfy 绑定到 evPrototype。",
+          "code": "subject"
+        },
+        {
+          "id": "analysis",
+          "icon": "3",
+          "label": "分析入口",
+          "detail": "VehicleModelPurpose 和 purposeCheck 表达为什么要分析当前车辆模型。subject vehicle = evPrototype 让分析入口围绕同一台样车展开，后续 C08 会继续连接计算和约束。",
+          "code": "analysis subject"
+        },
+        {
+          "id": "trace",
+          "icon": "4",
+          "label": "追踪关系",
+          "detail": "satisfy usableRange by evPrototype 说明样车模型对象承担满足续航需求的责任。即使某个图形预览没有画出这条边，模型语句和课程规则仍然把关系记录下来了。",
+          "code": "satisfy"
+        }
+      ]
+    }
+  },
+  "learningBlocks": [
+    {
+      "type": "image-gallery",
+      "title": "课程导引图",
+      "content": "本图按当前 lesson 的工程任务和模型主题生成，用于先理解课程场景，再进入 SysML v2 建模练习。",
+      "generatedBy": "scripts/generate-course-lesson-illustrations.js",
+      "images": [
+        {
+          "src": "/api/course-assets/assets/course-visuals/generated-lesson-guides/ev-course-01-lesson-03-requirement.svg",
+          "title": "C01.L03 把模型目的连接到需求",
+          "caption": "围绕 需求/Requirement / 满足/Satisfy / 追踪/Trace 组织汽车工程语境，把本课对象放进可追踪的 SysML v2 模型。",
+          "alt": "电动汽车 SysML v2 建模课程导引图：把模型目的连接到需求"
+        }
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "工程意图：MBSE 模型应服务工程决策。本 lesson 在 L02 的结构和上下文上加入需求层，建立从 `usableRange` 到 `evPrototype` 的最小追踪关系，让模型能回答“这个样车对象为什么存在、要满足什么”。"
+    },
+    {
+      "type": "markdown",
+      "content": "新概念：到目前为止你主要使用 `part def` 定义结构类型。本课新增 `requirement def` 和 `analysis def`。它们仍然遵循 def/usage 模式：`requirement def VehicleNeed` 定义需求类型，`requirement usableRange : VehicleNeed` 是具体需求；`analysis def VehicleModelPurpose` 定义分析类型，`analysis purposeCheck : VehicleModelPurpose` 是具体分析入口。"
+    },
+    {
+      "type": "hint-card",
+      "title": "usableRange 是 SysML v2 标准关键字吗？",
+      "label": "点击查看 requirement usage 的命名",
+      "content": "`usableRange` 不是 SysML v2 标准关键字，也不是必须固定使用的名称。它是建模者给这条具体需求取的 usage 名称，意思是“可用续航”这条需求。`requirement usableRange : VehicleNeed;` 可以拆成三段读：`requirement` 是 SysML v2 关键字，`usableRange` 是自定义需求名称，冒号右侧 `VehicleNeed` 是被引用的需求类型。后面的 `satisfy usableRange by evPrototype;` 引用的也是这条具体需求名称；如果你把它改名为 `cityRangeNeed`，satisfy 和 view expose 中也要同步引用新名称。",
+      "examples": [
+        "`requirement usableRange : VehicleNeed;`：创建一条名为 usableRange 的具体需求。",
+        "`VehicleNeed` 是需求类型名，也由建模者命名；真正的标准语法是 `requirement def` 和 `requirement`。",
+        "`satisfy usableRange by evPrototype;`：把这条具体需求分配给样车对象承担。"
+      ]
+    },
+    {
+      "type": "hint-card",
+      "title": "为什么 PlantUML/SVG 图上看不到所有关系？",
+      "label": "点击查看模型关系和视图呈现的区别",
+      "content": "这不是 SysML v2 不能表达关系，也不是 PlantUML 完全不能画关系，而是当前官方 GeneralView 的 SVG 输出更偏向展示被 expose 的元素、类型化和组成关系，未必把每条语义关系都画成你期待的连线。本课真正要读的三条关系在代码里：`subject vehicle : ElectricVehicle` 说明需求类型/分析类型讨论的是车辆；`analysis purposeCheck : VehicleModelPurpose { subject vehicle = evPrototype; }` 说明这次具体分析绑定到当前样车；`satisfy usableRange by evPrototype` 说明样车承担满足需求的设计责任，并由 satisfy 为这条需求建立 subject 绑定。`purposeCheck` 不是“满足需求”的对象，它是后续 C08 分析证据链的入口；分析可以支持判断和验证计划，但不能替代车辆本身承担 satisfy 责任。",
+      "examples": [
+        "`view ... { expose usableRange; expose evPrototype; }`：把元素放进评审视图，不等于自动生成全部追踪边。",
+        "`requirement usableRange : VehicleNeed;`：创建具体需求，subject 先保持开放，等待 satisfy 绑定。",
+        "`analysis purposeCheck : VehicleModelPurpose { subject vehicle = evPrototype; }`：把分析入口绑定到当前样车。",
+        "`satisfy usableRange by evPrototype`：把需求满足责任落到车辆 part usage。"
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "读模要点：不要只按图上有没有一条线来判断模型有没有关系。本课至少要读出三层关联：1）`requirement def VehicleNeed { subject vehicle : ElectricVehicle; }` 说明需求类型约束车辆；2）`requirement usableRange : VehicleNeed;` 创建具体需求，但不要在它内部再写 `subject vehicle = evPrototype`；3）`satisfy usableRange by evPrototype;` 的方向不是随意的，前者是要被满足的需求，后者是承担该需求的车辆使用对象，satisfy 会把 requirement subject 绑定到满足它的样车对象。`analysis purposeCheck : VehicleModelPurpose { subject vehicle = evPrototype; }` 单独把分析入口绑定到同一台样车。后续 C07 会把需求写成带正文、参数和约束的完整需求，C08 会把 `purposeCheck` 这类分析入口扩展成真实计算和判据。"
+    },
+    {
+      "type": "markdown",
+      "content": "练习步骤：如果编辑器顶部显示“课程模板”，保留 L02 的结构，并按 TODO 1-5 补全 `VehicleNeed`、`usableRange`、`VehicleModelPurpose`、`purposeCheck`、`purposeCheck` 的 `subject vehicle = evPrototype` 绑定和 `satisfy usableRange by evPrototype;`。注意：不要在 `usableRange` 内再写 `subject vehicle = evPrototype` 或 `subject :>> vehicle = evPrototype`，否则会和 `satisfy` 对同一个 requirement subject 形成重复绑定。如果显示“已恢复草稿”，先检查这些对应结构行是否已经存在且拼写正确，必要时点击“重置为课程模板”回到 TODO 起点。运行校验并检查模型元素树；如果官方 PlantUML/SVG 图没有画出 satisfy 边，以规则通过、模型元素树和代码语句为准。"
+    },
+    {
+      "type": "code",
+      "language": "sysml",
+      "sourceFile": "starter.sysml"
+    }
+  ],
+  "workspace": {
+    "files": [
+      {
+        "path": "main.sysml",
+        "source": "starter.sysml",
+        "editable": true
+      }
+    ],
+    "entryFile": "main.sysml"
+  },
+  "tasks": [
+    {
+      "id": "task-01",
+      "type": "model-challenge",
+      "prompt": "在课程模板的 TODO 位置，或在已恢复草稿中的对应结构位置，基于 L02 模型补全 `VehicleNeed`、`usableRange : VehicleNeed`、`VehicleModelPurpose`、`purposeCheck : VehicleModelPurpose`；需求类型和分析类型都要声明 `subject vehicle : ElectricVehicle`，具体分析 `purposeCheck` 绑定 `subject vehicle = evPrototype`，具体需求 `usableRange` 保持 subject 开放，最后用 `satisfy usableRange by evPrototype;` 绑定需求 subject 并建立满足责任。",
+      "hints": [
+        "`requirement def` 和 `analysis def` 也是定义类型，不要把它们和具体需求、具体分析使用混在一起。",
+        "`usableRange` 内不要写 `subject vehicle = evPrototype`；外部 `satisfy usableRange by evPrototype;` 会绑定 requirement subject。",
+        "`subject` 回答“这条需求或这次分析讨论谁”，`satisfy` 回答“谁承担满足这条需求的责任”。",
+        "`satisfy` 关系必须引用已经存在的 `usableRange` 和 `evPrototype`。",
+        "如果课程规则未通过，先看模型元素树中是否真的出现 requirement、analysis、subject 和 satisfy。"
+      ]
+    }
+  ],
+  "validation": {
+    "strictSysml": true,
+    "rulesFile": "rules.json"
+  },
+  "completion": {
+    "requiresStrictValidation": true,
+    "requiresAllLessonRules": true
+  },
+  "glossaryTerms": [
+    "package",
+    "part def",
+    "part",
+    "requirement def",
+    "requirement",
+    "analysis def",
+    "analysis",
+    "subject",
+    "satisfy"
+  ]
+}

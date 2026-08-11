@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "id": "system-modeling-foundations",
+  "title": "SysML v2 工程扫盲与导读",
+  "description": "在进入建模课程前，建立系统工程、SysML v2 与符号和神经方法的共同认知底座。",
+  "version": "1.1.0",
+  "license": "EPL-2.0",
+  "authors": ["Josh Chen"],
+  "language": "zh-CN",
+  "entryTopicId": "why-models-are-not-one-diagram",
+  "displayOrder": 10,
+  "references": "references.json",
+  "domains": [
+    {
+      "id": "systems-engineering",
+      "title": "01 系统工程方法",
+      "description": "从任务和边界走向验证证据。",
+      "order": 1,
+      "topics": [
+        "topics/why-models-are-not-one-diagram/topic.json",
+        "topics/mission-and-boundary/topic.json",
+        "topics/traceability-and-evidence/topic.json"
+      ]
+    },
+    {
+      "id": "sysml-v2-language",
+      "title": "02 SysML v2 语言",
+      "description": "理解语言、模型与视图的分工。",
+      "order": 2,
+      "topics": [
+        "topics/language-model-view/topic.json",
+        "topics/definitions-and-usages/topic.json"
+      ]
+    },
+    {
+      "id": "sysml-v2-llm",
+      "title": "03 SysML v2 + LLM",
+      "description": "理解符号系统与神经网络如何协作。",
+      "order": 3,
+      "topics": [
+        "topics/symbolic-and-neural/topic.json",
+        "topics/validation-boundary/topic.json"
+      ]
+    }
+  ]
+}

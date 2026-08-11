@@ -1,0 +1,38 @@
+{
+  "coordinateConvention": {
+    "xAxis": "vehicle lateral axis",
+    "yAxis": "vehicle vertical axis",
+    "zAxis": "vehicle longitudinal axis",
+    "frontDirection": "+Z"
+  },
+  "componentInstallations": {
+    "front_radar": "前保险杠中央",
+    "front_camera": "前风挡上沿",
+    "front_zcu": "前舱左侧区域",
+    "central_compute": "座舱中央区域",
+    "rear_zcu": "后舱右侧区域",
+    "adas_domain_controller": "前舱计算区域",
+    "chassis_domain_controller": "座舱后部区域",
+    "brake_actuator": "后轴左侧制动位置",
+    "steering_actuator": "前轴车轮之间"
+  },
+  "cases": {
+    "zonal": {
+      "front_radar": { "x": 0, "y": 0.05, "z": 3.08 },
+      "front_camera": { "x": 0, "y": 1.12, "z": 1.35 },
+      "front_zcu": { "x": -1.02, "y": 0.18, "z": 1.45 },
+      "central_compute": { "x": 0.5, "y": 0.2, "z": 0.1 },
+      "rear_zcu": { "x": 1.02, "y": 0.18, "z": -1.55 },
+      "brake_actuator": { "x": -0.88, "y": -0.1, "z": -1.95 },
+      "steering_actuator": { "x": 0, "y": -0.1, "z": 2.15 }
+    },
+    "domain": {
+      "front_radar": { "x": 0, "y": 0.05, "z": 3.08 },
+      "front_camera": { "x": 0, "y": 1.12, "z": 1.35 },
+      "adas_domain_controller": { "x": -0.58, "y": 0.24, "z": 0.4 },
+      "chassis_domain_controller": { "x": 0.68, "y": 0.2, "z": -0.45 },
+      "brake_actuator": { "x": -0.88, "y": -0.1, "z": -1.95 },
+      "steering_actuator": { "x": 0, "y": -0.1, "z": 2.15 }
+    }
+  }
+}

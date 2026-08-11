@@ -1,0 +1,87 @@
+{
+  "id": "course-07-lesson-02",
+  "title": "需求成熟度 2：维护来源与派生谱系",
+  "type": "modeling-lesson",
+  "estimatedMinutes": 45,
+  "timePlan": [
+    { "label": "确认来源需求", "minutes": 8, "description": "把 480 km 整车目标作为 source requirement。" },
+    { "label": "建立派生指标", "minutes": 22, "description": "形成 78 kWh 电池能量与 16 kWh/100km 能耗需求。" },
+    { "label": "审查派生方向", "minutes": 15, "description": "检查 original 与 derive 端点是否表达正确谱系。" }
+  ],
+  "scenario": {
+    "title": "工程场景：整车目标下传到专业团队",
+    "body": "480.0 km 整车续航目标不能停在一条孤立需求上。电池团队需要 78.0 kWh 可用能量指标，整车能耗团队需要 16.0 kWh/100km 指标；评审者还必须知道两个下级需求来自哪个 source requirement。",
+    "visual": {
+      "type": "interactive-flow",
+      "variant": "07-maturity-derivation",
+      "title": "需求谱系",
+      "nodes": [
+        { "id": "source", "label": "来源需求", "detail": "vehicleRange = 480 km", "code": "#original" },
+        { "id": "battery", "label": "电池派生需求", "detail": "usableBatteryEnergy = 78 kWh", "code": "#derive" },
+        { "id": "consumption", "label": "能耗派生需求", "detail": "energyConsumption = 16", "code": "#derive" }
+      ]
+    }
+  },
+  "learningBlocks": [
+    {
+      "type": "image-gallery",
+      "title": "课程导引图",
+      "images": [
+        {
+          "src": "/api/course-assets/assets/course-visuals/generated-lesson-guides/ev-course-07-lesson-02-requirement.svg",
+          "title": "需求派生谱系",
+          "caption": "从整车目标派生电池与能耗指标。",
+          "alt": "电动汽车需求派生教学图"
+        }
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "工程意图：本课不再重复编写 L1 的好需求骨架，而是回答“需求为什么出现”。`vehicleRange` 是 source requirement；`usableBatteryEnergy` 和 `energyConsumption` 是 derived requirements。`#derivation connection` 用 `end #original ::> vehicleRange` 和两个 `end #derive` 记录谱系。"
+    },
+    {
+      "type": "hint-card",
+      "title": "派生关系是不是数值计算？",
+      "label": "语义边界",
+      "content": "不是。RequirementDerivation 表达需求来源与分解关系，不自动证明 78/16 一定能产生 480 km。数值合理性由 C08 的 calc 与 analysis 提供证据。"
+    },
+    {
+      "type": "hint-card",
+      "title": "derive 和 satisfy 为什么要同时保留？",
+      "label": "谱系与责任",
+      "content": "derive 回答“下级需求来自哪里”；satisfy 回答“哪个设计对象承担责任”。本课预置 satisfy，让练习集中在 source/derived requirement 谱系。"
+    },
+    {
+      "type": "markdown",
+      "content": "权威依据：官方 `VehicleRequirementDerivation.sysml` 导入 `RequirementDerivation::*`，使用 `#derivation connection`、`#original` 与 `#derive` 端点连接来源需求和派生需求。"
+    },
+    {
+      "type": "markdown",
+      "content": "练习步骤：在“课程模板”中按 TODO 1-3 完成三个 attribute 重定义，再按 TODO 4 添加一条 #derivation connection。使用“已恢复草稿”时核对端点方向；结构混乱时使用“重置为课程模板”。"
+    },
+    { "type": "code", "language": "sysml", "sourceFile": "starter.sysml" }
+  ],
+  "workspace": {
+    "files": [
+      { "path": "ev-program-baseline.sysml", "source": "../../../shared/ev-program-baseline.sysml", "editable": false },
+      { "path": "main.sysml", "source": "starter.sysml", "editable": true }
+    ],
+    "entryFile": "main.sysml"
+  },
+  "tasks": [
+    {
+      "id": "task-01",
+      "type": "model-challenge",
+      "prompt": "为跨专业需求评审建立整车续航到电池能量、整车能耗的派生谱系，使来源和下级指标都可追踪。",
+      "hints": [
+        "vehicleRange 是 #original，两个专业指标是 #derive。",
+        "三个 requirement usage 分别绑定 480.0、78.0 和 16.0。",
+        "端点使用 ::> 引用已有需求，不要在 connection 内复制需求。",
+        "derive 只记录来源，不替代数值分析与 satisfy 责任。"
+      ]
+    }
+  ],
+  "validation": { "strictSysml": true, "rulesFile": "rules.json" },
+  "completion": { "requiresStrictValidation": true, "requiresAllLessonRules": true },
+  "glossaryTerms": ["source requirement", "derived requirement", "#derivation connection", "#original", "#derive"]
+}

@@ -1,0 +1,183 @@
+{
+  "id": "course-01-lesson-00",
+  "title": "为什么用 SysML v2 做汽车设计",
+  "type": "modeling-lesson",
+  "estimatedMinutes": 20,
+  "timePlan": [
+    {
+      "label": "读工程问题",
+      "minutes": 4,
+      "description": "先理解传统文档、表格和图形在参数变更、跨团队追踪和验证闭环上的断点。"
+    },
+    {
+      "label": "看全景模型",
+      "minutes": 5,
+      "description": "快速扫读 `part def`、`port def`、`interface def`、`action def`、`state def`、`requirement def`、`analysis def` 在同一个汽车模型中的位置。"
+    },
+    {
+      "label": "动手建模",
+      "minutes": 4,
+      "description": "不用新增代码，点击文字-代码导读，把每个工程维度和代码中的 SysML 元素对应起来。"
+    },
+    {
+      "label": "校验与修正",
+      "minutes": 4,
+      "description": "运行官方 validator，确认这不是伪代码，而是能被严格校验的 SysML v2 教学模型。"
+    },
+    {
+      "label": "复盘与概念解释",
+      "minutes": 3,
+      "description": "记住 Course 1 的主线：从 `package` 到 `part def`，再到 `satisfy` 需求追踪。"
+    }
+  ],
+  "scenario": {
+    "title": "工程场景",
+    "body": "整车项目把电池容量、驱动接口、驾驶行为、运行状态、续航需求和分析入口分别放在 Word、Excel、PPT 和测试表中。SysML v2 的价值不是把这些内容换一种格式保存，而是把它们变成同一份可校验模型中的工程事实。",
+    "visual": {
+      "type": "interactive-flow",
+      "variant": "overview",
+      "title": "从文档断点到模型主线",
+      "caption": "点击节点，观察汽车设计中分散的信息如何收敛到 SysML v2 的模型对象和追踪关系。",
+      "nodes": [
+        {
+          "id": "problem",
+          "icon": "1",
+          "label": "参数变更",
+          "detail": "电池容量或车辆质量变化时，传统表格、需求文档和测试用例容易不同步。模型化之后，结构、分析和验证可以围绕同一组元素建立追踪。",
+          "code": "BatteryPack"
+        },
+        {
+          "id": "structure",
+          "icon": "2",
+          "label": "产品结构",
+          "detail": "part def/part 先回答系统由什么组成，例如电池、控制器、电机和车轮。这是后续接口、行为和需求追踪的承载对象。",
+          "code": "part def"
+        },
+        {
+          "id": "interface",
+          "icon": "3",
+          "label": "接口交换",
+          "detail": "item def、port def 和 interface def 把能量或命令的交换对象显式建模，避免接口只剩线条和端口名字。",
+          "code": "interface def"
+        },
+        {
+          "id": "behavior",
+          "icon": "4",
+          "label": "行为状态",
+          "detail": "action def 和 state def 把车辆做什么、处于什么模式表达成可追踪模型元素，为功能分解和状态验证打基础。",
+          "code": "action def"
+        },
+        {
+          "id": "trace",
+          "icon": "5",
+          "label": "需求闭环",
+          "detail": "requirement、analysis 和 satisfy 让需求、分析目的和承担需求的车辆对象连起来，后续才能回答为什么设计、由谁满足、如何验证。",
+          "code": "satisfy"
+        }
+      ]
+    }
+  },
+  "learningBlocks": [
+    {
+      "type": "image-gallery",
+      "title": "课程导引图",
+      "content": "本图按当前 lesson 的工程任务和模型主题生成，用于先理解课程场景，再进入 SysML v2 建模练习。",
+      "generatedBy": "scripts/generate-course-lesson-illustrations.js",
+      "images": [
+        {
+          "src": "/api/course-assets/assets/course-visuals/generated-lesson-guides/ev-course-01-lesson-00-overview.svg",
+          "title": "C01.L00 为什么用 SysML v2 做汽车设计",
+          "caption": "围绕 系统地图/System / 追踪模型/Trace / 评审入口/Review 组织汽车工程语境，把本课对象放进可追踪的 SysML v2 模型。",
+          "alt": "电动汽车 SysML v2 建模课程导引图：为什么用 SysML v2 做汽车设计"
+        }
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "工程意图：本 lesson 不要求你先写语法，而是建立全景。SysML v2 让结构、接口、行为、状态、需求、分析和验证进入同一个可检查模型，因此模型可以承担跨专业沟通、变更影响分析和需求追踪。"
+    },
+    {
+      "type": "markdown",
+      "content": "读模要点：`part def ElectricVehicle`（整车结构类型）表示要设计的车；`interface def PropulsionPowerInterface`（电能接口契约）表示电能如何跨边界交换；`action def DriveCycle`（驾驶行为类型）和 `state def VehicleOperatingState`（运行状态类型）表示车会做什么、处于什么模式；`requirement usableRange : VehicleNeed`（续航需求）与 `satisfy usableRange by evPreview`（满足责任）形成第一条需求追踪线。这里 `requirement` 是 SysML v2 关键字，`usableRange` 是本课程按工程语义取的具体需求名称，不是标准保留字；`VehicleNeed` 是需求类型名。`view courseOverviewView`（评审入口）说明同一份模型可以从不同角度阅读。"
+    },
+    {
+      "type": "hint-card",
+      "title": "什么时候用 item def？",
+      "label": "点击查看 part / item / port 的区别",
+      "content": "`item def` 用来定义系统之间被交换、携带或传递的对象，例如电能、扭矩命令、冷却液、温度信号或 CAN 报文。它和 `part def` 的判断口径不同：`part def` 更像有结构责任、能装配或承载功能的系统/部件；`item def` 更像从一个边界流向另一个边界的能量、物质或信息。`port def` 则不是交换对象本身，而是部件边界上的端口规格，通常通过 `ref item` 说明这个端口允许交换哪类 item。Course 1 只要求你先认识这个分工，Course 2 会正式练习 `part def` 与 `item def` 的选择。",
+      "examples": [
+        "`part def BatteryPack`：电池包是车辆结构中的部件类型。",
+        "`item def ElectricalPower`：电功率不是一个装配零件，而是通过端口和接口交换的能量对象。",
+        "`port def PowerPort { ref item power : ElectricalPower; }`：端口说明边界能交换 ElectricalPower，但端口本身不是电能。"
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "View 基础：本课先把 `view` 理解成评审入口。`GeneralView`（通用关系图）看总体关系，`InterconnectionView`（接口连接图）看端口和连接，`ActionFlowView`（行为流图）看动作之间的数据流，`StateTransitionView`（状态迁移图）看模式切换。标准库里还包括 `SequenceView`（时序图）、`GeometryView`（几何/空间视图）、`GridView`（表格/矩阵视图）和 `BrowserView`（成员树）；这些先作为术语认识，不要求一次掌握。当前 viewer（视图查看器）稳定展示前四类图形入口，其余类型可先作为模型语义和后续工具能力理解。"
+    },
+    {
+      "type": "markdown",
+      "content": "View 与 expose：`view def CourseOverviewView specializes StandardViewDefinitions::GeneralView` 定义一种视图模板；`view courseOverviewView : CourseOverviewView { ... }` 是具体视图；`expose ElectricVehicle;` 只是选择已有元素进入视图，不复制、不拥有、不重新定义 ElectricVehicle。"
+    },
+    {
+      "type": "markdown",
+      "content": "证据链预览：后续课程会把一条汽车工程链路逐步补完整：range requirement（续航需求）由 battery/vehicle（电池和整车设计）承担 satisfy（满足责任），range analysis（续航分析）给出预测，road test verification（道路测试验证）给出独立判定，evidence view（证据视图）把这些对象放到同一个评审入口。Course 1 只要求你先看懂 `package`（模型包）、`part def`（结构类型）、`part`（结构使用）、`item def`（可交换对象类型）、`satisfy`（满足责任）和 `view/expose`（视图与暴露对象）。"
+    },
+    {
+      "type": "markdown",
+      "content": "练习步骤：先不要改代码。点击右侧“模型代码简述”中的彩色行号，看这一行代码对应哪个工程对象；然后运行校验，确认这是一份可被 SysML v2 validator（校验器）检查的工程模型，不是只给人看的示意代码。"
+    },
+    {
+      "type": "code",
+      "language": "sysml",
+      "sourceFile": "starter.sysml"
+    }
+  ],
+  "workspace": {
+    "files": [
+      {
+        "path": "main.sysml",
+        "source": "starter.sysml",
+        "editable": true
+      }
+    ],
+    "entryFile": "main.sysml"
+  },
+  "tasks": [
+    {
+      "id": "task-00",
+      "type": "model-challenge",
+      "prompt": "阅读并校验全景模型，指出 `ElectricVehicle`、`PropulsionPowerInterface`、`DriveCycle`、`VehicleOperatingState`、`satisfy usableRange by evPreview` 和两个 `view` 分别对应什么工程问题。",
+      "hints": [
+        "`part def` 不是零件清单，而是后续模型元素的结构承载类型。",
+        "`interface def` 关注交换对象和端点，不只是连线。",
+        "`satisfy` 是需求到模型对象的追踪关系，后续课程会继续扩展到验证。",
+        "`view` 是评审入口，`expose` 是选择已有模型元素，不是在视图里重新造一套模型。"
+      ]
+    }
+  ],
+  "validation": {
+    "strictSysml": true,
+    "rulesFile": "rules.json"
+  },
+  "completion": {
+    "requiresStrictValidation": true,
+    "requiresAllLessonRules": true
+  },
+  "glossaryTerms": [
+    "package",
+    "part def",
+    "part",
+    "item def",
+    "port def",
+    "interface def",
+    "action def",
+    "state def",
+    "requirement def",
+    "analysis def",
+    "satisfy",
+    "view def",
+    "view",
+    "expose"
+  ]
+}

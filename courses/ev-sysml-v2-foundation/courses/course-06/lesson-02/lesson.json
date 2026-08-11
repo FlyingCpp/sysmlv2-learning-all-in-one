@@ -1,0 +1,194 @@
+{
+  "id": "course-06-lesson-02",
+  "title": "电池嵌套状态、安全状态与动作",
+  "type": "modeling-lesson",
+  "estimatedMinutes": 40,
+  "timePlan": [
+    {
+      "label": "复盘状态机规则",
+      "minutes": 5,
+      "description": "确认 BatteryState 也必须有初始状态、安全状态和恢复路径。"
+    },
+    {
+      "label": "理解嵌套状态",
+      "minutes": 8,
+      "description": "把 Active 拆成 Discharging 与 Charging，再把 Charging 拆成 ConstantCurrent 与 ConstantVoltage。"
+    },
+    {
+      "label": "关联参数与守卫",
+      "minutes": 8,
+      "description": "理解 socPercent、minSocPercent、packTempC、maxTempC 如何进入 transition 的 if 条件。"
+    },
+    {
+      "label": "补全安全状态动作",
+      "minutes": 12,
+      "description": "在 SafeState 内分别添加 entry、do、exit action，再补齐低电量和恢复转移。"
+    },
+    {
+      "label": "校验与复盘",
+      "minutes": 7,
+      "description": "检查嵌套状态路径、动作绑定和守卫条件是否通过课程规则。"
+    }
+  ],
+  "scenario": {
+    "title": "工程场景",
+    "body": "电池管理系统不是只有 Normal/Fault 两个词。真实工程里，电池会在 Idle、Discharging、Charging.ConstantCurrent、Charging.ConstantVoltage 和 SafeState 之间切换；低电压、热故障和绝缘恢复都必须成为明确的状态转移规则。",
+    "visual": {
+      "type": "interactive-flow",
+      "variant": "06-battery-nested-state",
+      "title": "电池状态分层",
+      "caption": "嵌套状态让状态机像产品结构一样分层，同时用 entry/do/exit action 说明安全状态要执行什么。",
+      "nodes": [
+        {
+          "id": "active",
+          "icon": "A",
+          "label": "复合状态",
+          "detail": "Active 是复合状态，内部再分 Discharging 与 Charging。",
+          "code": "state Active"
+        },
+        {
+          "id": "charging",
+          "icon": "C",
+          "label": "充电子状态",
+          "detail": "Charging 内部继续区分 ConstantCurrent 与 ConstantVoltage。",
+          "code": "Charging.ConstantCurrent"
+        },
+        {
+          "id": "guard",
+          "icon": "G",
+          "label": "参数守卫",
+          "detail": "socPercent、packTempC 这类参数用于决定是否允许转移或是否必须进入 SafeState。",
+          "code": "if packTempC > maxTempC"
+        },
+        {
+          "id": "actions",
+          "icon": "X",
+          "label": "状态动作",
+          "detail": "SafeState 的 entry/do/exit action 说明进入、停留和离开安全状态时分别做什么。",
+          "code": "entry/do/exit action"
+        }
+      ]
+    }
+  },
+  "learningBlocks": [
+    {
+      "type": "image-gallery",
+      "title": "课程导引图",
+      "content": "本图按当前 lesson 的工程任务和模型主题生成，用于先理解课程场景，再进入 SysML v2 建模练习。",
+      "generatedBy": "scripts/generate-course-lesson-illustrations.js",
+      "images": [
+        {
+          "src": "/api/course-assets/assets/course-visuals/generated-lesson-guides/ev-course-06-lesson-02-state.svg",
+          "title": "C06.L02 电池嵌套状态、安全状态与动作",
+          "caption": "围绕 状态机/State / 转移/Transition / 安全模式/Safety 组织汽车工程语境，把本课对象放进可追踪的 SysML v2 模型。",
+          "alt": "电动汽车 SysML v2 建模课程导引图：电池嵌套状态、安全状态与动作"
+        }
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "工程意图：L01 解决车辆级模式切换，L02 进入子系统状态。电池状态机要回答两个问题：正常充放电如何分层，发生低电压或热故障时如何安全退出。"
+    },
+    {
+      "type": "markdown",
+      "content": "嵌套状态：`Active.Discharging` 和 `Active.Charging.ConstantCurrent` 这种点号路径表示状态层级。它和 C03 产品结构里的 BatteryPack/Module/Cell 层级是同一种工程思想：先建立父状态，再在内部细化。"
+    },
+    {
+      "type": "markdown",
+      "content": "参数和守卫：`if socPercent < minSocPercent` 不是让本站计算 SOC，而是把“低于阈值才进入安全状态”的规则写入模型。真实项目中，minSocPercent 可以来自 BatteryPack 参数、需求或校准数据；当前 lesson 先把这些参数作为 BatteryState 的输入，后续综合项目再用 package/import 组织跨模型引用。"
+    },
+    {
+      "type": "hint-card",
+      "title": "guard 是否要先定义",
+      "label": "点击查看状态/行为语义说明",
+      "content": "本课的 guard 仍是内联 Boolean 表达式，不需要先定义独立 guard 元素。表达式里引用的 `socPercent`、`minSocPercent`、`packTempC`、`maxTempC`、`isolationOK` 已经作为 `BatteryState` 的 `in` 参数放在状态机顶部，因此在 transition 中可见；后续如果多个状态机复用同一判据，可以再抽成 `constraint` 或 `calc`。"
+    },
+    {
+      "type": "hint-card",
+      "title": "Signal 与 Guard",
+      "label": "点击查看状态/行为语义说明",
+      "content": "`attribute def ChargerConnectedSignal;`、`CellVoltageLowSignal`、`ThermalFaultSignal` 是可被 `accept` 接收的信号/事件载荷类型，不是 Boolean。`accept CellVoltageLowSignal if socPercent < minSocPercent` 表示“收到低电压事件，并且 SOC 低于阈值时才转入安全状态”。事件触发和 Boolean guard 是两层条件。"
+    },
+    {
+      "type": "hint-card",
+      "title": "entry/do/exit action 和 perform action 是一回事吗？",
+      "label": "点击查看状态/行为语义说明",
+      "content": "C05 的 `perform action` 说明结构或行为上下文承担/调用某个行为；本课的 `entry action openContactors`、`do action sendFaultReport`、`exit action reenableBattery` 是状态动作，分别说明进入 SafeState、停留在 SafeState、离开 SafeState 时执行什么。官方 training 示例也把三者写在同一个状态块里：`entry ...`、`do action ...`、`exit action ...`。二者都关联 action，但回答的工程问题不同。"
+    },
+    {
+      "type": "markdown",
+      "content": "transition 写法示例：模板已经先写出 `transition cc_to_cv first ConstantCurrent accept ChargeTaperSignal if socPercent > 80.0 then ConstantVoltage;`，并预置了热故障安全转移 `transition thermal_to_safe first Active.Charging accept ThermalFaultSignal if packTempC > maxTempC then SafeState;`。这条热故障转移是示例，不需要再写一遍；TODO 6 练习的是把同样的点号路径方法迁移到 `Active.Discharging`，说明低电量事件从 Active 内的 Discharging 子状态进入 SafeState。"
+    },
+    {
+      "type": "hint-card",
+      "title": "SafeState -> Idle 中 first 和 then 怎么读？",
+      "label": "点击查看恢复转移写法",
+      "content": "`transition ... first SafeState accept FaultClearedSignal if isolationOK then Idle;` 读作：这条转移从 `SafeState` 出发，接收 `FaultClearedSignal`，并且 `isolationOK` 为真时，目标状态是 `Idle`。这里的 `first` 不是“状态机初始状态”，而是这条 transition 的源状态；`then Idle` 才是转移完成后的目标状态。离开 `SafeState` 时，`exit action reenableBattery : ReenableBattery;` 会表达重新使能电池的退出动作。"
+    },
+    {
+      "type": "markdown",
+      "content": "transition usage 名称可以自定义：`cc_to_cv`、`discharging_to_charging`、`low_soc_to_safe`、`thermal_to_safe`、`safe_to_idle` 是推荐示例名，不是本课通过条件。课程检查关注嵌套父级、源状态、目标状态、事件和 guard；如果你写成更符合团队规范的名称，只要转移语义正确也应通过。TODO 3-5 中的状态动作名称仍需按课程要求写 `openContactors`、`sendFaultReport`、`reenableBattery`，因为这三个名称对应本课明确要检查的进入、停留和退出动作。"
+    },
+    {
+      "type": "markdown",
+      "content": "视图定位：`batteryStateTransitionView` 使用 `StateTransitionView`，只暴露 `BatteryState` 这种状态定义；`batteryStateCarrierView` 使用 `GeneralView`，展示 `BatteryPack` 如何承载 `state batteryMode : BatteryState`。状态迁移视图和结构承载视图要分开，避免把结构对象混进纯状态迁移视图。"
+    },
+    {
+      "type": "markdown",
+      "content": "练习步骤：如果编辑器顶部显示“课程模板”，先读 ConstantCurrent -> ConstantVoltage 和热故障安全转移两个示例，再按 TODO 2-7 补齐放电转充电、SafeState 内的 entry/do/exit action、低电压安全转移和恢复转移。如果显示“已恢复草稿”，请检查这些内容是否在 BatteryState 内的正确层级；如果草稿已经偏离练习起点，可以点击“重置为课程模板”重新开始。"
+    },
+    {
+      "type": "code",
+      "language": "sysml",
+      "sourceFile": "starter.sysml"
+    }
+  ],
+  "workspace": {
+    "files": [
+      {
+        "path": "main.sysml",
+        "source": "starter.sysml",
+        "editable": true
+      }
+    ],
+    "entryFile": "main.sysml"
+  },
+  "tasks": [
+    {
+      "id": "task-01",
+      "type": "model-challenge",
+      "prompt": "在课程模板的 TODO 位置，或在已恢复草稿中的对应结构位置，完成 BatteryState 的嵌套充电状态、安全状态、状态动作、参数守卫和恢复路径。",
+      "hints": [
+        "嵌套状态路径请使用点号：`Active.Charging` 表示 Active 下面的 Charging 子状态；TODO 6 要用同样逻辑引用 `Active.Discharging`。",
+        "照着模板中的 ConstantCurrent -> ConstantVoltage 示例写后续 transition：`first` 源状态、`accept` 事件、可选 `if` 守卫、`then` 目标状态。",
+        "`if` 后可以直接写内联 guard 表达式，不需要单独定义 guard；但引用的参数必须已在 `BatteryState` 上下文可见。",
+        "`CellVoltageLowSignal`、`ThermalFaultSignal` 是 signal 类型，供 `accept` 接收事件使用，不是 Boolean guard。",
+        "低 SOC 转移练的是嵌套状态路径和守卫组合：源状态应指向 `Active.Discharging`，事件是 `CellVoltageLowSignal`，阈值条件是 `socPercent < minSocPercent`。",
+        "transition usage 名称可以自定义；推荐示例名是 `discharging_to_charging`、`low_soc_to_safe`、`thermal_to_safe`、`safe_to_idle`。",
+        "状态动作要写在 `state SafeState { ... }` 内，语法骨架是 `entry|do|exit action 名称 : 动作类型;`；冒号左边是本状态里的动作 usage 名称，冒号右边引用前面定义的 action def。",
+        "`entry` 绑定进入状态的时机，`do` 绑定停留在状态期间的持续/周期行为，`exit` 绑定离开状态的时机；本课分别对应断开接触器、上报故障、重新使能电池。",
+        "`perform action` 说明结构或行为上下文承担/调用行为；`entry/do/exit action` 说明状态进入、停留、离开时执行行为。",
+        "`first SafeState ... then Idle` 中，`first SafeState` 是恢复转移的源状态，`then Idle` 是故障清除后的目标状态。",
+        "参数可以先作为 state def 的输入；跨 package 参数引用会在 L03 的模型组织部分解释。"
+      ]
+    }
+  ],
+  "validation": {
+    "strictSysml": true,
+    "rulesFile": "rules.json"
+  },
+  "completion": {
+    "requiresStrictValidation": true,
+    "requiresAllLessonRules": true
+  },
+  "glossaryTerms": [
+    "state def",
+    "state",
+    "transition",
+    "guard",
+    "entry action",
+    "do action",
+    "exit action",
+    "SafeState"
+  ]
+}

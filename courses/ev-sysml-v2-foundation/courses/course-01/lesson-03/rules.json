@@ -1,0 +1,155 @@
+{
+  "rules": [
+    {
+      "id": "strict-valid",
+      "type": "strictValidationPassed",
+      "severity": "error",
+      "message": "模型必须通过严格 SysML v2 校验。"
+    },
+    {
+      "id": "keep-vehicle-context",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "ElectricVehicle",
+        "kind": "part",
+        "name": "driver",
+        "typeName": "Driver"
+      },
+      "message": "需要保留 Lesson 02 的 part driver : Driver。"
+    },
+    {
+      "id": "need-type",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "requirementDef",
+        "name": "VehicleNeed"
+      },
+      "message": "请补全 requirement def VehicleNeed。"
+    },
+    {
+      "id": "need-type-subject",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "VehicleNeed",
+        "kind": "subject",
+        "name": "vehicle",
+        "typeName": "ElectricVehicle"
+      },
+      "message": "VehicleNeed 需要声明 subject vehicle : ElectricVehicle，说明这类需求约束的是车辆。"
+    },
+    {
+      "id": "usable-range",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "requirement",
+        "name": "usableRange",
+        "typeName": "VehicleNeed"
+      },
+      "message": "请补全 requirement usableRange : VehicleNeed。"
+    },
+    {
+      "id": "analysis-type",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "analysisDef",
+        "name": "VehicleModelPurpose"
+      },
+      "message": "请补全 analysis def VehicleModelPurpose。"
+    },
+    {
+      "id": "analysis-type-subject",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "VehicleModelPurpose",
+        "kind": "subject",
+        "name": "vehicle",
+        "typeName": "ElectricVehicle"
+      },
+      "message": "VehicleModelPurpose 需要声明 subject vehicle : ElectricVehicle，说明分析目的围绕车辆模型展开。"
+    },
+    {
+      "id": "analysis-usage",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "analysis",
+        "name": "purposeCheck",
+        "typeName": "VehicleModelPurpose"
+      },
+      "message": "请补全 analysis purposeCheck : VehicleModelPurpose。"
+    },
+    {
+      "id": "analysis-usage-subject",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "purposeCheck",
+        "kind": "subject",
+        "name": "vehicle",
+        "targetName": "evPrototype"
+      },
+      "message": "purposeCheck 需要绑定 subject vehicle = evPrototype，让分析入口和当前样车关联。"
+    },
+    {
+      "id": "satisfy-trace",
+      "type": "relationshipExists",
+      "severity": "error",
+      "selector": {
+        "kind": "satisfy",
+        "sourceName": "usableRange",
+        "targetName": "evPrototype"
+      },
+      "message": "请补全 satisfy usableRange by evPrototype。"
+    },
+    {
+      "id": "view-exposes-need-type",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "contextRequirementView",
+        "kind": "expose",
+        "targetName": "VehicleNeed"
+      },
+      "message": "contextRequirementView 需要 expose VehicleNeed，让需求类型进入评审视图。"
+    },
+    {
+      "id": "view-exposes-usable-range",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "contextRequirementView",
+        "kind": "expose",
+        "targetName": "usableRange"
+      },
+      "message": "contextRequirementView 需要 expose usableRange，让第一条需求进入评审视图。"
+    },
+    {
+      "id": "view-exposes-analysis-type",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "contextRequirementView",
+        "kind": "expose",
+        "targetName": "VehicleModelPurpose"
+      },
+      "message": "contextRequirementView 需要 expose VehicleModelPurpose，让分析入口类型进入评审视图。"
+    },
+    {
+      "id": "view-exposes-purpose-check",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "contextRequirementView",
+        "kind": "expose",
+        "targetName": "purposeCheck"
+      },
+      "message": "contextRequirementView 需要 expose purposeCheck，让分析入口使用进入评审视图。"
+    }
+  ]
+}

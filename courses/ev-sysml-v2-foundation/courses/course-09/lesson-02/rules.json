@@ -1,0 +1,98 @@
+{
+  "rules": [
+    {
+      "id": "strict-valid",
+      "type": "strictValidationPassed",
+      "severity": "error",
+      "message": "模型必须通过严格 SysML v2 校验。"
+    },
+    {
+      "id": "collect-measurement",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "collectData",
+        "kind": "out",
+        "name": "measuredRangeKm",
+        "valueIncludes": "RangeRoadTest::measuredRangeKm"
+      },
+      "message": "collectData 需要采集道路测试观测值。"
+    },
+    {
+      "id": "process-input",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "processData",
+        "kind": "in",
+        "name": "rawMeasuredRangeKm",
+        "valueIncludes": "collectData.measuredRangeKm"
+      },
+      "message": "processData 需要接收 collectData 的原始观测。"
+    },
+    {
+      "id": "process-output",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "processData",
+        "kind": "out",
+        "name": "processedRangeKm",
+        "valueIncludes": "rawMeasuredRangeKm"
+      },
+      "message": "processData 需要输出可审计的 processedRangeKm。"
+    },
+    {
+      "id": "evaluate-verdict",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "evaluateData",
+        "kind": "out",
+        "name": "verdict",
+        "typeName": "VerdictKind",
+        "valueIncludes": "PassIf(processedRangeKm >= requiredRangeKm)"
+      },
+      "message": "evaluateData 只能用独立处理后的观测值判定需求。"
+    },
+    {
+      "id": "verification-return",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "RangeRoadTest",
+        "kind": "return",
+        "name": "verdict",
+        "typeName": "VerdictKind",
+        "valueIncludes": "evaluateData.verdict"
+      },
+      "message": "RangeRoadTest 需要返回 evaluateData.verdict。"
+    },
+    {
+      "id": "execution-prediction-binding",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "executedRangeRoadTest",
+        "kind": "attribute",
+        "name": "predictedRangeKm",
+        "isRedefinition": true,
+        "valueIncludes": "cityRangePrediction.predictedRangeKm"
+      },
+      "message": "执行记录中的 predictedRangeKm 必须保持分析预测角色。"
+    },
+    {
+      "id": "execution-measurement-binding",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "executedRangeRoadTest",
+        "kind": "attribute",
+        "name": "measuredRangeKm",
+        "isRedefinition": true,
+        "valueIncludes": "rangeRoadTestEvidence.measuredRangeKm"
+      },
+      "message": "执行记录中的 measuredRangeKm 必须来自独立道路观测，不能来自分析预测。"
+    }
+  ]
+}

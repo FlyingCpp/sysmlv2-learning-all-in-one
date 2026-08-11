@@ -1,0 +1,173 @@
+{
+  "id": "course-03-lesson-01",
+  "title": "给产品结构添加工程参数",
+  "type": "modeling-lesson",
+  "estimatedMinutes": 25,
+  "scenario": {
+    "title": "工程场景",
+    "body": "整车架构评审已经能看到车辆由车身、电池包、电机、控制器和车轮组成，但这仍然只是一棵“名字树”。产品负责人现在追问：车轮多大、车身多重、目标续航是多少？本课把 `attribute` 加入 part def，让产品结构开始承载工程参数。",
+    "visual": {
+      "type": "interactive-flow",
+      "variant": "03",
+      "title": "从名字树到参数化零件",
+      "caption": "产品结构建模不只说明“由什么组成”，还要说明每个零件带有哪些工程参数。",
+      "nodes": [
+        {
+          "id": "bare-part",
+          "icon": "1",
+          "label": "裸 part def",
+          "detail": "只有 part def Wheel 时，模型只知道有轮子这个零件类型，但不知道轮径、质量或规格。",
+          "code": "part def Wheel"
+        },
+        {
+          "id": "attribute-added",
+          "icon": "2",
+          "label": "添加 attribute",
+          "detail": "attribute diameterM 和 massKg 把零件参数放入 Wheel 的定义里，形成可复用的参数表。",
+          "code": "attribute"
+        },
+        {
+          "id": "typed-value",
+          "icon": "3",
+          "label": "类型与默认值",
+          "detail": "ScalarValues::Real 说明参数是数值，= 0.65 或 = 12.0 给出当前课程场景的默认工程值。",
+          "code": "ScalarValues::Real"
+        },
+        {
+          "id": "part-vs-attribute",
+          "icon": "4",
+          "label": "结构与参数分工",
+          "detail": "part 回答“由什么组成”，attribute 回答“这个对象有什么工程特性”。两者共同构成可审查的产品定义。",
+          "code": "part / attribute"
+        }
+      ]
+    }
+  },
+  "learningBlocks": [
+    {
+      "type": "image-gallery",
+      "title": "课程导引图",
+      "content": "本图按当前 lesson 的工程任务和模型主题生成，用于先理解课程场景，再进入 SysML v2 建模练习。",
+      "generatedBy": "scripts/generate-course-lesson-illustrations.js",
+      "images": [
+        {
+          "src": "/api/course-assets/assets/course-visuals/generated-lesson-guides/ev-course-03-lesson-01-attribute.svg",
+          "title": "C03.L01 给产品结构添加工程参数",
+          "caption": "围绕 属性/Attribute / 取值/Value / 多重性/Multiplicity 组织汽车工程语境，把本课对象放进可追踪的 SysML v2 模型。",
+          "alt": "电动汽车 SysML v2 建模课程导引图：给产品结构添加工程参数"
+        }
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "视图定位：本课构建的是带工程参数的产品结构视图内容。结构视图不只展示零件树，也应展示轮径、质量、续航目标等关键 attribute；后续行为视图会复用这些结构对象作为行为载体。"
+    },
+    {
+      "type": "markdown",
+      "content": "工程意图：Course 01/02 已经覆盖 `part def` 和 `part usage` 的基本模式。Course 03 不再重复零件树，而是学习产品结构建模的下一层能力：给零件和整车定义工程参数。没有 attribute 的结构模型只能回答“有什么”，不能回答“多大、多重、目标多少”。"
+    },
+    {
+      "type": "markdown",
+      "content": "新概念：`attribute` 是写在 `part def` 内部的工程参数使用。`part def Wheel { attribute diameterM : ScalarValues::Real = 0.65; }` 可以理解为在轮子零件定义上增加一行参数表：轮径是实数，默认值 0.65 m。"
+    },
+    {
+      "type": "markdown",
+      "content": "语法读法：`attribute diameterM : ScalarValues::Real = 0.65;` 中，`attribute` 是 SysML v2 标准关键字，`diameterM` 是建模者给参数取的名称，`ScalarValues::Real` 是标准库里的实数类型，`= 0.65` 是这个参数的默认值或取值表达式。`diameterM`、`massKg`、`targetRangeKm` 是工程命名约定，不是标准强制名称；但参数必须有合法类型，且应放在正确的 part def 内。"
+    },
+    {
+      "type": "hint-card",
+      "title": "冒号空格和 ScalarValues::Real 是强制格式吗？",
+      "label": "点击查看 attribute 写法边界",
+      "content": "`attribute massKg : ScalarValues::Real = 5.00;` 里的空格主要是课程书写规范，方便人阅读；SysML v2 语法通常不要求冒号前后必须保留空格，`attribute massKg:ScalarValues::Real=5.00;` 也应被解析为同一类 attribute。课程规则应检查结构语义：父元素是 Wheel、名称是 massKg、类型是 ScalarValues::Real；只要这些模型元素正确，不应因为冒号或等号周围排版不同而失败。`ScalarValues::Real` 是标准库中的实数类型限定名，`ScalarValues::` 指明类型来自 ScalarValues 命名空间；课程显式写完整限定名，是为了先不引入 import。后续可以用 import 简化成 `Real`，但那会增加一层命名空间概念，本课先保持完整写法。",
+      "examples": [
+        "`attribute massKg : ScalarValues::Real = 5.00;`：课程推荐格式，最易读。",
+        "`attribute massKg:ScalarValues::Real=5.00;`：语义上等价，不应因为空格不同被课程规则拒绝。",
+        "`private import ScalarValues::*;` 后再写 `attribute massKg : Real = 5.00;` 是一种可行简写方向，但本课暂不前置 import。"
+      ]
+    },
+    {
+      "type": "hint-card",
+      "title": "单位 Unit 怎么办？",
+      "label": "点击查看单位建模边界",
+      "content": "`ScalarValues::Real` 只说明这里是实数值，本身不携带单位。严格单位建模应引入 SysML v2 官方 Quantities and Units 标准库，用 `ISQ` 表达物理量语义，用 `SI` 提供单位，并在取值里写 `[m]`、`[kg]`、`[km]`。下面的 `WheelWithUnits` 示例已按本站官方 SysML v2 Pilot validator 验证通过；但当前官方 Pilot validator 不能自动检查物理量和单位的维度一致性，例如 `ISQ::length = 1[kg]` 这类工程上明显不匹配的写法也可能通过语法和语义校验。3.1 主任务暂时采用 `diameterM`、`massKg`、`targetRangeKm` 这种工程命名约定，是为了先把 attribute 的父级位置、名称、类型和取值讲清楚；以后课程主线仍沿用这个简化写法，不把单位库作为通过条件。",
+      "examples": [
+        "本课简化写法：`attribute diameterM : ScalarValues::Real = 0.65;`，单位通过名称后缀 M 表达。",
+        "严格单位写法：`attribute diameter :> ISQ::length;`，具体取值写成 `attribute :>> diameter = 0.65[m];`。",
+        "官方 EV 示例也使用 `private import SI::*;`、`attribute mass :> ISQ::mass;`、`1000[kg]`、`0.7[m]` 和 `130[km]`。"
+      ]
+    },
+    {
+      "type": "markdown",
+      "title": "带 Unit 的标准写法示例",
+      "content": "如果项目从一开始就要求严格单位语义，可以采用下面这种模式：先导入 `SI`，用 `ISQ::length` / `ISQ::mass` 定义物理量，再在具体 usage 中用 `[m]`、`[kg]` 给值。本课练习仍使用简化参数名，是教学取舍，不是否认 SysML v2 的单位能力。注意：这种写法把“这是长度、这是质量”的意图写进模型，但当前官方 Pilot validator 还不能把所有错误单位自动拦住；工程项目仍需要额外的单位一致性规则或人工评审。这里第一次预览 `:>` 和 `:>>`：`:>` 表示这个 attribute 是某个更通用物理量类型的一种特化，`:>>` 表示在具体 usage 里重定义已经由类型带来的 attribute 值；C03 L03 会把 `:`、`:>`、`:>>` 放在产品族语境中系统对比。",
+      "code": "package UnitExample {\n  private import SI::*;\n\n  part def WheelWithUnits {\n    attribute diameter :> ISQ::length;\n    attribute mass :> ISQ::mass;\n  }\n\n  part sampleWheel : WheelWithUnits {\n    attribute :>> diameter = 0.65[m];\n    attribute :>> mass = 12.0[kg];\n  }\n}"
+    },
+    {
+      "type": "hint-card",
+      "title": "ISO / SI 单位体系支持哪些单位？",
+      "label": "点击查看常用单位范围",
+      "content": "`ISQ::length` 和 `ISQ::mass` 不是单位名，而是 ISO/IEC 80000 International System of Quantities 里的物理量语义：length 表示长度量，mass 表示质量量。单位来自 `SI` 包；官方 `SI.sysml` 说明它是 `representative but not yet complete list of measurement units`，也就是代表性但不完整的单位清单，所以课程只列常用范围，不把它讲成穷尽清单。",
+      "examples": [
+        "基础 SI 单位：`m`、`kg`、`s`、`A`、`K`、`mol`、`cd`。",
+        "结构尺寸与质量：`mm`、`cm`、`m`、`km`、`m²`、`m³`、`kg`、`tonne`。",
+        "车辆动力学：`m/s`、`km/h`、`m/s²`、`N`、`Pa`、`N⋅m`。",
+        "电气与能量：`A`、`V`、`Ω`、`C`、`F`、`H`、`J`、`W`、`W⋅h`、`kW`、`kJ`、`MJ`、`GJ`。",
+        "热与容量等：`K`、`°C`、`L`、`mL`，信息类库中还可见 `bit`、`B`。",
+        "当前工具边界：官方 Pilot validator 可以接受单位写法，但不能自动检查 `ISQ::length` 是否只能配长度单位；`attribute lengthValue :> ISQ::length = 1[kg];` 目前不会被它自动判错。",
+        "如果项目需要课程未列出的单位，应先查官方 `SI.sysml` 是否已有；没有时可参考官方 unit declaration 模式定义项目专用单位，并用官方 validator 校验。"
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "读模要点：`part wheels[4] : Wheel` 说明 ElectricVehicle 由若干 Wheel 组成；`attribute diameterM : ScalarValues::Real = 0.65;` 说明 Wheel 这个零件类型带有轮径参数。不要把 attribute 当成下级零件，它不是组成关系，而是工程属性。"
+    },
+    {
+      "type": "markdown",
+      "content": "练习步骤：如果编辑器顶部显示“课程模板”，就在 TODO 1 补全 `Wheel` 的 `diameterM` 和 `massKg`，在 TODO 2 补全 `VehicleBody` 的 `dragCoeff` 和 `massKg`，在 TODO 3 补全 `ElectricVehicle` 的 `targetRangeKm = 480.0`。如果显示“已恢复草稿”，先检查这些 attribute 是否已经写在对应 part def 内，必要时点击“重置为课程模板”回到 TODO 起点。运行校验并观察模型元素树中 attribute 是否挂在正确父元素下。"
+    },
+    {
+      "type": "code",
+      "language": "sysml",
+      "sourceFile": "starter.sysml"
+    }
+  ],
+  "workspace": {
+    "files": [
+      {
+        "path": "main.sysml",
+        "source": "starter.sysml",
+        "editable": true
+      }
+    ],
+    "entryFile": "main.sysml"
+  },
+  "tasks": [
+    {
+      "id": "task-01",
+      "type": "model-challenge",
+      "prompt": "在课程模板的 TODO 位置，或在已恢复草稿中的对应结构位置，给 `Wheel`、`VehicleBody` 和 `ElectricVehicle` 添加工程 attribute，让产品结构从“零件名字树”升级为“带参数的产品定义”。",
+      "hints": [
+        "所有数值类型请使用 `ScalarValues::Real`，这是官方库中的实数类型；本课写完整限定名，避免先引入 import。",
+        "冒号前后的空格是课程推荐排版，不是建模语义。规则检查的是 attribute 的父元素、名称、类型和必要取值。",
+        "`massKg` 可以同时出现在 Wheel 和 VehicleBody 中，因为它们属于不同 part def 的参数。",
+        "参数名由建模者按工程语义命名；语法层面先检查 attribute 是否有合法名称、类型和可选取值，并且是否放在正确的模型上下文中。",
+        "`targetRangeKm` 本课固定使用 480.0，方便后续 C07-C10 的需求、分析和验证课程沿用同一辆车的续航目标。"
+      ]
+    }
+  ],
+  "validation": {
+    "strictSysml": true,
+    "rulesFile": "rules.json"
+  },
+  "completion": {
+    "requiresStrictValidation": true,
+    "requiresAllLessonRules": true
+  },
+  "glossaryTerms": [
+    "part def",
+    "part",
+    "attribute",
+    "AttributeUsage",
+    "FeatureValue"
+  ]
+}

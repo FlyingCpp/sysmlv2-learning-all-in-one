@@ -1,0 +1,144 @@
+{
+  "rules": [
+    {
+      "id": "strict-valid",
+      "type": "strictValidationPassed",
+      "severity": "error",
+      "message": "模型必须通过严格 SysML v2 校验。"
+    },
+    {
+      "id": "power-voltage",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "ElectricalPower",
+        "kind": "attribute",
+        "name": "voltageV",
+        "typeName": "ScalarValues::Real"
+      },
+      "message": "ElectricalPower 中需要存在 attribute voltageV : ScalarValues::Real，表达功率流的电压属性。"
+    },
+    {
+      "id": "power-current",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "ElectricalPower",
+        "kind": "attribute",
+        "name": "currentA",
+        "typeName": "ScalarValues::Real"
+      },
+      "message": "ElectricalPower 中需要存在 attribute currentA : ScalarValues::Real，表达功率流的电流属性。"
+    },
+    {
+      "id": "power-max-power",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "ElectricalPower",
+        "kind": "attribute",
+        "name": "maxPowerKW",
+        "typeName": "ScalarValues::Real"
+      },
+      "message": "ElectricalPower 中需要存在 attribute maxPowerKW : ScalarValues::Real，表达功率接口能力。"
+    },
+    {
+      "id": "command-torque",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "TorqueCommand",
+        "kind": "attribute",
+        "name": "requestedTorqueNm",
+        "typeName": "ScalarValues::Real"
+      },
+      "message": "TorqueCommand 中需要存在 attribute requestedTorqueNm : ScalarValues::Real，表达请求扭矩。"
+    },
+    {
+      "id": "command-time",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "TorqueCommand",
+        "kind": "attribute",
+        "name": "timestampMs",
+        "typeName": "ScalarValues::Integer"
+      },
+      "message": "TorqueCommand 中需要存在 attribute timestampMs : ScalarValues::Integer，表达命令时序信息。"
+    },
+    {
+      "id": "command-priority",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "TorqueCommand",
+        "kind": "attribute",
+        "name": "priority",
+        "typeName": "ScalarValues::Integer"
+      },
+      "message": "TorqueCommand 中需要存在 attribute priority : ScalarValues::Integer，表达控制命令优先级。"
+    },
+    {
+      "id": "coolant-flow-rate",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "CoolantFlow",
+        "kind": "attribute",
+        "name": "flowRateLpm",
+        "typeName": "ScalarValues::Real"
+      },
+      "message": "CoolantFlow 中需要存在 attribute flowRateLpm : ScalarValues::Real，表达冷却液流量。"
+    },
+    {
+      "id": "coolant-temperature",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "CoolantFlow",
+        "kind": "attribute",
+        "name": "temperatureC",
+        "typeName": "ScalarValues::Real"
+      },
+      "message": "CoolantFlow 中需要存在 attribute temperatureC : ScalarValues::Real，表达冷却液温度。"
+    },
+    {
+      "id": "coolant-pressure",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "CoolantFlow",
+        "kind": "attribute",
+        "name": "pressureKPa",
+        "typeName": "ScalarValues::Real"
+      },
+      "message": "CoolantFlow 中需要存在 attribute pressureKPa : ScalarValues::Real，表达冷却回路压力。"
+    },
+    {
+      "id": "command-port-ref",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "CommandPort",
+        "kind": "item",
+        "name": "command",
+        "typeName": "TorqueCommand",
+        "isReference": true
+      },
+      "message": "CommandPort 中需要存在 ref item command : TorqueCommand，说明控制端口交换扭矩命令。"
+    },
+    {
+      "id": "thermal-port-ref",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "ThermalPort",
+        "kind": "item",
+        "name": "coolant",
+        "typeName": "CoolantFlow",
+        "isReference": true
+      },
+      "message": "ThermalPort 中需要存在 ref item coolant : CoolantFlow，说明热管理端口交换冷却流。"
+    }
+  ]
+}

@@ -1,0 +1,200 @@
+{
+  "id": "course-08",
+  "order": 8,
+  "title": "分析证据成熟度：计算、用例与权衡",
+  "summary": "复用 C07 需求基线，按三步成熟分析证据：L1 用纯 calc 建立 78/16 续航计算；L2 用 analysis subject/objective/return 把计算放进车型与目标上下文；L3 用官方 TradeStudy 模式比较标准与长续航方案。",
+  "thumbnail": {
+    "src": "/api/course-assets/assets/course-thumbnails/course-08.svg",
+    "alt": "Course 08 分析约束和计算证据缩略图"
+  },
+  "objectives": [
+    "用 calc def/usage 的 in 与 return 建立可复用纯计算",
+    "区分 487.5 km 原始计算、490.0 km 报告预测与 488.0 km 道路观测",
+    "用 analysis def/usage 建立 subject、objective、输入来源和分析 return",
+    "用 TradeStudy alternatives、evaluationFunction、MaximizeObjective 和 selectedAlternative 形成决策入口",
+    "理解分析支持需求评审，但不替代 satisfy 责任或 verification verdict"
+  ],
+  "concepts": [
+    "attribute",
+    "calc def",
+    "calc",
+    "analysis def",
+    "subject",
+    "objective",
+    "return",
+    "TradeStudy",
+    "alternative",
+    "evaluationFunction",
+    "selectedAlternative"
+  ],
+  "lessons": [
+    "lesson-01/lesson.json",
+    "lesson-02/lesson.json",
+    "lesson-03/lesson.json"
+  ],
+  "references": [
+    {
+      "type": "standard",
+      "source": "OMG SysML v2.0 Language Specification",
+      "title": "Calculations / Constraints / Analysis Cases 标准章节",
+      "section": "Clauses 7.19 Calculations, 7.20 Constraints, 7.23 Analysis Cases; Clauses 8.2.2.19, 8.2.2.20, 8.2.2.23; Clauses 8.4.15, 8.4.16, 8.4.19",
+      "url": "https://www.omg.org/spec/SysML/2.0/Language/PDF",
+      "note": "支撑 calc def、constraint def、analysis def、subject、assert constraint 和分析结果 return。"
+    },
+    {
+      "type": "example",
+      "source": "Systems-Modeling/SysML-v2-Release",
+      "title": "Official Calculation Training Examples",
+      "section": "sysml/src/training/30. Calculations / Calculation Definitions, Calculation Usages",
+      "url": "https://github.com/Systems-Modeling/SysML-v2-Release/tree/master/sysml/src/training/30.%20Calculations",
+      "note": "官方示例展示 calc def 的 in 参数、return 输出和 calc usage 的输入绑定。"
+    },
+    {
+      "type": "example",
+      "source": "Systems-Modeling/SysML-v2-Release",
+      "title": "Official Constraint Training Examples",
+      "section": "sysml/src/training/31. Constraints / Analytical Constraints, Constraint Assertions",
+      "url": "https://github.com/Systems-Modeling/SysML-v2-Release/tree/master/sysml/src/training/31.%20Constraints",
+      "note": "官方示例展示 constraint def 中的布尔表达式，以及 assert constraint 如何绑定参数。"
+    },
+    {
+      "type": "example",
+      "source": "Systems-Modeling/SysML-v2-Release",
+      "title": "Official Analysis Training Examples",
+      "section": "sysml/src/training/33. Analysis / Analysis Case Definition Example, Analysis Case Usage Example",
+      "url": "https://github.com/Systems-Modeling/SysML-v2-Release/tree/master/sysml/src/training/33.%20Analysis",
+      "note": "官方示例展示 analysis def 的 subject、objective、in、action/calc、assert constraint 和 return。"
+    },
+    {
+      "type": "example",
+      "source": "Systems-Modeling/SysML-v2-Release",
+      "title": "Official Mass Roll-up Example",
+      "section": "sysml/src/examples/Mass Roll-up Example",
+      "url": "https://github.com/Systems-Modeling/SysML-v2-Release/tree/master/sysml/src/examples/Mass%20Roll-up%20Example",
+      "note": "质量汇总是理解结构参数如何进入分析模型的典型工程案例。"
+    }
+  ],
+  "codeGuideExplanations": [
+    {
+      "id": "c08-attribute",
+      "lineStartsWith": "attribute ",
+      "explanation": "这行把工程参数放入模型。分析不是凭空计算，必须先在结构或需求中明确电池能量、质量、效率、目标值等参数来源。"
+    },
+    {
+      "id": "c08-constraint-def",
+      "lineStartsWith": "constraint def",
+      "explanation": "这行定义可复用判据。constraint def 的重点不是名字，而是内部输入参数和必须成立的布尔表达式。"
+    },
+    {
+      "id": "c08-calc-def",
+      "lineStartsWith": "calc def",
+      "explanation": "这行定义可复用计算方法。calc def 通常包含 in 参数和 return 输出，可理解为工程模型中的函数签名和计算表达式。"
+    },
+    {
+      "id": "c08-calc-usage",
+      "lineStartsWith": "calc ",
+      "explanation": "这行在 analysis 内使用一个计算定义，并把 subject 或分析输入绑定到 calc 的入参。"
+    },
+    {
+      "id": "c08-subject",
+      "lineStartsWith": "subject ",
+      "explanation": "这行声明被分析对象。analysis 没有 subject，就无法说明当前计算针对哪台车、哪个电池包或哪个设计配置。"
+    },
+    {
+      "id": "c08-return",
+      "lineStartsWith": "return ",
+      "explanation": "这行声明计算或分析输出。return 让分析结果成为可被需求、验证或后续分析引用的模型元素。"
+    },
+    {
+      "id": "c08-assert-constraint",
+      "lineStartsWith": "assert constraint",
+      "explanation": "这行断言某个约束必须成立，并把具体参数绑定到约束输入。它是分析结果变成需求判断证据的关键。"
+    },
+    {
+      "id": "c08-analysis",
+      "lineStartsWith": "analysis ",
+      "explanation": "这行创建一次具体分析使用。analysis usage 把分析定义应用到某个车辆或场景，并设置本次分析的输入值。"
+    }
+  ],
+  "conceptExplanations": [
+    {
+      "id": "ConstraintDefinition",
+      "term": "ConstraintDefinition",
+      "aliases": [
+        "constraint def"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass ConstraintDefinition",
+      "standardEnglish": "A ConstraintDefinition is an OccurrenceDefinition that is also a Predicate that defines a constraint that may be asserted to hold on a system or part of a system.",
+      "chineseTranslation": "ConstraintDefinition 是一种 OccurrenceDefinition，同时也是 Predicate，用来定义可被断言为成立的约束。",
+      "explanation": "在工程分析中，constraint def 表达判据或边界条件，例如“估算续航必须不小于目标续航”“整备质量必须低于预算”。",
+      "engineeringExample": "constraint def RangeBalance { in batteryEnergyKWh; in energyPer100Km; in targetRangeKm; batteryEnergyKWh * 100.0 / energyPer100Km >= targetRangeKm }"
+    },
+    {
+      "id": "AssertConstraintUsage",
+      "term": "AssertConstraintUsage",
+      "aliases": [
+        "assert constraint"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass AssertConstraintUsage",
+      "standardEnglish": "An AssertConstraintUsage is a ConstraintUsage that is also an Invariant.",
+      "chineseTranslation": "AssertConstraintUsage 是一种 ConstraintUsage，同时也是 Invariant。",
+      "explanation": "assert constraint 把可复用约束放到具体分析或结构上下文中，并绑定本次分析使用的参数。",
+      "engineeringExample": "assert constraint rangeCheck : RangeBalance { in batteryEnergyKWh = vehicle.battery.usableEnergyKWh; in targetRangeKm = targetRangeKm; }"
+    },
+    {
+      "id": "CalculationDefinition",
+      "term": "CalculationDefinition",
+      "aliases": [
+        "calc def"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass CalculationDefinition",
+      "standardEnglish": "A CalculationDefinition is an ActionDefinition that also defines a Function producing a result.",
+      "chineseTranslation": "CalculationDefinition 是一种 ActionDefinition，同时定义一个产生结果的 Function。",
+      "explanation": "calc def 是可复用计算方法。它不是自动仿真环境本身，但把输入、输出和计算关系以标准模型形式表达出来，供支持求值的工具或外部分析链执行。",
+      "engineeringExample": "calc def EstimateRange { in batteryEnergyKWh; in energyPer100Km; return rangeKm = batteryEnergyKWh * 100.0 / energyPer100Km; }"
+    },
+    {
+      "id": "CalculationUsage",
+      "term": "CalculationUsage",
+      "aliases": [
+        "calc"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass CalculationUsage",
+      "standardEnglish": "A CalculationUsage is an ActionUsage that is also an Expression, and, so, is typed by a Function.",
+      "chineseTranslation": "CalculationUsage 是一种 ActionUsage，同时也是 Expression，因此由 Function 类型化。",
+      "explanation": "calc usage 是某次分析中对 calc def 的具体使用，重点是把车辆、部件或场景参数绑定到计算入参。",
+      "engineeringExample": "calc estimateRange : EstimateRange { in batteryEnergyKWh = vehicle.battery.usableEnergyKWh; return rangeKm; }"
+    },
+    {
+      "id": "AnalysisCaseDefinition",
+      "term": "AnalysisCaseDefinition",
+      "aliases": [
+        "analysis def",
+        "analysis case def"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass AnalysisCaseDefinition",
+      "standardEnglish": "An AnalysisCaseDefinition is a CaseDefinition for the case of carrying out an analysis.",
+      "chineseTranslation": "AnalysisCaseDefinition 是用于开展分析的 CaseDefinition。",
+      "explanation": "analysis def 组织一次分析的 subject、输入、计算、输出和判据。它回答“分析谁、用什么参数、算出什么、如何判断”。",
+      "engineeringExample": "analysis def MassAnalysis { subject vehicle : ElectricVehicle; calc sumVehicleMass : SumVehicleMass; assert constraint massBudgetCheck : MassBudget; }"
+    },
+    {
+      "id": "SubjectMembership",
+      "term": "SubjectMembership",
+      "aliases": [
+        "subject"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass SubjectMembership",
+      "standardEnglish": "A SubjectMembership is a ParameterMembership that indicates that its ownedSubjectParameter is the subject of its owningType.",
+      "chineseTranslation": "SubjectMembership 是一种 ParameterMembership，用于指明拥有类型的 subject 参数。",
+      "explanation": "subject 让需求、分析或验证明确针对哪个对象。没有 subject，分析结果很难成为工程证据。",
+      "engineeringExample": "analysis evRange : RangeAnalysis { subject vehicle = evCityVehicle; } 表示这次续航分析针对 evCityVehicle。"
+    }
+  ]
+}

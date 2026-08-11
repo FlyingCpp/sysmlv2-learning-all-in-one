@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 236" role="img" aria-labelledby="t d">
+  <title id="t">Course 10 Integrated EV project</title>
+  <desc id="d">Cross-course baseline connects structure, behavior, requirements, analysis, verification and view.</desc>
+  <rect width="420" height="236" rx="18" fill="#f8fbff"/>
+  <circle cx="210" cy="118" r="72" fill="#eef6ff" stroke="#b9d4ee" stroke-width="3"/>
+  <g font-family="Segoe UI,Arial" font-size="13" font-weight="800">
+    <rect x="38" y="42" width="96" height="40" rx="9" fill="#fff" stroke="#b9d4ee"/><text x="59" y="67">C03</text>
+    <rect x="286" y="42" width="96" height="40" rx="9" fill="#fff" stroke="#b9d4ee"/><text x="307" y="67">C04</text>
+    <rect x="38" y="154" width="96" height="40" rx="9" fill="#fff" stroke="#b8dfc8"/><text x="59" y="179">C07</text>
+    <rect x="286" y="154" width="96" height="40" rx="9" fill="#fff" stroke="#b8dfc8"/><text x="307" y="179">C09</text>
+    <rect x="158" y="93" width="104" height="50" rx="12" fill="#1769aa"/><text x="183" y="123" fill="#fff">EV model</text>
+  </g>
+  <path d="M134 62l42 40M286 62l-42 40M134 174l42-40M286 174l-42-40" stroke="#64748b" stroke-width="4" stroke-linecap="round"/>
+  <text x="122" y="216" font-family="Consolas,monospace" font-size="14" fill="#0f172a">import baseline + final view</text>
+</svg>

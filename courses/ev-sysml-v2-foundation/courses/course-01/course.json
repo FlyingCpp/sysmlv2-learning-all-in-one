@@ -1,0 +1,172 @@
+{
+  "id": "course-01",
+  "order": 1,
+  "title": "SysML v2 是什么",
+  "summary": "先建立 SysML v2 的汽车工程全景，再用一个连续演进的电动汽车模型练习 package、part def、part、需求追踪和分析入口。",
+  "thumbnail": {
+    "src": "/api/course-assets/assets/course-thumbnails/course-01.svg",
+    "alt": "Course 01 汽车工程全景与 SysML v2 模型边界缩略图"
+  },
+  "objectives": [
+    "理解 SysML v2 把工程事实放入可校验文本模型，而不是只画图或写说明文档",
+    "识别本课程会反复使用的结构、接口、行为、状态、需求、分析和验证建模维度",
+    "能从空白 package 逐步补全电动汽车结构、系统边界和第一条需求追踪线",
+    "理解 def 定义类型、usage 放入具体模型上下文的基本模式"
+  ],
+  "concepts": [
+    "package",
+    "part def",
+    "part",
+    "requirement def",
+    "requirement",
+    "analysis def",
+    "analysis",
+    "satisfy",
+    "model boundary",
+    "def/usage pattern"
+  ],
+  "lessons": [
+    "lesson-00/lesson.json",
+    "lesson-01/lesson.json",
+    "lesson-02/lesson.json",
+    "lesson-03/lesson.json"
+  ],
+  "references": [
+    {
+      "type": "standard",
+      "source": "OMG SysML v2.0 Language Specification",
+      "title": "OMG SysML v2 Language Specification",
+      "section": "Clause 6 Introduction; Clause 7.5 Namespaces and Packages; Clause 8.2.2.5 Namespaces and Packages Textual Notation",
+      "url": "https://www.omg.org/spec/SysML/2.0/Language/PDF",
+      "note": "理解 SysML v2 文档组织、package 边界和文本建模入口。"
+    },
+    {
+      "type": "standard",
+      "source": "OMG SysML v2.0 Language Specification",
+      "title": "Definitions and Usages",
+      "section": "Clause 7.6 Definition and Usage; Clause 8.2.2.6 Definition and Usage Textual Notation",
+      "url": "https://www.omg.org/spec/SysML/2.0/Language/PDF",
+      "note": "支撑本课的核心模式：先定义工程类型，再把它放入具体系统上下文。"
+    },
+    {
+      "type": "guide",
+      "source": "Official SysML v2 resource",
+      "title": "OMG SysML v2 overview",
+      "section": "SysML v2 用于 requirements、behavior、structure、analysis、verification，并强调一致性与可追踪性。",
+      "url": "https://www.omg.org/sysml/sysmlv2/"
+    },
+    {
+      "type": "example",
+      "source": "Systems-Modeling/SysML-v2-Release",
+      "title": "Official Vehicle Example",
+      "section": "Vehicle Example / SysML v2 Spec Annex A SimpleVehicleModel.sysml",
+      "url": "https://github.com/Systems-Modeling/SysML-v2-Release/tree/master/sysml/src/examples/Vehicle%20Example",
+      "note": "对照本课最小车辆 package，观察官方车辆示例如何组织结构、接口和需求。"
+    }
+  ],
+  "conceptExplanations": [
+    {
+      "id": "Package",
+      "term": "Package",
+      "aliases": [
+        "package"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass Package",
+      "standardEnglish": "A Package is a Namespace used to group Elements, without any instance-level semantics. It may have one or more model-level evaluable filterCondition Expressions used to filter its importedMemberships. Any imported member must meet all of the filterConditions.",
+      "chineseTranslation": "Package 是一种 Namespace，用来组织模型元素，本身不表达实例级语义。",
+      "explanation": "Package 是可校验模型的工程边界。汽车项目里，需求、结构、接口、分析和验证都应放入明确命名空间，避免模型元素散落在全局空间。",
+      "engineeringExample": "package EV_C01_L01 { part def ElectricVehicle; } 用一个包承载课程中的车辆模型边界。"
+    },
+    {
+      "id": "Namespace",
+      "term": "Namespace",
+      "aliases": [],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass Namespace",
+      "standardEnglish": "A Namespace is an Element that contains other Elements, known as its members, via Membership Relationships with those Elements. The members of a Namespace may be owned by the Namespace, aliased in the Namespace, or imported into the Namespace via Import Relationships.",
+      "chineseTranslation": "Namespace 是包含其他元素的 Element，这些元素通过 Membership 关系成为它的成员。",
+      "explanation": "Namespace 决定名称解析和模型边界。同名 BatteryPack 如果出现在不同包里，需要通过包边界和限定名区分。",
+      "engineeringExample": "把 BatteryPack 放在 EV_Structure 包内，需求或分析包可以通过导入或限定名引用它。"
+    },
+    {
+      "id": "PartDefinition",
+      "term": "PartDefinition",
+      "aliases": [
+        "part def"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass PartDefinition",
+      "standardEnglish": "A PartDefinition is an ItemDefinition of a Class of systems or parts of systems. Note that all parts may be considered items for certain purposes, but not all items are parts that can perform actions within a system.",
+      "chineseTranslation": "PartDefinition 是系统或系统部件类别的 ItemDefinition。",
+      "explanation": "part def 定义可复用的物理产品或系统类型。它类似工程图纸或产品平台定义，不表示某一台具体样车。",
+      "engineeringExample": "part def ElectricVehicle { part battery : BatteryPack; } 定义电动汽车结构模板。"
+    },
+    {
+      "id": "PartUsage",
+      "term": "PartUsage",
+      "aliases": [
+        "part"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass PartUsage",
+      "standardEnglish": "A PartUsage is a usage of a PartDefinition to represent a system or a part of a system. At least one of the itemDefinitions of the PartUsage must be a PartDefinition.",
+      "chineseTranslation": "PartUsage 是 PartDefinition 的一次使用，用来表示一个系统或系统部件。",
+      "explanation": "part 把定义放入具体模型上下文。课程中的 battery : BatteryPack 是 ElectricVehicle 结构里出现的一份电池包使用。",
+      "engineeringExample": "part evPrototype : ElectricVehicle; 表示一个可用于需求追踪和分析讨论的样车模型对象。"
+    },
+    {
+      "id": "RequirementDefinition",
+      "term": "RequirementDefinition",
+      "aliases": [
+        "requirement def"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass RequirementDefinition",
+      "standardEnglish": "A RequirementDefinition is a ConstraintDefinition that defines a requirement used in the context of a specification as a constraint that a valid solution must satisfy. The specification is relative to a specified subject, possibly in collaboration with one or more external actors.",
+      "chineseTranslation": "RequirementDefinition 是一种 ConstraintDefinition，用来定义有效解决方案必须满足的需求。",
+      "explanation": "requirement def 定义需求类型。它让需求不是散落在文档里的句子，而是可命名、可追踪、可被验证的模型对象类型。",
+      "engineeringExample": "requirement def VehicleNeed; 定义车辆能力需求模板，例如可用续航、安全阈值或充电目标。"
+    },
+    {
+      "id": "RequirementUsage",
+      "term": "RequirementUsage",
+      "aliases": [
+        "requirement"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass RequirementUsage",
+      "standardEnglish": "A RequirementUsage is a Usage of a RequirementDefinition.",
+      "chineseTranslation": "RequirementUsage 是 RequirementDefinition 的一次使用。",
+      "explanation": "requirement 表示具体工程需求。Course 1 只建立最小追踪线，后续需求课程再展开文本、约束和验证目标。",
+      "engineeringExample": "requirement usableRange : VehicleNeed; 表示当前车型要满足的城市续航可用性需求。"
+    },
+    {
+      "id": "AnalysisCaseDefinition",
+      "term": "AnalysisCaseDefinition",
+      "aliases": [
+        "analysis def",
+        "analysis case def"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass AnalysisCaseDefinition",
+      "standardEnglish": "An AnalysisCaseDefinition is a CaseDefinition for the case of carrying out an analysis.",
+      "chineseTranslation": "AnalysisCaseDefinition 是用于执行分析的 CaseDefinition。",
+      "explanation": "analysis def 定义分析案例类型，用来组织为什么分析、分析什么对象、后续如何连接计算或验证。",
+      "engineeringExample": "analysis def VehicleModelPurpose; 表示用于评估车辆模型是否足以回答续航需求的分析入口。"
+    },
+    {
+      "id": "SatisfyRequirementUsage",
+      "term": "SatisfyRequirementUsage",
+      "aliases": [
+        "satisfy"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass SatisfyRequirementUsage",
+      "standardEnglish": "A SatisfyRequirementUsage is an AssertConstraintUsage that asserts, by default, that a satisfied RequirementUsage is true for a specific satisfyingFeature, or, if isNegated = true, that the RequirementUsage is false. The satisfied RequirementUsage is related to the SatisfyRequirementUsage by a ReferenceSubsetting Relationship.",
+      "chineseTranslation": "SatisfyRequirementUsage 断言某个特定模型特征满足一个 RequirementUsage。",
+      "explanation": "satisfy 建立需求到结构或行为的责任链。它不是注释，而是模型中的可追踪关系。",
+      "engineeringExample": "satisfy usableRange by evPrototype; 表示样车模型对象承担满足续航需求的责任。"
+    }
+  ]
+}

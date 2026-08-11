@@ -1,0 +1,81 @@
+{
+  "rules": [
+    {
+      "id": "strict-valid",
+      "type": "strictValidationPassed",
+      "severity": "error",
+      "message": "模型必须通过严格 SysML v2 校验。"
+    },
+    {
+      "id": "plan-objective",
+      "type": "relationshipExists",
+      "severity": "error",
+      "selector": { "kind": "verify", "sourceName": "vehicleRange" },
+      "message": "验证计划 objective 需要 verify vehicleRange。"
+    },
+    {
+      "id": "plan-method",
+      "type": "regex",
+      "severity": "error",
+      "pattern": "@VerificationMethod\\s*\\{\\s*kind\\s*=\\s*\\(VerificationMethodKind::test,\\s*VerificationMethodKind::analyze\\)",
+      "message": "验证计划需要记录 test 与 analyze 两种 VerificationMethod。"
+    },
+    {
+      "id": "plan-required-binding",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "rangeVerificationPlan",
+        "kind": "attribute",
+        "name": "requiredRangeKm",
+        "isRedefinition": true,
+        "valueIncludes": "vehicleRange.minRangeKm"
+      },
+      "message": "验证计划阈值必须来自 480.0 km 需求。"
+    },
+    {
+      "id": "plan-prediction-binding",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "rangeVerificationPlan",
+        "kind": "attribute",
+        "name": "predictedRangeKm",
+        "isRedefinition": true,
+        "valueIncludes": "cityRangePrediction.predictedRangeKm"
+      },
+      "message": "验证计划可引用 490.0 km 分析预测，但不能把它当作实测。"
+    },
+    {
+      "id": "plan-inconclusive-verdict",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "RangeVerificationPlan",
+        "kind": "return",
+        "name": "verdict",
+        "typeName": "VerdictKind",
+        "valueIncludes": "VerdictKind::inconclusive"
+      },
+      "message": "验证尚未执行时，计划 verdict 必须保持 VerdictKind::inconclusive。"
+    },
+    {
+      "id": "plan-must-not-use-passif",
+      "type": "notContains",
+      "severity": "error",
+      "text": "PassIf(",
+      "message": "验证策划阶段不能用 PassIf 把分析预测冒充执行证据。"
+    },
+    {
+      "id": "coverage-view",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "verificationCoverageView",
+        "kind": "expose",
+        "targetName": "rangeVerificationPlan"
+      },
+      "message": "覆盖视图需要 expose rangeVerificationPlan。"
+    }
+  ]
+}

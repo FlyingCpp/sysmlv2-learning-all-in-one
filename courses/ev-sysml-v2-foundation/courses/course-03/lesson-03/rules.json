@@ -1,0 +1,329 @@
+{
+  "rules": [
+    {
+      "id": "strict-valid",
+      "type": "strictValidationPassed",
+      "severity": "error",
+      "message": "模型必须通过严格 SysML v2 校验。"
+    },
+    {
+      "id": "cell-capacity-baseline",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "BatteryCell",
+        "kind": "attribute",
+        "name": "capacityAh",
+        "typeName": "ScalarValues::Real",
+        "valueIncludes": "220.0"
+      },
+      "message": "BatteryCell 中需要保留 capacityAh = 220.0，确保产品族课程沿用 C03-L02 的 78kWh 级电池包主线。"
+    },
+    {
+      "id": "cell-mass-baseline",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "BatteryCell",
+        "kind": "attribute",
+        "name": "massKg",
+        "typeName": "ScalarValues::Real",
+        "valueIncludes": "5.0"
+      },
+      "message": "BatteryCell 中需要保留 massKg = 5.0，作为 220Ah 车用电芯的教学近似质量。"
+    },
+    {
+      "id": "cell-energy-parameter",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "BatteryCell",
+        "kind": "attribute",
+        "name": "energyWh",
+        "typeName": "ScalarValues::Real",
+        "valueIncludes": "nominalVoltageV * capacityAh"
+      },
+      "message": "BatteryCell 中需要保留 energyWh = nominalVoltageV * capacityAh，沿用 C03-L02 的电芯能量来源。"
+    },
+    {
+      "id": "module-energy-rollup",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "BatteryModule",
+        "kind": "attribute",
+        "name": "moduleEnergyWh",
+        "typeName": "ScalarValues::Real",
+        "valueIncludes": "sum(cells.energyWh)"
+      },
+      "message": "BatteryModule 中需要保留 moduleEnergyWh = sum(cells.energyWh)，避免产品族课程回退到脱离 part usage 的硬编码能量公式。"
+    },
+    {
+      "id": "abstract-powertrain",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "partDef",
+        "name": "Powertrain",
+        "isAbstract": true
+      },
+      "message": "需要存在 abstract part def Powertrain，作为动力总成产品族的抽象父类型。"
+    },
+    {
+      "id": "single-motor-specialization",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "partDef",
+        "name": "SingleMotorPowertrain",
+        "specializes": "Powertrain"
+      },
+      "message": "需要存在 part def SingleMotorPowertrain :> Powertrain，表达单电机动力总成变体。"
+    },
+    {
+      "id": "single-motor-child",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "SingleMotorPowertrain",
+        "kind": "part",
+        "name": "motor",
+        "typeName": "Motor"
+      },
+      "message": "SingleMotorPowertrain 中需要存在 part motor : Motor。"
+    },
+    {
+      "id": "dual-motor-specialization",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "partDef",
+        "name": "DualMotorPowertrain",
+        "specializes": "Powertrain"
+      },
+      "message": "需要存在 part def DualMotorPowertrain :> Powertrain，表达双电机动力总成变体。"
+    },
+    {
+      "id": "dual-front-motor",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "DualMotorPowertrain",
+        "kind": "part",
+        "name": "frontMotor",
+        "typeName": "Motor"
+      },
+      "message": "DualMotorPowertrain 中需要存在 part frontMotor : Motor。"
+    },
+    {
+      "id": "dual-rear-motor",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "DualMotorPowertrain",
+        "kind": "part",
+        "name": "rearMotor",
+        "typeName": "Motor"
+      },
+      "message": "DualMotorPowertrain 中需要存在 part rearMotor : Motor。"
+    },
+    {
+      "id": "vehicle-powertrain",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "Vehicle",
+        "kind": "part",
+        "name": "powertrain",
+        "typeName": "Powertrain"
+      },
+      "message": "Vehicle 中需要存在 part powertrain : Powertrain，让整车结构引用抽象动力总成位置。"
+    },
+    {
+      "id": "vehicle-target-range",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "Vehicle",
+        "kind": "attribute",
+        "name": "targetRangeKm",
+        "typeName": "ScalarValues::Real",
+        "valueIncludes": "480.0"
+      },
+      "message": "Vehicle 中需要保留 attribute targetRangeKm : ScalarValues::Real = 480.0，使产品族课程与后续需求、分析、验证课程的续航目标一致。"
+    },
+    {
+      "id": "pack-total-energy",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "BatteryPack",
+        "kind": "attribute",
+        "name": "totalEnergyWh",
+        "typeName": "ScalarValues::Real",
+        "valueIncludes": "sum(modules.moduleEnergyWh)"
+      },
+      "message": "BatteryPack 中需要保留 totalEnergyWh = sum(modules.moduleEnergyWh)，让产品族课程沿用 C03-L02 的 usage 特征链汇总方式。"
+    },
+    {
+      "id": "pack-usable-energy",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "BatteryPack",
+        "kind": "attribute",
+        "name": "usableEnergyKWh",
+        "typeName": "ScalarValues::Real",
+        "valueIncludes": "totalEnergyWh / 1000.0"
+      },
+      "message": "BatteryPack 中需要保留 usableEnergyKWh = totalEnergyWh / 1000.0，作为后续 78kWh 级续航分析输入。"
+    },
+    {
+      "id": "standard-powertrain",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "part",
+        "name": "standardPowertrain",
+        "typeName": "SingleMotorPowertrain"
+      },
+      "message": "需要存在 part standardPowertrain : SingleMotorPowertrain，表示标准版动力总成配置。"
+    },
+    {
+      "id": "performance-powertrain",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "part",
+        "name": "performancePowertrain",
+        "typeName": "DualMotorPowertrain"
+      },
+      "message": "需要存在 part performancePowertrain : DualMotorPowertrain，表示性能版动力总成配置。"
+    },
+    {
+      "id": "standard-ev",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "part",
+        "name": "standardEV",
+        "typeName": "Vehicle"
+      },
+      "message": "需要存在 part standardEV : Vehicle，并在其内部绑定标准版动力总成。"
+    },
+    {
+      "id": "performance-ev",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "part",
+        "name": "performanceEV",
+        "typeName": "Vehicle"
+      },
+      "message": "需要存在 part performanceEV : Vehicle，并在其内部绑定性能版动力总成。"
+    },
+    {
+      "id": "standard-ev-powertrain-binding",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "standardEV",
+        "kind": "part",
+        "name": "powertrain",
+        "isRedefinition": true,
+        "valueIncludes": "standardPowertrain"
+      },
+      "message": "standardEV 内需要用 part :>> powertrain = standardPowertrain; 把 Vehicle 的动力总成槽位绑定到标准版配置。"
+    },
+    {
+      "id": "performance-ev-powertrain-binding",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "performanceEV",
+        "kind": "part",
+        "name": "powertrain",
+        "isRedefinition": true,
+        "valueIncludes": "performancePowertrain"
+      },
+      "message": "performanceEV 内需要用 part :>> powertrain = performancePowertrain; 把 Vehicle 的动力总成槽位绑定到性能版配置。"
+    },
+    {
+      "id": "vehicle-configs",
+      "type": "minCount",
+      "severity": "error",
+      "selector": {
+        "kind": "part",
+        "typeName": "Vehicle"
+      },
+      "count": 2,
+      "message": "需要至少创建两个 Vehicle 使用，用来表达标准版和性能版两个产品配置。"
+    },
+    {
+      "id": "view-exposes-single-powertrain",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "productVariantView",
+        "kind": "expose",
+        "targetName": "SingleMotorPowertrain"
+      },
+      "message": "productVariantView 需要 expose SingleMotorPowertrain，让产品族视图包含单电机动力总成类型。"
+    },
+    {
+      "id": "view-exposes-dual-powertrain",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "productVariantView",
+        "kind": "expose",
+        "targetName": "DualMotorPowertrain"
+      },
+      "message": "productVariantView 需要 expose DualMotorPowertrain，让产品族视图包含双电机动力总成类型。"
+    },
+    {
+      "id": "view-exposes-standard-powertrain",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "productVariantView",
+        "kind": "expose",
+        "targetName": "standardPowertrain"
+      },
+      "message": "productVariantView 需要 expose standardPowertrain，让图中看到标准版动力总成实例。"
+    },
+    {
+      "id": "view-exposes-performance-powertrain",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "productVariantView",
+        "kind": "expose",
+        "targetName": "performancePowertrain"
+      },
+      "message": "productVariantView 需要 expose performancePowertrain，让图中看到性能版动力总成实例。"
+    },
+    {
+      "id": "view-exposes-standard-ev",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "productVariantView",
+        "kind": "expose",
+        "targetName": "standardEV"
+      },
+      "message": "productVariantView 需要 expose standardEV，让图中看到标准版整车配置。"
+    },
+    {
+      "id": "view-exposes-performance-ev",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "productVariantView",
+        "kind": "expose",
+        "targetName": "performanceEV"
+      },
+      "message": "productVariantView 需要 expose performanceEV，让图中看到性能版整车配置。"
+    }
+  ]
+}

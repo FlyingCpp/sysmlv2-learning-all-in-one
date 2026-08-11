@@ -1,0 +1,87 @@
+{
+  "id": "course-08-lesson-03",
+  "title": "分析成熟度 3：用 TradeStudy 比较方案",
+  "type": "modeling-lesson",
+  "estimatedMinutes": 50,
+  "timePlan": [
+    { "label": "定义 alternatives", "minutes": 12, "description": "建立标准续航与长续航两个电池包方案。" },
+    { "label": "构造评价函数", "minutes": 20, "description": "综合续航、质量代价和快充时间形成 score。" },
+    { "label": "形成决策入口", "minutes": 18, "description": "使用 MaximizeObjective 与 selectedAlternative。" }
+  ],
+  "scenario": {
+    "title": "工程场景：预测不等于方案选择",
+    "body": "490.0 km 标准方案满足 480.0 km 目标，但项目还可选择 540.0 km 长续航方案。长续航方案带来 90 kg 质量代价和 35 min 快充时间。决策需要同时比较多个准则，而不是把单次续航计算当作最终答案。",
+    "visual": {
+      "type": "interactive-flow",
+      "variant": "08-maturity-trade-study",
+      "title": "方案权衡链",
+      "nodes": [
+        { "id": "alternatives", "label": "候选方案", "detail": "standard / long range", "code": "subject alternatives" },
+        { "id": "score", "label": "评价函数", "detail": "续航 - 质量 - 充电代价", "code": "evaluationFunction" },
+        { "id": "selection", "label": "选择入口", "detail": "最大化并返回方案", "code": "selectedAlternative" }
+      ]
+    }
+  },
+  "learningBlocks": [
+    {
+      "type": "image-gallery",
+      "title": "课程导引图",
+      "images": [
+        {
+          "src": "/api/course-assets/assets/course-visuals/generated-lesson-guides/ev-course-08-lesson-03-requirement.svg",
+          "title": "方案权衡",
+          "caption": "从单次预测升级为多方案工程决策。",
+          "alt": "电动汽车 TradeStudy 教学图"
+        }
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "工程意图：本课采用官方 `TradeStudies::*` 模式。`subject : RangePackageOption = (standardRangePackage, longRangePackage)` 给出 alternatives；`objective : MaximizeObjective` 定义方向；重定义 `evaluationFunction` 调用 RangePackageScore；`selectedAlternative` 是分析选择结果。"
+    },
+    {
+      "type": "hint-card",
+      "title": "TradeStudy 会自动替项目做决定吗？",
+      "label": "执行边界",
+      "content": "不会。官方 validator 证明模型结构与语言语义可接受，不是数值优化器。本课建立可审查的 alternatives、评价函数和选择接口，实际求值仍需分析运行时或外部求解工具。"
+    },
+    {
+      "type": "hint-card",
+      "title": "为什么这里不写 satisfy 或 PassIf？",
+      "label": "分析与验证边界",
+      "content": "TradeStudy 产出工程决策证据，不声明设计责任，也不产生测试 verdict。需求 satisfy 已在 C07，独立 PassIf 判定在 C09。"
+    },
+    {
+      "type": "markdown",
+      "content": "权威依据：官方 `Trade Study Analysis Example.sysml` 使用 TradeStudy、alternatives subject、MaximizeObjective、evaluationFunction 和 selectedAlternative。本课保持该结构，只把发动机候选项换成电动车续航方案。"
+    },
+    {
+      "type": "markdown",
+      "content": "练习步骤：在“课程模板”中按 TODO 1-2 补 alternatives 与 objective，按 TODO 3 完成 evaluationFunction result，按 TODO 4 返回 selectedAlternative。使用“已恢复草稿”时保留两个方案的参数差异；需要恢复时点击“重置为课程模板”。"
+    },
+    { "type": "code", "language": "sysml", "sourceFile": "starter.sysml" }
+  ],
+  "workspace": {
+    "files": [
+      { "path": "ev-program-baseline.sysml", "source": "../../../shared/ev-program-baseline.sysml", "editable": false },
+      { "path": "main.sysml", "source": "starter.sysml", "editable": true }
+    ],
+    "entryFile": "main.sysml"
+  },
+  "tasks": [
+    {
+      "id": "task-01",
+      "type": "model-challenge",
+      "prompt": "为电动车续航方案评审补齐官方 TradeStudy 结构，使两个方案能按共同评价函数进入可审查的选择流程。",
+      "hints": [
+        "subject 元组同时列出 standardRangePackage 和 longRangePackage。",
+        "objective 使用 TradeStudies 的 MaximizeObjective。",
+        "evaluationFunction 的 option 重定义 alternative。",
+        "selectedAlternative 返回类型保持 RangePackageOption。"
+      ]
+    }
+  ],
+  "validation": { "strictSysml": true, "rulesFile": "rules.json" },
+  "completion": { "requiresStrictValidation": true, "requiresAllLessonRules": true },
+  "glossaryTerms": ["TradeStudy", "alternative", "evaluationFunction", "MaximizeObjective", "selectedAlternative"]
+}

@@ -1,0 +1,185 @@
+{
+  "id": "course-05-lesson-01",
+  "title": "从结构视图切换到行为视图",
+  "type": "modeling-lesson",
+  "estimatedMinutes": 35,
+  "scenario": {
+    "title": "工程场景",
+    "body": "C01-C04 已经建立了结构、产品分解和接口。现在功能建模会议要回答新的问题：车辆接收到驾驶员加速或制动输入后，控制器、驱动和制动功能如何把输入变成扭矩与制动压力？这不是零件树，而是 `DriveCycle` 行为视图。",
+    "visual": {
+      "type": "interactive-flow",
+      "variant": "05-view-shift",
+      "title": "结构模型到行为模型",
+      "caption": "同一辆车可以被多个视图承载：结构视图看组成，行为视图看过程。",
+      "nodes": [
+        {
+          "id": "structure-view",
+          "icon": "S",
+          "label": "结构视图",
+          "detail": "C01-C04 的 part、port、interface 回答系统由什么组成、边界在哪里、部件如何交互。",
+          "code": "part / port"
+        },
+        {
+          "id": "behavior-view",
+          "icon": "B",
+          "label": "行为视图",
+          "detail": "C05 的 action、in/out、flow 回答系统在时间过程中做什么、数据如何流动。",
+          "code": "action def DriveCycle"
+        },
+        {
+          "id": "view-selection",
+          "icon": "V",
+          "label": "view 选择",
+          "detail": "view/expose 不复制模型，而是选择 ElectricVehicle、DriveCycle、urbanDrive 形成行为评审视图。",
+          "code": "view driveBehaviorView"
+        },
+        {
+          "id": "data-flow",
+          "icon": "F",
+          "label": "边界与数据流",
+          "detail": "bind 把外层行为参数接入内部步骤，flow 把一个步骤的输出连到下一个步骤的输入。",
+          "code": "bind / flow"
+        }
+      ]
+    }
+  },
+  "learningBlocks": [
+    {
+      "type": "image-gallery",
+      "title": "课程导引图",
+      "content": "本图按当前 lesson 的工程任务和模型主题生成，用于先理解课程场景，再进入 SysML v2 建模练习。",
+      "generatedBy": "scripts/generate-course-lesson-illustrations.js",
+      "images": [
+        {
+          "src": "/api/course-assets/assets/course-visuals/generated-lesson-guides/ev-course-05-lesson-01-view.svg",
+          "title": "C05.L01 从结构视图切换到行为视图",
+          "caption": "围绕 视点/Viewpoint / 暴露/Expose / 评审模型/Review 组织汽车工程语境，把本课对象放进可追踪的 SysML v2 模型。",
+          "alt": "电动汽车 SysML v2 建模课程导引图：从结构视图切换到行为视图"
+        }
+      ]
+    },
+    {
+      "type": "concept-map",
+      "title": "L01 新概念工程类比",
+      "intro": "从结构转到行为时，先把 SysML v2 术语翻译成控制和功能开发语言。",
+      "items": [
+        {
+          "engineeringQuestion": "车辆要完成哪类功能过程？",
+          "concept": "`action def`",
+          "analogy": "定义一种可复用的功能过程，例如驾驶循环或再生制动。",
+          "code": "action def DriveCycle",
+          "watchOut": "它不是 ECU 零件，也不是状态模式。"
+        },
+        {
+          "engineeringQuestion": "这一次功能执行叫什么？",
+          "concept": "`action` usage",
+          "analogy": "在 DriveCycle 内使用 readPedalSignals、computeMotorTorque 等步骤。",
+          "code": "action computeMotorTorque",
+          "watchOut": "usage 是本模型中的一次使用，不等于重新定义一个功能类型。"
+        },
+        {
+          "engineeringQuestion": "信号从哪里进入、从哪里输出？",
+          "concept": "`in` / `out`",
+          "analogy": "控制算法输入驾驶员加速请求，输出电机扭矩目标。",
+          "code": "in driverAccelCmd",
+          "watchOut": "`in` / `out` 是参数方向关键字，不是变量名后缀。"
+        },
+        {
+          "engineeringQuestion": "步骤之间如何传递数据？",
+          "concept": "`bind` / `flow`",
+          "analogy": "先把驾驶员输入接到踏板解析步骤，再把踏板解析结果传给扭矩计算步骤。",
+          "code": "bind readPedalSignals.accelCmd = driverAccelCmd",
+          "watchOut": "bind 连接外层边界和内部步骤；flow 连接步骤之间的数据传递。"
+        },
+        {
+          "engineeringQuestion": "评审时展示哪些行为内容？",
+          "concept": "`view` / `expose`",
+          "analogy": "功能评审视图选择 DriveCycle 和相关结构，不复制模型。",
+          "code": "view driveBehaviorView",
+          "watchOut": "不要在 view 里重新定义行为。"
+        }
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "行为建模导论：结构模型回答“系统是什么”，行为模型回答“系统做什么”。可以把结构模型理解成建筑蓝图，把行为模型理解成使用手册：同一栋建筑既需要房间和线路布局，也需要电梯、空调、消防怎么运行的过程说明。"
+    },
+    {
+      "type": "markdown",
+      "content": "视图定位：SysML v2 的 `view` 是一等建模元素。`driveActionFlowView` 使用 `ActionFlowView`（行为流图），只看动作之间怎么传数据；`driveBehaviorView` 使用 `GeneralView`（通用关系图），可以同时看车、控制器和动作责任。工程评审时先问“我要看动作流，还是要同时看谁执行这些动作”。"
+    },
+    {
+      "type": "hint-card",
+      "title": "action 和 state 都是行为建模，它们区别是什么？",
+      "label": "点击查看状态/行为语义说明",
+      "content": "C05 学 `action`，关注“做了什么”和输入输出数据流；C06 学 `state`，关注“处于什么模式”和模式切换。两者都是行为建模，但评审问题不同。"
+    },
+    {
+      "type": "markdown",
+      "content": "语法读法：`in driverAccelCmd : ScalarValues::Real;` 和 `out motorTorqueNm : ScalarValues::Real;` 中，行首 `in` / `out` 是 SysML v2 的参数方向关键字，表示数据进入或离开行为；`driverAccelCmd`、`motorTorqueNm` 是建模者取的参数名。不要把这里的 `out` 和 Course04 里 `dcOut` 名称后缀混淆：一个是语法关键字，一个只是名字的一部分。"
+    },
+    {
+      "type": "hint-card",
+      "title": "外层 in/out 会自动传给内部 action 吗？",
+      "label": "点击查看参数和关系建模说明",
+      "content": "`DriveCycle` 外层的 `in` / `out` 是这个行为对外的契约，内部 action 的 `in` / `out` 是分解步骤自己的参数。它们不是继承关系，也不会因为名称相似自动连线。用 `bind readPedalSignals.accelCmd = driverAccelCmd;` 这类绑定说明外层输入和内部步骤输入是同一个值；用 `bind computeMotorTorque.torqueCmd = motorTorqueNm;` 说明内部结果和外层输出是同一个值。`bind` 的 `=` 不是赋值方向，左右互换仍是同一条绑定；课程示例统一把内部步骤参数写在左边，便于阅读分解结构。"
+    },
+    {
+      "type": "markdown",
+      "content": "读模要点：`DriveCycle` 的 `in` 参数代表进入驾驶行为的信号，`out` 参数代表行为产生的控制结果；`bind` 负责外层参数和内部步骤参数的值相等，`flow` 负责步骤之间的传递。`flow readPedalSignals.torqueRequest to computeMotorTorque.torqueRequest` 表示踏板解析输出进入扭矩计算；`flow readPedalSignals.brakeRequest to computeBrakePressure.brakeRequest` 表示制动请求进入制动压力计算。"
+    },
+    {
+      "type": "markdown",
+      "content": "练习步骤：如果编辑器顶部显示“课程模板”，在 TODO 1 添加 `DriveCycle` 顶层输入，在 TODO 2 添加顶层输出，在 TODO 3/6 用 bind 接入输入和接回输出，在 TODO 4/5 添加两个步骤间 flow，在 TODO 7 把 `DriveCycle` 暴露到 `driveBehaviorView`。如果显示“已恢复草稿”，请检查这些内容是否位于对应结构位置；需要重新练习时点击“重置为课程模板”。"
+    },
+    {
+      "type": "code",
+      "language": "sysml",
+      "sourceFile": "starter.sysml"
+    }
+  ],
+  "workspace": {
+    "files": [
+      {
+        "path": "main.sysml",
+        "source": "starter.sysml",
+        "editable": true
+      }
+    ],
+    "entryFile": "main.sysml"
+  },
+  "tasks": [
+    {
+      "id": "task-01",
+      "type": "model-challenge",
+      "prompt": "在课程模板的 TODO 位置，或在已恢复草稿中的对应结构位置，把 DriveCycle 从动作名称列表升级为带输入、输出和内部数据流的行为模型，并用 view/expose 构建驾驶行为视图。",
+      "hints": [
+        "外层 `in`/`out` 不会自动继承给内部 action；本课用 `bind` 说明外层参数和内部步骤参数是同一个值。",
+        "`bind a = b` 不是赋值语句，左右没有数据方向；课程示例统一把内部步骤参数写在左边，但等价反写也应被理解为同一条绑定。",
+        "输入 `bind` 的工程含义是把 DriveCycle 边界输入接入内部步骤：驾驶员油门/制动请求进入踏板解析，车速进入扭矩计算；对应路径是 `readPedalSignals.accelCmd = driverAccelCmd`、`readPedalSignals.brakeCmd = driverBrakeCmd`、`computeMotorTorque.speedKph = vehicleSpeedKph`。",
+        "步骤间 `flow` 表达内部数据传递，不是外层边界绑定：踏板解析输出的扭矩请求进入扭矩计算，制动请求进入制动压力计算；端点路径分别是 `readPedalSignals.torqueRequest` 到 `computeMotorTorque.torqueRequest`、`readPedalSignals.brakeRequest` 到 `computeBrakePressure.brakeRequest`。",
+        "输出 `bind` 的工程含义是把内部计算结果接回 DriveCycle 边界输出：电机扭矩目标接回 `motorTorqueNm`，制动压力目标接回 `brakePressureBar`；对应路径是 `computeMotorTorque.torqueCmd = motorTorqueNm`、`computeBrakePressure.pressureCmd = brakePressureBar`。",
+        "`in`/`out` 是参数方向关键字；参数名称可以按工程语义命名，但不要把方向只写进名字里而省略关键字。",
+        "`view` 只选择和呈现模型内容，不要在 view 中重新定义 DriveCycle。"
+      ]
+    }
+  ],
+  "validation": {
+    "strictSysml": true,
+    "rulesFile": "rules.json"
+  },
+  "completion": {
+    "requiresStrictValidation": true,
+    "requiresAllLessonRules": true
+  },
+  "glossaryTerms": [
+    "view",
+    "expose",
+    "action def",
+    "action",
+    "Behavior",
+    "Step",
+    "flow",
+    "bind"
+  ]
+}

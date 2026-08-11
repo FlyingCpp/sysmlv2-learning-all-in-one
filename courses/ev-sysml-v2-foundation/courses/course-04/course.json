@@ -1,0 +1,188 @@
+{
+  "id": "course-04",
+  "order": 4,
+  "title": "端口、接口与跨部件流",
+  "summary": "围绕电池包、逆变器、控制器和冷却回路，按“先定义交换物，再定义端口，再定义接口方向，最后绑定具体端口”的顺序学习 item def、ref item、port def、interface def 与 interface usage/connect。",
+  "thumbnail": {
+    "src": "/api/course-assets/assets/course-thumbnails/course-04.svg",
+    "alt": "Course 04 端口接口和跨部件流缩略图"
+  },
+  "objectives": [
+    "解释 ref item 为什么用于端口中的交换对象，而不是把流项建成端口拥有的零件",
+    "区分能量、控制信息和热流体三类跨部件流，并用 attribute 表达其工程性质",
+    "用 interface def 定义接口契约，再用 interface usage/connect 绑定整车中的具体端口"
+  ],
+  "concepts": [
+    "item def",
+    "ref item",
+    "port def",
+    "port",
+    "interface def",
+    "interface usage",
+    "flow",
+    "connect"
+  ],
+  "lessons": [
+    "lesson-01/lesson.json",
+    "lesson-02/lesson.json",
+    "lesson-03/lesson.json"
+  ],
+  "references": [
+    {
+      "type": "standard",
+      "source": "OMG SysML v2.0 Language Specification",
+      "title": "Items / Ports / Interfaces / Connections / Flows 标准章节",
+      "section": "Clause 7.10 Items; Clause 7.12 Ports; Clause 7.14 Interfaces; Clause 7.15 Connections; Clause 7.16 Flows and Messages; Clauses 8.2.2.10, 8.2.2.12, 8.2.2.14, 8.2.2.15, 8.2.2.16",
+      "url": "https://www.omg.org/spec/SysML/2.0/Language/PDF",
+      "note": "支撑端口、接口契约、具体连接和跨部件流的标准语义。"
+    },
+    {
+      "type": "example",
+      "source": "Systems-Modeling/SysML-v2-Release",
+      "title": "Official Flashlight Example",
+      "section": "Flashlight Example: interface userToFlashlight connect ...",
+      "url": "https://github.com/Systems-Modeling/SysML-v2-Release/tree/master/sysml/src/examples/Flashlight%20Example",
+      "note": "官方示例中用 interface usage connect 绑定具体端口，可作为本课 Lesson 03 的语法对照。"
+    },
+    {
+      "type": "example",
+      "source": "Systems-Modeling/SysML-v2-Release",
+      "title": "Official Vehicle Example",
+      "section": "Vehicle Example: engine/transmission/fuel/shaft interfaces",
+      "url": "https://github.com/Systems-Modeling/SysML-v2-Release/tree/master/sysml/src/examples/Vehicle%20Example",
+      "note": "可对照车辆系统中端口、接口和连接如何嵌入产品结构。"
+    }
+  ],
+  "codeGuideExplanations": [
+    {
+      "id": "course04-ref-item",
+      "lineStartsWith": "ref item",
+      "explanation": "这行声明端口引用的交换对象。ref 表示端口允许能量、命令或冷却液通过边界，但端口本身不拥有这些对象。"
+    },
+    {
+      "id": "course04-interface-usage-connect",
+      "lineIncludes": [
+        "interface ",
+        " connect "
+      ],
+      "explanation": "这行是 interface usage：把可复用的 interface def 绑定到整车中的具体端口。它相当于在当前车辆上下文里签署一次接口契约。"
+    },
+    {
+      "id": "course04-interface-flow",
+      "lineStartsWith": "flow ",
+      "explanation": "这行定义接口契约里的交换方向。source/target 是前面 end 声明的端点名称，不是固定保留字；如果端点改名，flow 里也要同步改。"
+    },
+    {
+      "id": "course04-interface-end",
+      "lineStartsWith": "end ",
+      "explanation": "这行定义接口契约的端点类型约束。`end` 是标准端点声明，source 和 target 是本接口选用的端点名，不是具体 BatteryPack 或 Inverter，也不是必须固定使用的保留名称。"
+    }
+  ],
+  "conceptExplanations": [
+    {
+      "id": "ItemDefinition",
+      "term": "ItemDefinition",
+      "aliases": [
+        "item def"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass ItemDefinition",
+      "standardEnglish": "An ItemDefinition is an OccurrenceDefinition of the Structure of things that may themselves be systems or parts of systems, but may also be things that are acted on by a system or parts of a system, but which do not necessarily perform actions themselves. This includes items that can be exchanged between parts of a system, such as water or electrical signals.",
+      "chineseTranslation": "ItemDefinition 是事物结构的发生定义；这些事物可以是系统或系统部件，也可以是被系统作用的对象，并包括可在系统部件之间交换的对象，例如水或电信号。",
+      "explanation": "在接口建模里，item def 先回答“交换对象是什么类型”。电功率、扭矩命令和冷却液流都不应被建成车辆组成零件，而应作为跨边界交换对象定义。",
+      "engineeringExample": "item def TorqueCommand { attribute requestedTorqueNm : ScalarValues::Real; } 表示控制器向逆变器发送的命令对象类型。"
+    },
+    {
+      "id": "ReferenceUsage",
+      "term": "ReferenceUsage",
+      "aliases": [
+        "ref"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass ReferenceUsage",
+      "standardEnglish": "A ReferenceUsage is a Usage that specifies a non-compositional (isComposite = false) reference to something. The definition of a ReferenceUsage can be any kind of Classifier, with the default being the top-level Classifier Base::Anything from the Kernel Semantic Library. This allows the specification of a generic reference without distinguishing if the thing referenced is an attribute value, item, action, etc.",
+      "chineseTranslation": "ReferenceUsage 是一种 Usage，用于指定对某物的非组合引用，也就是 isComposite = false。",
+      "explanation": "`ref item power : ElectricalPower` 的重点是非拥有关系。端口说明“通过我可以引用/交换 ElectricalPower”，而不是说端口内部组成了一个 ElectricalPower 零件。",
+      "engineeringExample": "PowerPort 中的 ref item power 表示功率可通过端口传递；BatteryPack 仍然是拥有电池结构的部件。"
+    },
+    {
+      "id": "PortDefinition",
+      "term": "PortDefinition",
+      "aliases": [
+        "port def"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass PortDefinition",
+      "standardEnglish": "A PortDefinition defines a point at which external entities can connect to and interact with a system or part of a system. Any ownedUsages of a PortDefinition, other than PortUsages, must not be composite.",
+      "chineseTranslation": "PortDefinition 定义外部实体可以连接并与系统或系统部件交互的点；除 PortUsage 外，其拥有的 usage 不应是组合的。",
+      "explanation": "port def 是端口类型模板。它规定某类边界点允许交换哪些 item，以及这些 item 是引用性质还是拥有性质。",
+      "engineeringExample": "port def PowerPort { ref item power : ElectricalPower; } 定义所有高压功率端口都交换 ElectricalPower。"
+    },
+    {
+      "id": "PortUsage",
+      "term": "PortUsage",
+      "aliases": [
+        "port"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass PortUsage",
+      "standardEnglish": "A PortUsage is a usage of a PortDefinition. A PortUsage itself as well as all its nestedUsages must be referential (non-composite).",
+      "chineseTranslation": "PortUsage 是 PortDefinition 的一次使用；PortUsage 本身及其嵌套 usage 必须是引用的、非组合的。",
+      "explanation": "port usage 把端口类型放到某个部件边界上。`dcOut : PowerPort` 是电池包上的一个具体端口，不是 PowerPort 类型本身。",
+      "engineeringExample": "part def BatteryPack { port dcOut : PowerPort; } 表示电池包边界暴露一个高压直流输出端。"
+    },
+    {
+      "id": "InterfaceDefinition",
+      "term": "InterfaceDefinition",
+      "aliases": [
+        "interface def"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass InterfaceDefinition",
+      "standardEnglish": "An InterfaceDefinition is a ConnectionDefinition all of whose ends are PortUsages, defining an interface between elements that interact through such ports.",
+      "chineseTranslation": "InterfaceDefinition 是一种 ConnectionDefinition，其所有端点都是 PortUsage，用于定义通过这些端口交互的元素之间的接口。",
+      "explanation": "interface def 是可复用接口契约，不是具体连线。它说明端点应是什么端口类型，以及从哪个端点向哪个端点传递什么。",
+      "engineeringExample": "interface def BatteryToInverter 定义任意电池端口到逆变器端口的功率接口契约。"
+    },
+    {
+      "id": "FlowUsage",
+      "term": "FlowUsage",
+      "aliases": [
+        "flow"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass FlowUsage",
+      "standardEnglish": "A FlowUsage is an ActionUsage that is also a ConnectorAsUsage and a KerML Flow.",
+      "chineseTranslation": "FlowUsage 是一种 ActionUsage，同时也是 ConnectorAsUsage 和 KerML Flow。",
+      "explanation": "flow 让接口不只是“两个端点相连”，而是明确说明交换对象和方向。它可以表达能量、物质、信息或命令的传递。",
+      "engineeringExample": "flow source.command to target.command 表示扭矩命令从控制器侧端口传递到逆变器侧端口。"
+    },
+    {
+      "id": "InterfaceUsage",
+      "term": "InterfaceUsage",
+      "aliases": [
+        "interface"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass InterfaceUsage",
+      "standardEnglish": "An InterfaceUsage is a Usage of an InterfaceDefinition to represent an interface connecting parts of a system through specific ports.",
+      "chineseTranslation": "InterfaceUsage 是 InterfaceDefinition 的一次使用，用于表示通过具体端口连接系统部件的接口。",
+      "explanation": "`interface powerLink : BatteryToInverter connect battery.dcOut to inverter.dcIn;` 把接口契约绑定到当前整车中的具体端口。",
+      "engineeringExample": "在 ElectricVehicle 中，powerLink 把 battery.dcOut 和 inverter.dcIn 绑定为一条具体高压功率接口。"
+    },
+    {
+      "id": "ConnectionUsage",
+      "term": "ConnectionUsage",
+      "aliases": [
+        "connect",
+        "connection"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass ConnectionUsage",
+      "standardEnglish": "A ConnectionUsage is a ConnectorAsUsage that is also a PartUsage. Nominally, if its type is a ConnectionDefinition, then a ConnectionUsage is a Usage of that ConnectionDefinition, representing a connection between parts of a system. However, other kinds of kernel AssociationStructures are also allowed, to permit use of AssociationStructures from the Kernel Model Libraries.",
+      "chineseTranslation": "ConnectionUsage 是一种 ConnectorAsUsage，同时也是 PartUsage；当它的类型是 ConnectionDefinition 时，它表示系统部件之间连接定义的一次使用。",
+      "explanation": "interface usage 是 connection usage 的接口特化。普通 connection 可表达一般连接，本课程优先使用 interface usage，因为被连接对象是端口且需要接口契约。",
+      "engineeringExample": "interface commandLink : ControllerToInverter connect controller.commandOut to inverter.commandIn; 是一个具体连接使用。"
+    }
+  ]
+}

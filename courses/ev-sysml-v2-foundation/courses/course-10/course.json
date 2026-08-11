@@ -1,0 +1,196 @@
+{
+  "id": "course-10",
+  "order": 10,
+  "title": "综合项目：电动汽车需求-分析-验证闭环",
+  "summary": "用一个贯通案例收束 C01-C09：结构和接口必须连到具体部件，行为和状态必须服务需求，需求、分析、验证必须共享同一目标和同一被测对象，最终形成可评审、可校验、可导出的系统工程模型。",
+  "thumbnail": {
+    "src": "/api/course-assets/assets/course-thumbnails/course-10.svg",
+    "alt": "Course 10 电动汽车综合闭环项目缩略图"
+  },
+  "objectives": [
+    "把 C03-C04 的结构、端口、接口和 flow 集成为具体连接，而不是只定义接口类型",
+    "把 C05-C06 的行为和状态接到整车，并用 C07 的完整需求表达目标",
+    "把 C08 的 calc/analysis/assert constraint 和 C09 的 verification/verify 合成一条证据链",
+    "用 view/expose 输出阶段性交付视图，帮助评审者看到模型主线",
+    "形成需求、结构、行为、状态、分析、验证之间的闭环模型"
+  ],
+  "concepts": [
+    "integrated model",
+    "ElectricVehicle",
+    "interface connect",
+    "perform action",
+    "state transition",
+    "requirement",
+    "analysis",
+    "verification",
+    "VerdictKind",
+    "PassIf",
+    "satisfy",
+    "verify",
+    "view"
+  ],
+  "lessons": [
+    "lesson-01/lesson.json",
+    "lesson-02/lesson.json",
+    "lesson-03/lesson.json"
+  ],
+  "references": [
+    {
+      "type": "standard",
+      "source": "OMG SysML v2.0 Language Specification",
+      "title": "综合建模主线标准章节",
+      "section": "Clauses 7.5-7.24 Language Description; Clause 9 Model Libraries; Annex A Simple Vehicle Model",
+      "url": "https://www.omg.org/spec/SysML/2.0/Language/PDF",
+      "note": "综合复习结构、接口、行为、状态、需求、分析和验证案例。"
+    },
+    {
+      "type": "example",
+      "source": "Systems-Modeling/SysML-v2-Release",
+      "title": "Official Vehicle Example / Annex A",
+      "section": "Vehicle Example / SysML v2 Spec Annex A SimpleVehicleModel.sysml",
+      "url": "https://github.com/Systems-Modeling/SysML-v2-Release/tree/master/sysml/src/examples/Vehicle%20Example",
+      "note": "作为最终项目的官方车辆模型对照物，观察需求、行为、分析和验证如何分包组织。"
+    },
+    {
+      "type": "example",
+      "source": "Systems-Modeling/SysML-v2-Release",
+      "title": "Official Verification and Analysis Training Examples",
+      "section": "sysml/src/training/33. Analysis; sysml/src/training/34. Verification",
+      "url": "https://github.com/Systems-Modeling/SysML-v2-Release/tree/master/sysml/src/training",
+      "note": "对照 analysis def 与 verification def 如何使用 subject、objective、return 和约束判定。"
+    }
+  ],
+  "codeGuideExplanations": [
+    {
+      "id": "c10-interface-connect",
+      "lineStartsWith": "interface ",
+      "explanation": "这行把接口定义应用到具体部件连接上。综合项目不能只定义 interface def，还要用 interface usage connect 说明哪两个端口真正连接。"
+    },
+    {
+      "id": "c10-perform",
+      "lineStartsWith": "perform action",
+      "explanation": "这行把行为放到结构上下文中，说明整车或部件实际执行哪个 action。"
+    },
+    {
+      "id": "c10-transition",
+      "lineStartsWith": "transition",
+      "explanation": "这行表达状态切换的事件和条件。综合项目中的状态不是状态名列表，而是运行模式规则。"
+    },
+    {
+      "id": "c10-analysis",
+      "lineStartsWith": "analysis ",
+      "explanation": "这行创建具体分析使用，把分析定义应用到 finalVehicle，并绑定需求目标。"
+    },
+    {
+      "id": "c10-verification",
+      "lineStartsWith": "verification ",
+      "explanation": "这行创建具体验证活动，把验证案例应用到同一个 finalVehicle，并同时引用需求目标、分析预测值和独立道路实测值。"
+    },
+    {
+      "id": "c10-view",
+      "lineStartsWith": "view ",
+      "explanation": "这行形成阶段交付视图。最终项目要用 view/expose 把结构、行为、需求、分析和验证放到同一评审语境。"
+    }
+  ],
+  "conceptExplanations": [
+    {
+      "id": "Package",
+      "term": "Package",
+      "aliases": [
+        "package"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass Package",
+      "standardEnglish": "A Package is a Namespace used to group Elements, without any instance-level semantics.",
+      "chineseTranslation": "Package 是用于组织模型元素的 Namespace，本身不表达实例级语义。",
+      "explanation": "最终项目用 package 固定模型边界，避免结构、需求、分析和验证元素散落。"
+    },
+    {
+      "id": "PartDefinition",
+      "term": "PartDefinition",
+      "aliases": [
+        "part def"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass PartDefinition",
+      "standardEnglish": "A PartDefinition is an ItemDefinition of a Class of systems or parts of systems.",
+      "chineseTranslation": "PartDefinition 定义系统或系统部件的类别。",
+      "explanation": "综合项目用 ElectricVehicle、BatteryPack、Inverter、Motor 和 Wheel 定义可复用产品结构。"
+    },
+    {
+      "id": "RequirementUsage",
+      "term": "RequirementUsage",
+      "aliases": [
+        "requirement"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass RequirementUsage",
+      "standardEnglish": "A RequirementUsage is a Usage of a RequirementDefinition.",
+      "chineseTranslation": "RequirementUsage 是 RequirementDefinition 的一次使用。",
+      "explanation": "最终项目中的 finalRange 是具体需求，它必须同时接到 satisfy、analysis 和 verify。"
+    },
+    {
+      "id": "AnalysisCaseDefinition",
+      "term": "AnalysisCaseDefinition",
+      "aliases": [
+        "analysis def"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass AnalysisCaseDefinition",
+      "standardEnglish": "An AnalysisCaseDefinition is a CaseDefinition for the case of carrying out an analysis.",
+      "chineseTranslation": "AnalysisCaseDefinition 是用于开展分析的 CaseDefinition。",
+      "explanation": "RangeAnalysis 把 finalVehicle 参数和 finalRange 目标连接成分析证据。"
+    },
+    {
+      "id": "VerificationCaseUsage",
+      "term": "VerificationCaseUsage",
+      "aliases": [
+        "verification"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass VerificationCaseUsage",
+      "standardEnglish": "A VerificationCaseUsage is a Usage of a VerificationCaseDefinition.",
+      "chineseTranslation": "VerificationCaseUsage 是 VerificationCaseDefinition 的一次使用。",
+      "explanation": "finalRangeVerification 把 RangeRoadTest 应用到 finalVehicle。它应同时绑定 finalRangeAnalysis 的预测结果和 finalVehicle 的道路实测值，不能把分析预测直接当作最终验证测量。"
+    },
+    {
+      "id": "VerdictKind",
+      "term": "VerdictKind",
+      "aliases": [
+        "pass",
+        "fail",
+        "inconclusive",
+        "error"
+      ],
+      "source": "SysML v2 Systems Library / VerificationCases.sysml",
+      "section": "standard library package VerificationCases / enum def VerdictKind",
+      "standardEnglish": "VerdictKind is an enumeration of the possible results of a VerificationCase.",
+      "chineseTranslation": "VerdictKind 是 VerificationCase 可能结果的枚举。",
+      "explanation": "最终证据链用 VerdictKind 输出验证结论。它比普通 Boolean 更贴近标准 VerificationCases 库，也更适合工程评审记录。"
+    },
+    {
+      "id": "PassIf",
+      "term": "PassIf",
+      "aliases": [
+        "VerificationCases::PassIf"
+      ],
+      "source": "SysML v2 Systems Library / VerificationCases.sysml",
+      "section": "standard library package VerificationCases / calc def PassIf",
+      "standardEnglish": "PassIf returns a pass or fail VerdictKind depending on whether its argument is true or false.",
+      "chineseTranslation": "PassIf 根据输入条件是真还是假，返回 pass 或 fail VerdictKind。",
+      "explanation": "最终项目用 PassIf(measuredRangeKm >= requiredRangeKm) 把道路实测是否满足目标续航转换成正式验证判定。"
+    },
+    {
+      "id": "ViewUsage",
+      "term": "ViewUsage",
+      "aliases": [
+        "view"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass ViewUsage",
+      "standardEnglish": "A ViewUsage is a usage of a ViewDefinition to specify the generation of a view of the members of a collection of exposedNamespaces.",
+      "chineseTranslation": "ViewUsage 是 ViewDefinition 的一次使用，用于规定如何从 exposedNamespaces 的成员生成 view。",
+      "explanation": "最终项目用 view 把需求、结构、分析和验证对象组织成评审交付物。"
+    }
+  ]
+}

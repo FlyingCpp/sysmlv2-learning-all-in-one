@@ -1,0 +1,193 @@
+{
+  "rules": [
+    {
+      "id": "strict-valid",
+      "type": "strictValidationPassed",
+      "severity": "error",
+      "message": "最终项目必须通过严格 SysML v2 校验。"
+    },
+    {
+      "id": "has-ev",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "partDef",
+        "name": "ElectricVehicle"
+      },
+      "message": "需要定义 ElectricVehicle。"
+    },
+    {
+      "id": "has-battery",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "ElectricVehicle",
+        "kind": "part",
+        "name": "battery",
+        "typeName": "BatteryPack"
+      },
+      "message": "ElectricVehicle 需要包含 battery : BatteryPack。"
+    },
+    {
+      "id": "has-inverter",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": { "parent": "ElectricVehicle", "kind": "part", "name": "inverter", "typeName": "Inverter" },
+      "message": "ElectricVehicle 需要包含 inverter : Inverter。"
+    },
+    {
+      "id": "has-motor",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": { "parent": "ElectricVehicle", "kind": "part", "name": "motor", "typeName": "Motor" },
+      "message": "ElectricVehicle 需要包含 motor : Motor。"
+    },
+    {
+      "id": "has-cooling",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": { "parent": "ElectricVehicle", "kind": "part", "name": "cooling", "typeName": "CoolingLoop" },
+      "message": "ElectricVehicle 需要包含 cooling : CoolingLoop。"
+    },
+    {
+      "id": "has-controller",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": { "parent": "ElectricVehicle", "kind": "part", "name": "controller", "typeName": "VehicleController" },
+      "message": "ElectricVehicle 需要包含 controller : VehicleController。"
+    },
+    {
+      "id": "has-power-port",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "portDef",
+        "name": "PowerPort"
+      },
+      "message": "需要定义 PowerPort。"
+    },
+    {
+      "id": "has-interface",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "interfaceDef",
+        "name": "BatteryToInverter"
+      },
+      "message": "需要定义 BatteryToInverter 接口。"
+    },
+    {
+      "id": "has-action",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "actionDef",
+        "name": "DriveCycle"
+      },
+      "message": "需要定义 DriveCycle 行为。"
+    },
+    {
+      "id": "has-state",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "stateDef",
+        "name": "VehicleOperatingState"
+      },
+      "message": "需要定义车辆状态。"
+    },
+    {
+      "id": "has-req",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "requirement",
+        "name": "finalRange"
+      },
+      "message": "需要 finalRange 需求。"
+    },
+    {
+      "id": "has-analysis",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "analysisDef",
+        "name": "RangeAnalysis"
+      },
+      "message": "需要 RangeAnalysis。"
+    },
+    {
+      "id": "has-verification",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "verificationDef",
+        "name": "RangeRoadTest"
+      },
+      "message": "需要 RangeRoadTest。"
+    },
+    {
+      "id": "satisfy-range",
+      "type": "relationshipExists",
+      "severity": "error",
+      "selector": {
+        "kind": "satisfy",
+        "sourceName": "finalRange",
+        "targetName": "finalVehicle"
+      },
+      "message": "需要 finalRange 到 finalVehicle 的 satisfy。"
+    },
+    {
+      "id": "satisfy-charge",
+      "type": "relationshipExists",
+      "severity": "error",
+      "selector": { "kind": "satisfy", "sourceName": "fastCharge", "targetName": "finalVehicle" },
+      "message": "需要 fastCharge 到 finalVehicle 的 satisfy。"
+    },
+    {
+      "id": "satisfy-safety",
+      "type": "relationshipExists",
+      "severity": "error",
+      "selector": { "kind": "satisfy", "sourceName": "hvSafety", "targetName": "finalVehicle" },
+      "message": "需要 hvSafety 到 finalVehicle 的 satisfy。"
+    },
+    {
+      "id": "verify-range",
+      "type": "relationshipExists",
+      "severity": "error",
+      "selector": {
+        "kind": "verify",
+        "sourceName": "finalRange",
+        "parent": "RangeRoadTest"
+      },
+      "message": "RangeRoadTest 的 objective 中需要 verify finalRange。"
+    },
+    {
+      "id": "verify-charge",
+      "type": "relationshipExists",
+      "severity": "error",
+      "selector": { "kind": "verify", "sourceName": "fastCharge", "parent": "ChargeTest" },
+      "message": "ChargeTest 的 objective 中需要 verify fastCharge。"
+    },
+    {
+      "id": "verify-safety",
+      "type": "relationshipExists",
+      "severity": "error",
+      "selector": { "kind": "verify", "sourceName": "hvSafety", "parent": "SafetyInspection" },
+      "message": "SafetyInspection 的 objective 中需要 verify hvSafety。"
+    },
+    {
+      "id": "four-wheels",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "ElectricVehicle",
+        "kind": "part",
+        "name": "wheels",
+        "typeName": "Wheel",
+        "multiplicity": "4"
+      },
+      "message": "ElectricVehicle 中需要存在 part wheels[4] : Wheel。"
+    }
+  ]
+}

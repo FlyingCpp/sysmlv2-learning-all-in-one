@@ -1,0 +1,27 @@
+{
+  "generic": {
+    "requestFailed": "请求未能完成，请稍后重试。",
+    "badRequest": "请求信息无效，请检查后重试。",
+    "unauthorized": "登录状态已失效，请重新登录。",
+    "forbidden": "当前账号没有执行此操作的权限。",
+    "notFound": "请求的资源不存在。",
+    "conflict": "当前状态已发生变化，请刷新后重试。",
+    "rateLimited": "请求过于频繁，请稍后重试。",
+    "serviceUnavailable": "服务暂时不可用，请稍后重试。"
+  },
+  "codes": {
+    "AUTH_REQUIRED": "请先登录后继续。",
+    "AUTH_FAILED": "登录失败，请检查邮箱和密码。",
+    "AUTH_SESSION_EXPIRED": "登录状态已失效，请重新登录。",
+    "AUTH_SESSION_CHECK_FAILED": "无法确认登录状态，请重新登录。",
+    "REGISTRATION_DISABLED": "当前平台暂未开放用户注册。",
+    "GUEST_LOGIN_DISABLED": "当前平台暂未开放游客登录。",
+    "REGISTER_REQUIRED_FIELDS": "请填写邮箱和密码。",
+    "INVALID_EMAIL": "请输入有效的邮箱地址。",
+    "PASSWORD_TOO_SHORT": "密码至少需要 8 位。",
+    "ACCOUNT_ALREADY_EXISTS": "该邮箱已注册，请直接登录或更换邮箱。",
+    "ACCOUNT_DISABLED": "账号已被禁用。",
+    "REGISTER_VALIDATION_FAILED": "注册信息不符合要求，请检查邮箱和密码。",
+    "RATE_LIMIT_EXCEEDED": "请求过于频繁，请稍后重试。"
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "rules": [
+    {
+      "id": "strict-valid",
+      "type": "strictValidationPassed",
+      "severity": "error",
+      "message": "模型必须通过严格 SysML v2 校验。"
+    },
+    {
+      "id": "keep-electric-vehicle",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "ElectricVehicle",
+        "kind": "part",
+        "name": "battery",
+        "typeName": "BatteryPack"
+      },
+      "message": "需要保留 Lesson 01 的 part battery : BatteryPack。"
+    },
+    {
+      "id": "driver-type",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "partDef",
+        "name": "Driver"
+      },
+      "message": "请补全 part def Driver。"
+    },
+    {
+      "id": "road-environment-type",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "partDef",
+        "name": "RoadEnvironment"
+      },
+      "message": "请补全 part def RoadEnvironment。"
+    },
+    {
+      "id": "driver-context",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "ElectricVehicle",
+        "kind": "part",
+        "name": "driver",
+        "typeName": "Driver"
+      },
+      "message": "ElectricVehicle 中需要补全 part driver : Driver。"
+    },
+    {
+      "id": "environment-context",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "ElectricVehicle",
+        "kind": "part",
+        "name": "environment",
+        "typeName": "RoadEnvironment"
+      },
+      "message": "ElectricVehicle 中需要补全 part environment : RoadEnvironment。"
+    },
+    {
+      "id": "prototype-usage",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "part",
+        "name": "evPrototype",
+        "typeName": "ElectricVehicle"
+      },
+      "message": "需要保留 part evPrototype : ElectricVehicle。"
+    }
+  ]
+}

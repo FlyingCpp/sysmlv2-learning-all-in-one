@@ -1,0 +1,84 @@
+{
+  "rules": [
+    {
+      "id": "strict-valid",
+      "type": "strictValidationPassed",
+      "severity": "error",
+      "message": "模型必须通过严格 SysML v2 校验。"
+    },
+    {
+      "id": "vehicle-inverter",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "IntegratedVehicle",
+        "kind": "part",
+        "name": "inverter",
+        "typeName": "Inverter"
+      },
+      "message": "IntegratedVehicle 需要 part inverter : Inverter，作为电池和电机之间的功率电子环节。"
+    },
+    {
+      "id": "motor-power-in",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "IntegrationMotor",
+        "kind": "port",
+        "name": "powerIn",
+        "typeName": "PowerPort"
+      },
+      "message": "IntegrationMotor 需要 port powerIn : PowerPort，作为逆变器输出功率连接目标。"
+    },
+    {
+      "id": "vehicle-wheels",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "IntegratedVehicle",
+        "kind": "part",
+        "name": "wheels",
+        "typeName": "Wheel",
+        "multiplicity": "4"
+      },
+      "message": "IntegratedVehicle 中需要 part wheels[4] : Wheel。"
+    },
+    {
+      "id": "battery-to-inverter-interface",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "finalVehicle",
+        "kind": "interface",
+        "typeName": "PropulsionPowerInterface",
+        "sourceName": "battery.dcOut",
+        "targetName": "inverter.dcIn"
+      },
+      "message": "finalVehicle 需要一条 PropulsionPowerInterface interface usage，连接 battery.dcOut 到 inverter.dcIn；usage 名称可自定义。"
+    },
+    {
+      "id": "inverter-to-motor-interface",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "finalVehicle",
+        "kind": "interface",
+        "typeName": "PropulsionPowerInterface",
+        "sourceName": "inverter.acOut",
+        "targetName": "motor.powerIn"
+      },
+      "message": "finalVehicle 需要一条 PropulsionPowerInterface interface usage，连接 inverter.acOut 到 motor.powerIn；usage 名称可自定义。"
+    },
+    {
+      "id": "structure-view-exposes-interface",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "structureInterfaceView",
+        "kind": "expose",
+        "targetName": "PropulsionPowerInterface"
+      },
+      "message": "structureInterfaceView 需要 expose PropulsionPowerInterface。"
+    }
+  ]
+}

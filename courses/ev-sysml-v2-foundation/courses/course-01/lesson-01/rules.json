@@ -1,0 +1,75 @@
+{
+  "rules": [
+    {
+      "id": "strict-valid",
+      "type": "strictValidationPassed",
+      "severity": "error",
+      "message": "模型必须通过严格 SysML v2 校验。"
+    },
+    {
+      "id": "battery-type",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "partDef",
+        "name": "BatteryPack"
+      },
+      "message": "需要保留 part def BatteryPack。"
+    },
+    {
+      "id": "electric-vehicle-type",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "partDef",
+        "name": "ElectricVehicle"
+      },
+      "message": "请补全 part def ElectricVehicle。"
+    },
+    {
+      "id": "battery-composition",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "ElectricVehicle",
+        "kind": "part",
+        "name": "battery",
+        "typeName": "BatteryPack"
+      },
+      "message": "ElectricVehicle 中需要补全 part battery : BatteryPack。"
+    },
+    {
+      "id": "prototype-usage",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "part",
+        "name": "evPrototype",
+        "typeName": "ElectricVehicle"
+      },
+      "message": "请补全 part evPrototype : ElectricVehicle。"
+    },
+    {
+      "id": "view-exposes-electric-vehicle",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "firstPackageBrowserView",
+        "kind": "expose",
+        "targetName": "ElectricVehicle"
+      },
+      "message": "firstPackageBrowserView 需要 expose ElectricVehicle，让图形视图包含本课补全的整车类型。"
+    },
+    {
+      "id": "view-exposes-prototype",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "firstPackageBrowserView",
+        "kind": "expose",
+        "targetName": "evPrototype"
+      },
+      "message": "firstPackageBrowserView 需要 expose evPrototype，让图形视图包含样车使用。"
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "1.0.0",
+  "manifestVersion": "2026-07-16",
+  "sources": [
+    {
+      "id": "sysml-v2-modeling",
+      "name": "sysml-v2-modeling",
+      "rootDir": "sysml-v2-modeling",
+      "reviewStatus": "reviewed",
+      "sourceVersion": "omg-sysml-v2.0-part1-2026-06-15+teacher-review.20260717.14-value-context-semantics",
+      "contentHash": "sha256:aa2a290f12321999a7865943c16092c9eb888f7ae9756eee4f2431d6c5e2958d",
+      "allowedDirectories": [
+        "language-reference"
+      ],
+      "allowedFiles": [
+        "SKILL.md",
+        "chapters/ch01-language-foundations.md",
+        "chapters/ch02-definition-and-usage.md",
+        "chapters/ch03-attributes-enumerations.md",
+        "chapters/ch04-occurrences-time-individuals.md",
+        "chapters/ch05-items-parts.md",
+        "chapters/ch06-ports-connections.md",
+        "chapters/ch07-interfaces-allocations.md",
+        "chapters/ch08-flows-messages.md",
+        "chapters/ch09-actions.md",
+        "chapters/ch10-states.md",
+        "chapters/ch11-calculations-constraints.md",
+        "chapters/ch12-requirements.md",
+        "chapters/ch13-cases.md",
+        "chapters/ch14-views-viewpoints-metadata.md",
+        "chapters/ch15-syntax-metamodel-libraries.md",
+        "cheatsheet.md",
+        "glossary.md",
+        "patterns.md",
+        "verbatim.md"
+      ]
+    }
+  ]
+}

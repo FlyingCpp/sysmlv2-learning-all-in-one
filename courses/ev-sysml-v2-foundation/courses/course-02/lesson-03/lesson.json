@@ -1,0 +1,168 @@
+{
+  "id": "course-02-lesson-03",
+  "title": "封装电驱子系统并理解 def 内部的 usage",
+  "type": "modeling-lesson",
+  "estimatedMinutes": 30,
+  "timePlan": [
+    {
+      "label": "回顾贯穿模型",
+      "minutes": 5,
+      "description": "确认 L01 的电池包结构和 L02 的流项、控制器仍保留在同一模型中。"
+    },
+    {
+      "label": "分析子系统",
+      "minutes": 6,
+      "description": "把 Motor 和 Inverter 看作零件图册中的类型，把 ElectricDriveUnit 看作可复用子总成。"
+    },
+    {
+      "label": "补全 usage",
+      "minutes": 9,
+      "description": "在 ElectricDriveUnit 内写入 inverter 与 motor 两条 part usage，并创建 frontDriveUnit 使用。"
+    },
+    {
+      "label": "校验与修正",
+      "minutes": 6,
+      "description": "根据 validator 和课程规则定位“类型已定义但 usage 缺失”的问题。"
+    },
+    {
+      "label": "整车预览",
+      "minutes": 4,
+      "description": "阅读 Vehicle 整合模型，理解 Course 02 结束后能构建出的结构层级。"
+    }
+  ],
+  "scenario": {
+    "title": "工程场景",
+    "body": "电驱团队希望把逆变器和电机封装成一个可复用电驱总成。系统模型既要描述 Motor、Inverter 这些零件类型，也要描述 ElectricDriveUnit 内部“此处使用一个逆变器、此处使用一个电机”的结构事实。",
+    "visual": {
+      "type": "interactive-flow",
+      "variant": "02",
+      "title": "子系统封装与整车组合",
+      "caption": "点击节点理解为什么 def 块内部仍然要写 usage，而不是直接写另一个 def 名称。",
+      "nodes": [
+        {
+          "id": "part-types",
+          "icon": "1",
+          "label": "零件类型",
+          "detail": "`part def Motor` 和 `part def Inverter` 是可复用零件蓝图，类似零件图册条目。",
+          "code": "part def Motor"
+        },
+        {
+          "id": "subsystem-def",
+          "icon": "2",
+          "label": "子总成类型",
+          "detail": "`part def ElectricDriveUnit` 是电驱总成蓝图，它描述总成里应该有哪些角色。",
+          "code": "ElectricDriveUnit"
+        },
+        {
+          "id": "subsystem-usage",
+          "icon": "3",
+          "label": "总成内部 BOM 行",
+          "detail": "`part inverter : Inverter` 和 `part motor : Motor` 是总成内部的 usage，不是新的类型定义。",
+          "code": "part inverter"
+        },
+        {
+          "id": "position-usage",
+          "icon": "4",
+          "label": "装车位置",
+          "detail": "`part frontDriveUnit : ElectricDriveUnit` 表示前轴位置使用一份电驱总成。",
+          "code": "frontDriveUnit"
+        },
+        {
+          "id": "vehicle-preview",
+          "icon": "5",
+          "label": "整车预览",
+          "detail": "挑战任务可继续把 BatteryPack、Controller 和 ElectricDriveUnit 组合到 Vehicle 中，形成整车结构。",
+          "code": "Vehicle"
+        }
+      ]
+    }
+  },
+  "learningBlocks": [
+    {
+      "type": "image-gallery",
+      "title": "课程导引图",
+      "content": "本图按当前 lesson 的工程任务和模型主题生成，用于先理解课程场景，再进入 SysML v2 建模练习。",
+      "generatedBy": "scripts/generate-course-lesson-illustrations.js",
+      "images": [
+        {
+          "src": "/api/course-assets/assets/course-visuals/generated-lesson-guides/ev-course-02-lesson-03-structure.svg",
+          "title": "C02.L03 封装电驱子系统并理解 def 内部的 usage",
+          "caption": "围绕 结构/Structure / BOM层级/BOM / 组成/Composition 组织汽车工程语境，把本课对象放进可追踪的 SysML v2 模型。",
+          "alt": "电动汽车 SysML v2 建模课程导引图：封装电驱子系统并理解 def 内部的 usage"
+        }
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "工程意图：本 lesson 专门解决最容易卡住的问题：为什么 `part def ElectricDriveUnit` 内部不能直接写 `Inverter` 或 `Motor`？因为 `Inverter` 和 `Motor` 是蓝图，不是放进总成里的那一份对象。总成内部需要写 `part inverter : Inverter` 和 `part motor : Motor`，这才是 BOM 行。"
+    },
+    {
+      "type": "markdown",
+      "content": "读模要点：starter 已保留 `part packA : BatteryPack`、`BatteryPack` 内的 `item storedEnergy : ElectricalEnergy`、`Controller` 内的 `item driveCommand : TorqueCommand` 和 `part vehicleController : Controller`，说明 Course 02 是连续模型，不是三个孤立片段。本课只新增电驱子系统封装。"
+    },
+    {
+      "type": "hint-card",
+      "title": "为什么 def 内部还要写 usage？",
+      "label": "点击展开关键概念说明",
+      "content": "`part def Inverter` = 零件图册中的逆变器通用件；`part inverter : Inverter` = ElectricDriveUnit BOM 中的一行“这里使用一个逆变器”。SysML v2 用冒号把 usage 和被引用的 definition 明确连接起来。"
+    },
+    {
+      "type": "markdown",
+      "content": "语法读法：`part inverter : Inverter;` 和前面 `part cells[12] : BatteryCell;` 属于同一模式：`part` 是关键字，`inverter` / `cells` 是自定义 usage 名称，冒号右侧 `Inverter` / `BatteryCell` 是类型。区别只是 cells 带多重性，inverter 是单个角色。"
+    },
+    {
+      "type": "markdown",
+      "content": "练习步骤：如果编辑器顶部显示“课程模板”，就在 `part def ElectricDriveUnit` 内部 TODO 位置补全 `part inverter : Inverter;` 和 `part motor : Motor;`，并在类型定义外部补全 `part frontDriveUnit : ElectricDriveUnit;`；如果显示“已恢复草稿”，就检查这些对应结构行是否已经存在且拼写正确，必要时点击“重置为课程模板”回到 TODO 起点。运行校验，确认不是只定义了零件类型，而是真的把它们放入总成结构。"
+    },
+    {
+      "type": "markdown",
+      "content": "整合预览：Course 02 学完后，你应能读懂这样的结构：`part def Vehicle { part battery : BatteryPack; part controller : Controller; part frontDrive : ElectricDriveUnit; }`，再用 `part myEV : Vehicle` 表示一辆具体样车。挑战任务可以在当前文件中尝试补全这个 Vehicle，但本课通过条件只要求电驱总成封装。"
+    },
+    {
+      "type": "code",
+      "language": "sysml",
+      "sourceFile": "starter.sysml"
+    }
+  ],
+  "workspace": {
+    "files": [
+      {
+        "path": "main.sysml",
+        "source": "starter.sysml",
+        "editable": true
+      }
+    ],
+    "entryFile": "main.sysml"
+  },
+  "tasks": [
+    {
+      "id": "task-01",
+      "type": "model-challenge",
+      "prompt": "在课程模板的 TODO 位置，或在已恢复草稿中的对应结构位置，在 `ElectricDriveUnit` 内补全 `part inverter : Inverter` 和 `part motor : Motor`，并在类型定义外创建 `part frontDriveUnit : ElectricDriveUnit`，完成电驱子系统封装。",
+      "hints": [
+        "`Motor` 和 `Inverter` 已经是类型定义，不要在 ElectricDriveUnit 内重新写 `part def Motor`。",
+        "`inverter` 和 `motor` 是角色名，冒号右侧的 `Inverter` 和 `Motor` 才是被引用的类型。",
+        "`frontDriveUnit` 应写在 `part def ElectricDriveUnit { ... }` 块外，因为它是这个总成类型的一次使用。",
+        "挑战任务可继续定义 `Vehicle`，但不要为了通过规则而把 Vehicle 写进 ElectricDriveUnit 内部。"
+      ]
+    }
+  ],
+  "validation": {
+    "strictSysml": true,
+    "rulesFile": "rules.json"
+  },
+  "completion": {
+    "requiresStrictValidation": true,
+    "requiresAllLessonRules": true
+  },
+  "glossaryTerms": [
+    "definition",
+    "usage",
+    "part def",
+    "part",
+    "item def",
+    "item",
+    "typed usage",
+    "BOM mapping"
+  ]
+}

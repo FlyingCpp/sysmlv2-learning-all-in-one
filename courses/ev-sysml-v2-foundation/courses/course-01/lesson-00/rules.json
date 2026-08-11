@@ -1,0 +1,61 @@
+{
+  "rules": [
+    {
+      "id": "strict-valid",
+      "type": "strictValidationPassed",
+      "severity": "error",
+      "message": "全景预览模型必须通过严格 SysML v2 校验。"
+    },
+    {
+      "id": "overview-structure",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "partDef",
+        "name": "ElectricVehicle"
+      },
+      "message": "全景模型需要包含 part def ElectricVehicle。"
+    },
+    {
+      "id": "overview-interface",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "interfaceDef",
+        "name": "PropulsionPowerInterface"
+      },
+      "message": "全景模型需要包含 interface def PropulsionPowerInterface。"
+    },
+    {
+      "id": "overview-behavior",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "actionDef",
+        "name": "DriveCycle"
+      },
+      "message": "全景模型需要包含 action def DriveCycle。"
+    },
+    {
+      "id": "overview-state",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "stateDef",
+        "name": "VehicleOperatingState"
+      },
+      "message": "全景模型需要包含 state def VehicleOperatingState。"
+    },
+    {
+      "id": "overview-trace",
+      "type": "relationshipExists",
+      "severity": "error",
+      "selector": {
+        "kind": "satisfy",
+        "sourceName": "usableRange",
+        "targetName": "evPreview"
+      },
+      "message": "全景模型需要包含 satisfy usableRange by evPreview。"
+    }
+  ]
+}

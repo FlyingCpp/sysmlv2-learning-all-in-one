@@ -1,0 +1,121 @@
+{
+  "rules": [
+    {
+      "id": "strict-valid",
+      "type": "strictValidationPassed",
+      "severity": "error",
+      "message": "模型必须通过严格 SysML v2 校验。"
+    },
+    {
+      "id": "keep-packA",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "part",
+        "name": "packA",
+        "typeName": "BatteryPack"
+      },
+      "message": "本课应保留 L01 的 part packA : BatteryPack，保持贯穿案例连续。"
+    },
+    {
+      "id": "keep-drive-command",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "Controller",
+        "kind": "item",
+        "name": "driveCommand",
+        "typeName": "TorqueCommand"
+      },
+      "message": "本课应保留 L02 中 Controller 内部的 item driveCommand : TorqueCommand，保持流项上下文连续。"
+    },
+    {
+      "id": "keep-stored-energy",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "BatteryPack",
+        "kind": "item",
+        "name": "storedEnergy",
+        "typeName": "ElectricalEnergy"
+      },
+      "message": "本课应保留 L02 中 BatteryPack 内部的 item storedEnergy : ElectricalEnergy。"
+    },
+    {
+      "id": "motor-def",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "partDef",
+        "name": "Motor"
+      },
+      "message": "需要存在 part def Motor。"
+    },
+    {
+      "id": "inverter-def",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "partDef",
+        "name": "Inverter"
+      },
+      "message": "需要存在 part def Inverter。"
+    },
+    {
+      "id": "edu-def",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "partDef",
+        "name": "ElectricDriveUnit"
+      },
+      "message": "需要存在 part def ElectricDriveUnit。"
+    },
+    {
+      "id": "edu-inverter",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "ElectricDriveUnit",
+        "kind": "part",
+        "name": "inverter",
+        "typeName": "Inverter"
+      },
+      "message": "ElectricDriveUnit 中需要使用 part inverter : Inverter，而不是只写 Inverter 名称。"
+    },
+    {
+      "id": "edu-motor",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "ElectricDriveUnit",
+        "kind": "part",
+        "name": "motor",
+        "typeName": "Motor"
+      },
+      "message": "ElectricDriveUnit 中需要使用 part motor : Motor，而不是重新定义 Motor。"
+    },
+    {
+      "id": "front-drive-usage",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "part",
+        "name": "frontDriveUnit",
+        "typeName": "ElectricDriveUnit"
+      },
+      "message": "需要创建 part frontDriveUnit : ElectricDriveUnit，表示一份前轴电驱总成使用。"
+    },
+    {
+      "id": "view-exposes-front-drive-unit",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "driveUnitStructureView",
+        "kind": "expose",
+        "targetName": "frontDriveUnit"
+      },
+      "message": "driveUnitStructureView 需要 expose frontDriveUnit，让图形视图包含前轴电驱总成使用。"
+    }
+  ]
+}

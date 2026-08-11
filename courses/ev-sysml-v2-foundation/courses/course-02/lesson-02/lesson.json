@@ -1,0 +1,167 @@
+{
+  "id": "course-02-lesson-02",
+  "title": "从物理结构引出流项定义",
+  "type": "modeling-lesson",
+  "estimatedMinutes": 25,
+  "timePlan": [
+    {
+      "label": "复用 L01 结构",
+      "minutes": 4,
+      "description": "确认 BatteryPack、BatteryModule、packA 仍然存在，流项不是孤立学习。"
+    },
+    {
+      "label": "判断 part 或 item",
+      "minutes": 5,
+      "description": "用“BOM 上的零件”与“系统中流动的东西”判断 ElectricalEnergy、TorqueCommand 和 Controller 的建模类别。"
+    },
+    {
+      "label": "补全代码",
+      "minutes": 8,
+      "description": "补全两个 item def，并把 item usage 放入 BatteryPack 和 Controller 的上下文。"
+    },
+    {
+      "label": "校验与修正",
+      "minutes": 5,
+      "description": "运行官方 validator 和课程规则，重点检查 item usage 是否引用正确 item def。"
+    },
+    {
+      "label": "预览接口用途",
+      "minutes": 3,
+      "description": "理解 item def 后续会放到 port 和 interface 上，当前课程只先把交换对象定义清楚。"
+    }
+  ],
+  "scenario": {
+    "title": "工程场景",
+    "body": "电池包结构已经能表达“由什么组成”。控制团队进一步关心“这些部件之间传递什么”：电池存储并输出电能，控制器发送扭矩命令。这些不是 BOM 零件，而是系统流项。",
+    "visual": {
+      "type": "interactive-flow",
+      "variant": "02",
+      "title": "容器与流动对象",
+      "caption": "点击节点区分 part def 与 item def：一个表达容器或部件，一个表达流过系统的东西。",
+      "nodes": [
+        {
+          "id": "physical-context",
+          "icon": "1",
+          "label": "物理上下文",
+          "detail": "`part packA : BatteryPack` 保留了上一课的电池包结构，说明流项必须依附于具体工程上下文来理解。",
+          "code": "packA"
+        },
+        {
+          "id": "energy-item",
+          "icon": "2",
+          "label": "能量流项",
+          "detail": "`item def ElectricalEnergy` 定义电能类型。电能不是电池包这个零件，而是电池包中存储或向外交换的对象。",
+          "code": "ElectricalEnergy"
+        },
+        {
+          "id": "command-item",
+          "icon": "3",
+          "label": "命令流项",
+          "detail": "`item def TorqueCommand` 定义控制命令类型。它会在控制器和电驱之间传递。",
+          "code": "TorqueCommand"
+        },
+        {
+          "id": "usage",
+          "icon": "4",
+          "label": "具体流项使用",
+          "detail": "`BatteryPack` 内的 `item storedEnergy : ElectricalEnergy` 和 `Controller` 内的 `item driveCommand : TorqueCommand` 把抽象流项类型放入明确的结构上下文。",
+          "code": "item"
+        },
+        {
+          "id": "future-port",
+          "icon": "5",
+          "label": "接口预览",
+          "detail": "后续课程会把 item 放到 port 和 interface 上，例如端口声明可传递的能量或命令。",
+          "code": "port"
+        }
+      ]
+    }
+  },
+  "learningBlocks": [
+    {
+      "type": "image-gallery",
+      "title": "课程导引图",
+      "content": "本图按当前 lesson 的工程任务和模型主题生成，用于先理解课程场景，再进入 SysML v2 建模练习。",
+      "generatedBy": "scripts/generate-course-lesson-illustrations.js",
+      "images": [
+        {
+          "src": "/api/course-assets/assets/course-visuals/generated-lesson-guides/ev-course-02-lesson-02-item.svg",
+          "title": "C02.L02 从物理结构引出流项定义",
+          "caption": "围绕 流项/Item flow / 交换对象/Exchange / 接口载荷/Payload 组织汽车工程语境，把本课对象放进可追踪的 SysML v2 模型。",
+          "alt": "电动汽车 SysML v2 建模课程导引图：从物理结构引出流项定义"
+        }
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "工程意图：本 lesson 从 L01 的电池包结构自然延伸到“结构之间传递什么”。`BatteryPack`、`Controller` 是 part def，因为它们是工程结构或部件；`ElectricalEnergy`、`TorqueCommand` 是 item def，因为它们是可交换的能量或信息对象。"
+    },
+    {
+      "type": "markdown",
+      "content": "读模要点：starter 已保留 `part packA : BatteryPack`，说明这不是一个孤立的语法练习。你要补全 `item def ElectricalEnergy`、`item def TorqueCommand`，并把 `item storedEnergy : ElectricalEnergy` 写进 `part def BatteryPack`，把 `item driveCommand : TorqueCommand` 写进 `part def Controller`。这样 item usage 有明确承载上下文，而不是 package 根部的悬空对象。"
+    },
+    {
+      "type": "markdown",
+      "content": "语法读法：延续 L01 的规则，`part cells[12] : BatteryCell;` 中 `part` 是关键字，`cells` 是自定义 usage 名称，`BatteryCell` 是类型；本课的 `item storedEnergy : ElectricalEnergy;` 也是同样结构，只是关键字从 part 换成 item，表示这是一份流项使用。关键差异在所在层级：写在 `BatteryPack` 内，表示电池包上下文中的电能；写在 `Controller` 内，表示控制器上下文中的命令。"
+    },
+    {
+      "type": "hint-card",
+      "title": "什么时候用 part def，什么时候用 item def？",
+      "label": "点击展开关键概念说明",
+      "content": "如果它像 BOM 上有编号、能装配、能承载功能的对象，优先用 `part def`；如果它像箭头旁边标注的能量、物质、信号、命令或报文，优先用 `item def`。但 item 不应该在入门模型里无上下文漂浮：电能由电池包承载或交换，命令由控制器产生或处理，后续 Course 04 会再用 `port def` / `ref item` / `interface` 把这些 item 放到部件边界上。"
+    },
+    {
+      "type": "markdown",
+      "content": "接口预览：当前课程先把 item 放在有工程归属的 part 内部。后续 Course 04 会写类似 `port def PowerPort { ref item power : ElectricalEnergy; }` 的结构，把可交换对象放到系统边界上。现在的目标是先让“电能”和“命令”成为有类型、能追溯到承载部件的模型对象。"
+    },
+    {
+      "type": "markdown",
+      "content": "练习步骤：如果编辑器顶部显示“课程模板”，就在 TODO 1-2 补全两个 item def，在 TODO 3 把 `item storedEnergy : ElectricalEnergy;` 写进 `BatteryPack`，在 TODO 4 把 `item driveCommand : TorqueCommand;` 写进 `Controller`，在 TODO 5 补全控制器使用；如果显示“已恢复草稿”，就检查对应代码是否已经存在且拼写正确，必要时点击“重置为课程模板”回到 TODO 起点。运行校验，确认每个 item usage 的冒号右侧都引用了已定义 item 类型，并且不再悬空。"
+    },
+    {
+      "type": "code",
+      "language": "sysml",
+      "sourceFile": "starter.sysml"
+    }
+  ],
+  "workspace": {
+    "files": [
+      {
+        "path": "main.sysml",
+        "source": "starter.sysml",
+        "editable": true
+      }
+    ],
+    "entryFile": "main.sysml"
+  },
+  "tasks": [
+    {
+      "id": "task-01",
+      "type": "model-challenge",
+      "prompt": "在课程模板的 TODO 位置，或在已恢复草稿中的对应结构位置，补全 `item def ElectricalEnergy`、`item def TorqueCommand`；在 `BatteryPack` 内补全 `item storedEnergy : ElectricalEnergy`，在 `Controller` 内补全 `item driveCommand : TorqueCommand`，并创建 `part vehicleController : Controller`，把电池包结构扩展为带有流项语义的控制上下文。",
+      "hints": [
+        "`ElectricalEnergy` 和 `TorqueCommand` 应是 `item def`，不是 `part def`。",
+        "`storedEnergy` 和 `driveCommand` 是 item usage，分别引用对应 item def；它们应写在承载它们的 part def 内部，而不是放在 package 根部。",
+        "`Controller` 是部件类型，`vehicleController` 是它在当前模型中的一份使用。",
+        "如果校验提示 typeName 不匹配，检查冒号右侧是否写成了正确的定义名称。"
+      ]
+    }
+  ],
+  "validation": {
+    "strictSysml": true,
+    "rulesFile": "rules.json"
+  },
+  "completion": {
+    "requiresStrictValidation": true,
+    "requiresAllLessonRules": true
+  },
+  "glossaryTerms": [
+    "definition",
+    "usage",
+    "part def",
+    "part",
+    "item def",
+    "item",
+    "typed usage"
+  ]
+}

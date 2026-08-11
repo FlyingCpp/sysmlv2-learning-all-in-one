@@ -1,0 +1,95 @@
+{
+  "rules": [
+    {
+      "id": "strict-valid",
+      "type": "strictValidationPassed",
+      "severity": "error",
+      "message": "模型必须通过严格 SysML v2 校验。"
+    },
+    {
+      "id": "charge-assumption",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "FastChargeRequirement",
+        "kind": "assumeConstraint",
+        "name": "socWindow"
+      },
+      "message": "FastChargeRequirement 需要 socWindow assume constraint。"
+    },
+    {
+      "id": "charge-assumption-expression",
+      "type": "descendantElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "FastChargeRequirement",
+        "childParentKind": "assume constraint",
+        "kind": "constraintExpression",
+        "expressionIncludes": "startSOCPercent == 10.0 and endSOCPercent == 80.0"
+      },
+      "message": "socWindow 需要明确 10% 到 80% SOC 的适用边界。"
+    },
+    {
+      "id": "voltage-assumption",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "HighVoltageSafetyRequirement",
+        "kind": "assumeConstraint",
+        "name": "voltageBoundary"
+      },
+      "message": "高压安全需求需要 voltageBoundary assume constraint。"
+    },
+    {
+      "id": "voltage-assumption-expression",
+      "type": "regex",
+      "severity": "error",
+      "pattern": "requirement\\s+def\\s+HighVoltageSafetyRequirement\\s*\\{(?:(?!requirement\\s+hvIsolationSafety)[\\s\\S])*assume\\s+constraint\\s+voltageBoundary\\s*\\{\\s*system\\.nominalVoltageV\\s*<=\\s*maxNominalVoltageV\\s*\\}",
+      "message": "voltageBoundary 必须检查 system.nominalVoltageV 不高于 maxNominalVoltageV。"
+    },
+    {
+      "id": "charge-satisfy",
+      "type": "relationshipExists",
+      "severity": "error",
+      "selector": {
+        "kind": "satisfy",
+        "sourceName": "fastChargeTime",
+        "targetName": "evPrototype"
+      },
+      "message": "需要把快充需求责任分配给 evPrototype。"
+    },
+    {
+      "id": "safety-satisfy",
+      "type": "relationshipExists",
+      "severity": "error",
+      "selector": {
+        "kind": "satisfy",
+        "sourceName": "hvIsolationSafety",
+        "targetName": "evPrototype.hvSystem"
+      },
+      "message": "需要把绝缘安全责任分配给 evPrototype.hvSystem。"
+    },
+    {
+      "id": "view-charge",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "requirementResponsibilityView",
+        "kind": "expose",
+        "targetName": "fastChargeTime"
+      },
+      "message": "责任评审视图需要 expose fastChargeTime。"
+    },
+    {
+      "id": "view-safety",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "requirementResponsibilityView",
+        "kind": "expose",
+        "targetName": "hvIsolationSafety"
+      },
+      "message": "责任评审视图需要 expose hvIsolationSafety。"
+    }
+  ]
+}

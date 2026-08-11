@@ -1,0 +1,72 @@
+{
+  "rules": [
+    {
+      "id": "strict-valid",
+      "type": "strictValidationPassed",
+      "severity": "error",
+      "message": "模型必须通过严格 SysML v2 校验。"
+    },
+    {
+      "id": "analysis-objective",
+      "type": "regex",
+      "severity": "error",
+      "pattern": "objective\\s+rangeDecisionObjective\\s*\\{[\\s\\S]*reportedPredictionKm\\s*>=\\s*targetRangeKm",
+      "message": "RangeEvidenceAnalysis 需要明确预测值与需求目标的 objective。"
+    },
+    {
+      "id": "calc-energy-binding",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "estimateRange",
+        "kind": "in",
+        "name": "usableEnergyKWh",
+        "valueIncludes": "vehicle.battery.usableEnergyKWh"
+      },
+      "message": "分析中的计算必须绑定车型电池能量。"
+    },
+    {
+      "id": "calc-consumption-binding",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "estimateRange",
+        "kind": "in",
+        "name": "energyPer100Km",
+        "valueIncludes": "vehicle.energyPer100Km"
+      },
+      "message": "分析中的计算必须绑定车型能耗。"
+    },
+    {
+      "id": "calc-return",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": { "parent": "estimateRange", "kind": "return", "name": "rawRangeKm" },
+      "message": "分析内的 calc usage 需要暴露 rawRangeKm。"
+    },
+    {
+      "id": "analysis-return",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "RangeEvidenceAnalysis",
+        "kind": "return",
+        "name": "predictedRangeKm",
+        "valueIncludes": "reportedPredictionKm"
+      },
+      "message": "分析需要返回 490.0 km 报告预测值。"
+    },
+    {
+      "id": "reported-prediction-binding",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "cityRangeAnalysis",
+        "kind": "in",
+        "name": "reportedPredictionKm",
+        "valueIncludes": "evPrototype.reportedPredictionKm"
+      },
+      "message": "报告预测输入必须来自 490.0 km 预测属性。"
+    }
+  ]
+}

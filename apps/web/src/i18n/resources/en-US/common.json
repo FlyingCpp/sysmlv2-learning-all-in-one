@@ -1,0 +1,9 @@
+{
+  "states": {
+    "loading": "Loading"
+  },
+  "errors": {
+    "loadFailed": "Unable to load",
+    "requestFailed": "Request failed"
+  }
+}

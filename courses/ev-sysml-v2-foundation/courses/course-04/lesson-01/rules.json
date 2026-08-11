@@ -1,0 +1,83 @@
+{
+  "rules": [
+    {
+      "id": "strict-valid",
+      "type": "strictValidationPassed",
+      "severity": "error",
+      "message": "模型必须通过严格 SysML v2 校验。"
+    },
+    {
+      "id": "power-port-ref-item",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "PowerPort",
+        "kind": "item",
+        "name": "power",
+        "typeName": "ElectricalPower",
+        "isReference": true
+      },
+      "message": "PowerPort 中需要存在 ref item power : ElectricalPower，说明端口引用并交换功率对象。"
+    },
+    {
+      "id": "battery-dc-out",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "BatteryPack",
+        "kind": "port",
+        "name": "dcOut",
+        "typeName": "PowerPort"
+      },
+      "message": "BatteryPack 中需要存在 port dcOut : PowerPort，表示电池包高压直流输出边界。"
+    },
+    {
+      "id": "inverter-dc-in",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "Inverter",
+        "kind": "port",
+        "name": "dcIn",
+        "typeName": "PowerPort"
+      },
+      "message": "Inverter 中需要存在 port dcIn : PowerPort，表示逆变器高压直流输入边界。"
+    },
+    {
+      "id": "interface-source-end",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "BatteryToInverter",
+        "kind": "end",
+        "name": "source",
+        "typeName": "PowerPort"
+      },
+      "message": "BatteryToInverter 中需要存在 end source : PowerPort，定义功率接口的源端端口类型。"
+    },
+    {
+      "id": "interface-target-end",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "BatteryToInverter",
+        "kind": "end",
+        "name": "target",
+        "typeName": "PowerPort"
+      },
+      "message": "BatteryToInverter 中需要存在 end target : PowerPort，定义功率接口的目标端端口类型。"
+    },
+    {
+      "id": "power-flow",
+      "type": "relationshipExists",
+      "severity": "error",
+      "selector": {
+        "parent": "BatteryToInverter",
+        "kind": "flow",
+        "sourceName": "source.power",
+        "targetName": "target.power"
+      },
+      "message": "BatteryToInverter 中需要存在 flow source.power to target.power，明确高压功率流向。"
+    }
+  ]
+}

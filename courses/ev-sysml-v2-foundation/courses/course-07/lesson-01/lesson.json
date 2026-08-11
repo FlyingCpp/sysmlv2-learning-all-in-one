@@ -1,0 +1,87 @@
+{
+  "id": "course-07-lesson-01",
+  "title": "需求成熟度 1：把目标写成可验收契约",
+  "type": "modeling-lesson",
+  "estimatedMinutes": 45,
+  "timePlan": [
+    { "label": "读工程目标", "minutes": 8, "description": "识别车型、城市工况、480 km 续航和 16 kWh/100km 能耗边界。" },
+    { "label": "建立验收契约", "minutes": 25, "description": "补齐需求正文、主体、参数、两个验收点和责任关系。" },
+    { "label": "校验与评审", "minutes": 12, "description": "检查需求是否能被后续分析与验证稳定引用。" }
+  ],
+  "scenario": {
+    "title": "工程场景：概念目标进入需求评审",
+    "body": "同一辆试点样车采用 78.0 kWh 可用电量和 16.0 kWh/100km 能耗基线。产品目标要求城市续航不低于 480.0 km。系统工程师需要把自然语言目标升级为带主体、参数、判据和责任的模型契约，供 C08 分析与 C09 验证复用。",
+    "visual": {
+      "type": "interactive-flow",
+      "variant": "07-maturity-contract",
+      "title": "需求契约形成链",
+      "nodes": [
+        { "id": "intent", "label": "工程目标", "detail": "480 km 与 16 kWh/100km", "code": "doc + attribute" },
+        { "id": "criteria", "label": "独立验收点", "detail": "续航和能耗分别可审查", "code": "require constraint" },
+        { "id": "owner", "label": "责任对象", "detail": "同一辆 evPrototype 承担满足责任", "code": "satisfy" }
+      ]
+    }
+  },
+  "learningBlocks": [
+    {
+      "type": "image-gallery",
+      "title": "课程导引图",
+      "images": [
+        {
+          "src": "/api/course-assets/assets/course-visuals/generated-lesson-guides/ev-course-07-lesson-01-requirement.svg",
+          "title": "需求契约",
+          "caption": "从目标句进入可计算、可分责、可验收的需求模型。",
+          "alt": "电动汽车需求契约教学图"
+        }
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "工程意图：本课只建立一条好需求的完整骨架，不提前练习需求派生或验证执行。`doc` 说明场景与意图，`subject` 说明需求约束谁，`attribute` 承载 480.0 km 与 16.0 kWh/100km 目标，两个命名 `require constraint` 构成联合判据中的独立验收点，`satisfy` 记录设计责任。"
+    },
+    {
+      "type": "hint-card",
+      "title": "subject 为什么不等于 satisfy？",
+      "label": "区分对象与责任",
+      "content": "`subject vehicle : ElectricVehicle` 定义需求所描述的对象类型；`satisfy cityRange by evPrototype` 声明共享基线中的同一辆样车承担满足责任。satisfy 是责任声明，不是通过证据。"
+    },
+    {
+      "type": "hint-card",
+      "title": "为什么把续航和能耗写成两个判据？",
+      "label": "独立验收点",
+      "content": "两项判据共享同一需求上下文，但可分别分析和验证。这样既保留联合判据，又不会让一个失败条件被另一个条件掩盖。"
+    },
+    {
+      "type": "markdown",
+      "content": "权威依据：OMG SysML v2 Clause 7.21 与官方 `training/32. Requirements/Requirement Definitions.sysml` 使用 requirement、doc、subject、attribute 和 require constraint 表达可检查需求；官方 Requirement Satisfaction 示例区分需求主体与 satisfy 责任。"
+    },
+    {
+      "type": "markdown",
+      "content": "练习步骤：若顶部显示“课程模板”，按 TODO 1-6 完成正文、subject、两个 require constraint、attribute 重定义和 satisfy。若显示“已恢复草稿”，先核对对象仍位于 RangeAcceptanceRequirement、cityRange 和 package 根部，并继续引用只读 evPrototype；偏离起点时使用“重置为课程模板”。"
+    },
+    { "type": "code", "language": "sysml", "sourceFile": "starter.sysml" }
+  ],
+  "workspace": {
+    "files": [
+      { "path": "ev-program-baseline.sysml", "source": "../../../shared/ev-program-baseline.sysml", "editable": false },
+      { "path": "main.sysml", "source": "starter.sysml", "editable": true }
+    ],
+    "entryFile": "main.sysml"
+  },
+  "tasks": [
+    {
+      "id": "task-01",
+      "type": "model-challenge",
+      "prompt": "面向同一辆 evPrototype 的需求评审，补齐可被分析和验证引用的城市续航契约，并明确共享样车的满足责任。",
+      "hints": [
+        "先用 doc 写清城市工况与验收意图，再添加 subject vehicle。",
+        "rangeCriterion 检查 reportedPredictionKm >= minRangeKm。",
+        "energyCriterion 检查 energyPer100Km <= maxEnergyPer100Km。",
+        "cityRange 的两个 attribute 重定义分别使用 480.0 和 16.0。"
+      ]
+    }
+  ],
+  "validation": { "strictSysml": true, "rulesFile": "rules.json" },
+  "completion": { "requiresStrictValidation": true, "requiresAllLessonRules": true },
+  "glossaryTerms": ["requirement def", "doc", "subject", "attribute", "require constraint", "satisfy"]
+}

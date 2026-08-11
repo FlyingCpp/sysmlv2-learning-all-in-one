@@ -1,0 +1,90 @@
+{
+  "rules": [
+    {
+      "id": "strict-valid",
+      "type": "strictValidationPassed",
+      "severity": "error",
+      "message": "模型必须通过严格 SysML v2 校验。"
+    },
+    {
+      "id": "requirement-doc",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": { "parent": "RangeAcceptanceRequirement", "kind": "doc" },
+      "message": "RangeAcceptanceRequirement 需要 doc 正文。"
+    },
+    {
+      "id": "requirement-subject",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "RangeAcceptanceRequirement",
+        "kind": "subject",
+        "name": "vehicle",
+        "typeName": "ElectricVehicle"
+      },
+      "message": "需求需要 subject vehicle : ElectricVehicle。"
+    },
+    {
+      "id": "range-criterion",
+      "type": "descendantElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "RangeAcceptanceRequirement",
+        "childParentKind": "require constraint",
+        "kind": "constraintExpression",
+        "expressionIncludes": "vehicle.reportedPredictionKm >= minRangeKm"
+      },
+      "message": "rangeCriterion 需要检查报告预测续航是否达到需求目标。"
+    },
+    {
+      "id": "energy-criterion",
+      "type": "descendantElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "RangeAcceptanceRequirement",
+        "childParentKind": "require constraint",
+        "kind": "constraintExpression",
+        "expressionIncludes": "vehicle.energyPer100Km <= maxEnergyPer100Km"
+      },
+      "message": "energyCriterion 需要独立检查百公里能耗边界。"
+    },
+    {
+      "id": "range-target",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "cityRange",
+        "kind": "attribute",
+        "name": "minRangeKm",
+        "isRedefinition": true,
+        "valueIncludes": "480.0"
+      },
+      "message": "cityRange 需要 480.0 km 的 minRangeKm 重定义。"
+    },
+    {
+      "id": "energy-target",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "cityRange",
+        "kind": "attribute",
+        "name": "maxEnergyPer100Km",
+        "isRedefinition": true,
+        "valueIncludes": "16.0"
+      },
+      "message": "cityRange 需要 16.0 kWh/100km 的能耗重定义。"
+    },
+    {
+      "id": "satisfy-responsibility",
+      "type": "relationshipExists",
+      "severity": "error",
+      "selector": {
+        "kind": "satisfy",
+        "sourceName": "cityRange",
+        "targetName": "evPrototype"
+      },
+      "message": "需要 satisfy cityRange by evPrototype，记录同一辆试点样车的设计责任。"
+    }
+  ]
+}

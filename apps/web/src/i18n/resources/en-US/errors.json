@@ -1,0 +1,27 @@
+{
+  "generic": {
+    "requestFailed": "The request could not be completed. Try again later.",
+    "badRequest": "The request is invalid. Check the information and try again.",
+    "unauthorized": "Your session has expired. Sign in again.",
+    "forbidden": "Your account does not have permission to perform this action.",
+    "notFound": "The requested resource was not found.",
+    "conflict": "The current state has changed. Refresh and try again.",
+    "rateLimited": "Too many requests. Try again later.",
+    "serviceUnavailable": "The service is temporarily unavailable. Try again later."
+  },
+  "codes": {
+    "AUTH_REQUIRED": "Sign in to continue.",
+    "AUTH_FAILED": "Sign-in failed. Check your email and password.",
+    "AUTH_SESSION_EXPIRED": "Your session has expired. Sign in again.",
+    "AUTH_SESSION_CHECK_FAILED": "Your session could not be verified. Sign in again.",
+    "REGISTRATION_DISABLED": "User registration is currently closed.",
+    "GUEST_LOGIN_DISABLED": "Guest sign-in is currently disabled.",
+    "REGISTER_REQUIRED_FIELDS": "Enter an email address and password.",
+    "INVALID_EMAIL": "Enter a valid email address.",
+    "PASSWORD_TOO_SHORT": "The password must contain at least 8 characters.",
+    "ACCOUNT_ALREADY_EXISTS": "This email is already registered. Sign in or use another email.",
+    "ACCOUNT_DISABLED": "This account has been disabled.",
+    "REGISTER_VALIDATION_FAILED": "The registration information is invalid. Check the email and password.",
+    "RATE_LIMIT_EXCEEDED": "Too many requests. Try again later."
+  }
+}

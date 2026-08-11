@@ -1,0 +1,172 @@
+{
+  "id": "course-02-lesson-00",
+  "title": "Def / Usage 全景与汽车工程类比",
+  "type": "modeling-lesson",
+  "estimatedMinutes": 20,
+  "timePlan": [
+    {
+      "label": "建立类比",
+      "minutes": 5,
+      "description": "把 Definition / Usage 对应到零件图册和 BOM 行，先理解为什么不能把蓝图直接放进产品结构。"
+    },
+    {
+      "label": "识别 def 家族",
+      "minutes": 4,
+      "description": "快速扫读本课程会用到的 part def、item def，以及后续课程会遇到的 port、action、state、requirement 等 def。"
+    },
+    {
+      "label": "阅读全景模型",
+      "minutes": 5,
+      "description": "在代码中对照 BatteryPack、storedEnergy、Controller、driveCommand、Vehicle 和 myEV 的层级关系。"
+    },
+    {
+      "label": "运行校验",
+      "minutes": 3,
+      "description": "补齐两个 item usage 和一份 myEV 使用后运行严格校验。"
+    },
+    {
+      "label": "复盘判据",
+      "minutes": 3,
+      "description": "用“BOM 上的零件”与“系统中流动的东西”区分 part def 和 item def。"
+    }
+  ],
+  "scenario": {
+    "title": "工程场景",
+    "body": "汽车工程师熟悉零件图册、BOM、子总成和系统图。SysML v2 的 Definition / Usage 分离就是把这些工程习惯形式化：图册中的通用件是 def，某个车型或子系统里的一行引用是 usage。",
+    "visual": {
+      "type": "interactive-flow",
+      "variant": "02",
+      "title": "蓝图、BOM 与可交换对象",
+      "caption": "点击节点，观察 Definition / Usage 如何映射到汽车工程中的图纸、BOM 行和系统流。",
+      "nodes": [
+        {
+          "id": "blueprint",
+          "icon": "1",
+          "label": "零件图册",
+          "detail": "`part def BatteryPack`、`part def Motor` 代表可复用类型，类似通用件定义或零件图册条目。",
+          "code": "part def"
+        },
+        {
+          "id": "bom-row",
+          "icon": "2",
+          "label": "BOM 行",
+          "detail": "`part modules[8] : BatteryModule` 表示在 BatteryPack 中使用若干模组。数量和角色名属于 usage。",
+          "code": "part modules"
+        },
+        {
+          "id": "flow-item",
+          "icon": "3",
+          "label": "系统流",
+          "detail": "`item def ElectricalEnergy` 和 `item def TorqueCommand` 不是物理零件；它们的 usage 分别放在 BatteryPack 和 Controller 上，后续会通过端口和接口交换。",
+          "code": "item def"
+        },
+        {
+          "id": "subsystem",
+          "icon": "4",
+          "label": "子总成",
+          "detail": "`part def ElectricDriveUnit` 通过 `part inverter : Inverter` 引用内部零件类型，形成可复用总成。",
+          "code": "ElectricDriveUnit"
+        },
+        {
+          "id": "vehicle",
+          "icon": "5",
+          "label": "整车使用",
+          "detail": "`part myEV : Vehicle` 把整车类型放入当前模型上下文，类似本项目正在讨论的一辆样车或配置对象。",
+          "code": "myEV"
+        }
+      ]
+    }
+  },
+  "learningBlocks": [
+    {
+      "type": "image-gallery",
+      "title": "课程导引图",
+      "content": "本图按当前 lesson 的工程任务和模型主题生成，用于先理解课程场景，再进入 SysML v2 建模练习。",
+      "generatedBy": "scripts/generate-course-lesson-illustrations.js",
+      "images": [
+        {
+          "src": "/api/course-assets/assets/course-visuals/generated-lesson-guides/ev-course-02-lesson-00-usage.svg",
+          "title": "C02.L00 Def / Usage 全景与汽车工程类比",
+          "caption": "围绕 定义/Definition / 使用/Usage / 类型实例/Typed 组织汽车工程语境，把本课对象放进可追踪的 SysML v2 模型。",
+          "alt": "电动汽车 SysML v2 建模课程导引图：Def / Usage 全景与汽车工程类比"
+        }
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "工程意图：本 lesson 不是只看全景图，而是先用小 TODO 练习 def / usage 分离。`part def Inverter` 是零件图册里的逆变器通用件；`part inverter : Inverter` 是电驱总成 BOM 里的一行引用。你不能把零件图册直接塞进 BOM，只能在 BOM 中引用件号。"
+    },
+    {
+      "type": "markdown",
+      "content": "def 家族全景：本 Course 重点学习 `part def` 和 `item def`。后续课程会继续展开 `port def`、`interface def`、`connection def`、`action def`、`state def`、`requirement def`、`calc def`、`analysis def` 和 `verification def`。现在只需要先掌握“类型”和“使用”的分离。"
+    },
+    {
+      "type": "hint-card",
+      "title": "item usage 为什么不能悬空？",
+      "label": "点击查看 item 的工程归属",
+      "content": "`item def ElectricalEnergy` 定义的是电能这种可交换对象类型，不是电池包零件；`item storedEnergy : ElectricalEnergy` 是这个对象在当前模型中的一次 usage。入门课里应把它放进 `BatteryPack`，表示这份电能由电池包上下文承载或后续交换。同理，`item driveCommand : TorqueCommand` 放进 `Controller`，表示控制器产生或处理这类命令。Course04 会进一步用 `port def` / `ref item` / `interface` 把这些 item 放到部件边界和跨部件接口上。",
+      "bullets": [
+        "`part def`：有结构责任、能装配或承载功能的系统/部件类型。",
+        "`item def`：能量、信号、物质、命令、报文等可交换对象类型。",
+        "`item` usage：把某类可交换对象放进有工程归属的上下文，不要在入门模型里放成无归属对象。"
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "语法读法：`part modules[8] : BatteryModule;` 这类 usage 行可以拆成四段：`part` 是关键字，`modules` 是建模者自定义名称，`[8]` 是多重性，`BatteryModule` 是冒号右侧引用的类型。同理，`part cells[12] : BatteryCell;` 中 BatteryCell 是类型，cells 是 BOM 行名称。"
+    },
+    {
+      "type": "markdown",
+      "content": "读模要点：`part def BatteryPack` 是电池包类型；`part modules[8] : BatteryModule` 是电池包内部的 BOM 行；`item def ElectricalEnergy` 表示电能这种可交换对象，TODO 1 要把 `item storedEnergy : ElectricalEnergy` 放进 BatteryPack，说明这份电能由电池包上下文承载；TODO 2 要把 `item driveCommand : TorqueCommand` 放进 Controller，说明命令对象属于控制器上下文。item 不是物理零件，但也不应该在入门图里无归属地悬空。TODO 3 的 `part myEV : Vehicle` 表示整车类型的一次具体使用。"
+    },
+    {
+      "type": "markdown",
+      "content": "练习步骤：如果编辑器顶部显示“课程模板”，按 TODO 1-4 补齐 `storedEnergy`、`driveCommand`、`myEV` 和视图暴露；如果显示“已恢复草稿”，检查这些内容是否仍在 BatteryPack、Controller、package 根部和 view 的对应位置，必要时点击“重置为课程模板”回到 TODO 起点。完成后运行校验，确认这份全景模型完整有效。"
+    },
+    {
+      "type": "code",
+      "language": "sysml",
+      "sourceFile": "starter.sysml"
+    }
+  ],
+  "workspace": {
+    "files": [
+      {
+        "path": "main.sysml",
+        "source": "starter.sysml",
+        "editable": true
+      }
+    ],
+    "entryFile": "main.sysml"
+  },
+  "tasks": [
+    {
+      "id": "task-00",
+      "type": "model-challenge",
+      "prompt": "在课程模板的 TODO 位置，或在已恢复草稿中的对应结构位置，把 `item storedEnergy : ElectricalEnergy` 放进 BatteryPack，把 `item driveCommand : TorqueCommand` 放进 Controller，创建 `part myEV : Vehicle`，并在 view 中 expose myEV；然后用工程语言说明这些 usage 分别落在哪个上下文。",
+      "hints": [
+        "`def` 回答“这种东西是什么”，`usage` 回答“当前上下文里哪里用了它”。",
+        "`part def` 通常对应有结构责任的系统或部件，`item def` 通常对应能量、信号、物质或命令；item usage 应尽量放进承载或交换它的结构上下文。",
+        "`myEV` 写在类型定义外部，因为它是当前模型中的一台样车使用；不要把它写进 `part def Vehicle` 内部。"
+      ]
+    }
+  ],
+  "validation": {
+    "strictSysml": true,
+    "rulesFile": "rules.json"
+  },
+  "completion": {
+    "requiresStrictValidation": true,
+    "requiresAllLessonRules": true
+  },
+  "glossaryTerms": [
+    "definition",
+    "usage",
+    "part def",
+    "part",
+    "item def",
+    "item",
+    "multiplicity",
+    "typed usage"
+  ]
+}

@@ -1,0 +1,175 @@
+{
+  "rules": [
+    {
+      "id": "strict-valid",
+      "type": "strictValidationPassed",
+      "severity": "error",
+      "message": "模型必须通过严格 SysML v2 校验。"
+    },
+    {
+      "id": "state-machine",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "stateDef",
+        "name": "VehicleOperatingState"
+      },
+      "message": "需要存在 state def VehicleOperatingState。"
+    },
+    {
+      "id": "initial-off",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "VehicleOperatingState",
+        "kind": "transition",
+        "sourceName": "start",
+        "targetName": "Off",
+        "isInitial": true
+      },
+      "message": "VehicleOperatingState 需要 first start then Off，明确唯一初始状态。"
+    },
+    {
+      "id": "safe-state",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "VehicleOperatingState",
+        "kind": "state",
+        "name": "SafeState"
+      },
+      "message": "需要添加 state SafeState，作为严重故障后的车辆安全状态。"
+    },
+    {
+      "id": "safe-entry-action",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "SafeState",
+        "kind": "action",
+        "name": "emergencyShutdown",
+        "typeName": "EmergencyShutdown",
+        "isEntry": true
+      },
+      "message": "SafeState 需要 entry action emergencyShutdown : EmergencyShutdown，说明进入安全状态时执行的动作。"
+    },
+    {
+      "id": "off-to-standby",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "VehicleOperatingState",
+        "kind": "transition",
+        "sourceName": "Off",
+        "targetName": "Standby",
+        "triggerName": "IgnitionOnSignal"
+      },
+      "message": "需要 Off -> Standby 转移，事件为 IgnitionOnSignal。"
+    },
+    {
+      "id": "standby-to-driving",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "VehicleOperatingState",
+        "kind": "transition",
+        "sourceName": "Standby",
+        "targetName": "Driving",
+        "triggerName": "GearDriveSignal",
+        "guardIncludes": "socPercent"
+      },
+      "message": "需要 Standby -> Driving 转移，且必须包含 GearDriveSignal 和 socPercent 守卫条件。"
+    },
+    {
+      "id": "driving-to-standby",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "VehicleOperatingState",
+        "kind": "transition",
+        "sourceName": "Driving",
+        "targetName": "Standby",
+        "triggerName": "GearParkSignal",
+        "guardIncludes": "vehicleSpeedKph"
+      },
+      "message": "需要 Driving -> Standby 转移，且必须包含 GearParkSignal 和 vehicleSpeedKph 守卫条件。"
+    },
+    {
+      "id": "standby-to-charging",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "VehicleOperatingState",
+        "kind": "transition",
+        "sourceName": "Standby",
+        "targetName": "Charging",
+        "triggerName": "ChargerConnectedSignal"
+      },
+      "message": "需要 Standby -> Charging 转移，事件为 ChargerConnectedSignal。"
+    },
+    {
+      "id": "driving-to-safe",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "VehicleOperatingState",
+        "kind": "transition",
+        "sourceName": "Driving",
+        "targetName": "SafeState",
+        "triggerName": "CriticalFaultSignal"
+      },
+      "message": "需要 Driving -> SafeState 的严重故障安全转移。"
+    },
+    {
+      "id": "charging-to-safe",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "VehicleOperatingState",
+        "kind": "transition",
+        "sourceName": "Charging",
+        "targetName": "SafeState",
+        "triggerName": "CriticalFaultSignal"
+      },
+      "message": "需要 Charging -> SafeState 的严重故障安全转移。"
+    },
+    {
+      "id": "safe-to-off",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "VehicleOperatingState",
+        "kind": "transition",
+        "sourceName": "SafeState",
+        "targetName": "Off",
+        "triggerName": "ManualResetSignal",
+        "guardIncludes": "allFaultsCleared"
+      },
+      "message": "需要 SafeState -> Off 的人工复位恢复转移，且包含 allFaultsCleared 守卫条件。"
+    },
+    {
+      "id": "vehicle-mode",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "ElectricVehicle",
+        "kind": "state",
+        "name": "vehicleMode",
+        "typeName": "VehicleOperatingState"
+      },
+      "message": "ElectricVehicle 内需要 state vehicleMode : VehicleOperatingState。"
+    },
+    {
+      "id": "view-exposes-state",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "vehicleStateView",
+        "kind": "expose",
+        "name": "VehicleOperatingState",
+        "targetName": "VehicleOperatingState"
+      },
+      "message": "vehicleStateView 需要 expose VehicleOperatingState。"
+    }
+  ]
+}

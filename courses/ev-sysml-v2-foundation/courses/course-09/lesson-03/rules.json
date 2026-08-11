@@ -1,0 +1,72 @@
+{
+  "rules": [
+    {
+      "id": "strict-valid",
+      "type": "strictValidationPassed",
+      "severity": "error",
+      "message": "模型必须通过严格 SysML v2 校验。"
+    },
+    {
+      "id": "inspection-method",
+      "type": "regex",
+      "severity": "error",
+      "pattern": "verification\\s+def\\s+IsolationInspection\\s*\\{(?:(?!verification\\s+def\\s+SafeStateDemonstration)[\\s\\S])*@VerificationMethod\\s*\\{\\s*kind\\s*=\\s*VerificationMethodKind::inspect\\s*;\\s*\\}",
+      "message": "IsolationInspection 需要 inspect 方法元数据。"
+    },
+    {
+      "id": "inspection-verdict",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "IsolationInspection",
+        "kind": "return",
+        "name": "verdict",
+        "typeName": "VerdictKind",
+        "valueIncludes": "PassIf(measuredIsolationOhmPerVolt >= requiredIsolationOhmPerVolt)"
+      },
+      "message": "绝缘检查需要基于独立观测给出 VerdictKind。"
+    },
+    {
+      "id": "demonstration-method",
+      "type": "regex",
+      "severity": "error",
+      "pattern": "verification\\s+def\\s+SafeStateDemonstration\\s*\\{(?:(?!verification\\s+isolationInspection)[\\s\\S])*@VerificationMethod\\s*\\{\\s*kind\\s*=\\s*VerificationMethodKind::demo\\s*;\\s*\\}",
+      "message": "SafeStateDemonstration 需要 demo 方法元数据。"
+    },
+    {
+      "id": "inconclusive-verdict",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "SafeStateDemonstration",
+        "kind": "return",
+        "name": "verdict",
+        "typeName": "VerdictKind",
+        "valueIncludes": "VerdictKind::inconclusive"
+      },
+      "message": "SafeState 观测不完整时应记录 inconclusive，而不是伪造 pass。"
+    },
+    {
+      "id": "view-inspection",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "safetyVerificationView",
+        "kind": "expose",
+        "targetName": "isolationInspection"
+      },
+      "message": "安全评审视图需要 expose isolationInspection。"
+    },
+    {
+      "id": "view-demonstration",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "safetyVerificationView",
+        "kind": "expose",
+        "targetName": "safeStateDemonstration"
+      },
+      "message": "安全评审视图需要 expose safeStateDemonstration。"
+    }
+  ]
+}

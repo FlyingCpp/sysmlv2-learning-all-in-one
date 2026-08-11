@@ -1,0 +1,140 @@
+{
+  "id": "course-05-lesson-02",
+  "title": "充电过程的数据流与时序",
+  "type": "modeling-lesson",
+  "estimatedMinutes": 35,
+  "scenario": {
+    "title": "工程场景",
+    "body": "C04 已经教过端口和接口，但端口连上之后还要说明发生什么过程。本课以充电场景为例：Charger 和 BatteryPack 通过 PowerPort/CanPort 交互，`ChargingProcess` 描述握手、预充检查、电流调节和充电监控的行为链。",
+    "visual": {
+      "type": "interactive-flow",
+      "variant": "05-charging-sequence",
+      "title": "充电行为链",
+      "caption": "端口提供通道，action 描述通道上发生的过程，then action 和 flow 表达步骤顺序与数据传递。",
+      "nodes": [
+        {
+          "id": "interface-context",
+          "icon": "I",
+          "label": "接口上下文",
+          "detail": "BatteryPack.dcIn 和 Charger.dcOut 来自 C04 的端口建模思路，是充电行为发生的物理边界。",
+          "code": "PowerPort"
+        },
+        {
+          "id": "handshake",
+          "icon": "1",
+          "label": "通信握手",
+          "detail": "handshakeWithCharger 先确认充电桩可用，输出 chargerReady。",
+          "code": "handshakeWithCharger"
+        },
+        {
+          "id": "sequence",
+          "icon": "2",
+          "label": "时序步骤",
+          "detail": "then action 表示这个步骤跟在前面的行为之后执行；参数方向仍然靠 in/out 表达。",
+          "code": "then action"
+        },
+        {
+          "id": "behavior-flow",
+          "icon": "F",
+          "label": "步骤间数据流",
+          "detail": "flow 把 chargerReady、systemReady、currentCommandA 传到后续步骤。",
+          "code": "flow"
+        }
+      ]
+    }
+  },
+  "learningBlocks": [
+    {
+      "type": "image-gallery",
+      "title": "课程导引图",
+      "content": "本图按当前 lesson 的工程任务和模型主题生成，用于先理解课程场景，再进入 SysML v2 建模练习。",
+      "generatedBy": "scripts/generate-course-lesson-illustrations.js",
+      "images": [
+        {
+          "src": "/api/course-assets/assets/course-visuals/generated-lesson-guides/ev-course-05-lesson-02-action.svg",
+          "title": "C05.L02 充电过程的数据流与时序",
+          "caption": "围绕 行为流/Action flow / 行为/Behavior / 控制路径/Control 组织汽车工程语境，把本课对象放进可追踪的 SysML v2 模型。",
+          "alt": "电动汽车 SysML v2 建模课程导引图：充电过程的数据流与时序"
+        }
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "工程意图：充电不是“加一个充电口”就完成了。结构和接口回答谁与谁连接，行为回答连接之后如何握手、检查、调节电流和判断完成。"
+    },
+    {
+      "type": "markdown",
+      "content": "接口复盘：`interface def ChargingPowerInterface { end source : PowerPort; end target : PowerPort; flow source.power to target.power; }` 中，`interface def`、`end`、`flow` 是 SysML v2 标准语法；`ChargingPowerInterface`、`source`、`target` 是建模者取的名称。`source` / `target` 不是必须的保留端点名，也可以用 `chargerSide` / `batterySide`，但 flow 中必须引用同一组端点名称。"
+    },
+    {
+      "type": "hint-card",
+      "title": "端口名里的 In/Out 和行为参数 in/out 是一回事吗？",
+      "label": "点击展开关键概念说明",
+      "content": "`part def BatteryPack { port dcIn : PowerPort; port bmsCan : CanPort; }` 中，`port` 是标准关键字，`dcIn` 和 `bmsCan` 是端口名称，`PowerPort` 与 `CanPort` 是端口类型。`dcIn` 里的 In 是工程命名约定，不会自动产生输入方向；真正的行为输入方向要用 `in socCurrent : ScalarValues::Real;` 这类参数方向关键字表达。这里的 `ScalarValues::Real` 是标准库里的数值类型全名，先用全名可以减少 import 带来的前置负担。"
+    },
+    {
+      "type": "markdown",
+      "content": "读模要点：`BatteryPack` 和 `Charger` 是结构载体；`PowerPort` 与 `CanPort` 是交互通道；`ChargingProcess` 是行为过程。顶层参数固定为 `in socCurrent : ScalarValues::Real`、`in targetSOC : ScalarValues::Real`、`out currentSetpointA : ScalarValues::Real` 和 `out chargingComplete : ScalarValues::Boolean`。注意类型冒号必须是英文半角 `:`，中文输入法下的全角冒号 `：` 不是 SysML 语法符号。"
+    },
+    {
+      "type": "markdown",
+      "content": "固定步骤与路径：本课按充电行为链固定使用 `preChargeCheck`、`regulateCurrent`、`monitorCharge` 三个 then action 名称。三条 flow 建议使用官方样例常见的 `flow from ... to ...;` 形式，路径分别是 `handshakeWithCharger.chargerReady` 到 `preChargeCheck.chargerReady`、`preChargeCheck.systemReady` 到 `regulateCurrent.systemReady`、`regulateCurrent.currentCommandA` 到 `monitorCharge.currentCommandA`。"
+    },
+    {
+      "type": "markdown",
+      "content": "视图定位：`chargingActionFlowView` 是纯行为流入口，只暴露 `ChargingProcess`；`chargingBehaviorView` 是混合评审入口，用 `GeneralView` 同时暴露 BatteryPack、Charger 和 ChargingProcess，让学生看到行为发生在哪些结构边界之间。"
+    },
+    {
+      "type": "markdown",
+      "content": "练习步骤：如果编辑器顶部显示“课程模板”，在 TODO 1 补全 `ChargingProcess` 的 `socCurrent`、`targetSOC`、`currentSetpointA`、`chargingComplete`，在 TODO 2-4 把 `preChargeCheck`、`regulateCurrent`、`monitorCharge` 写成 `then action`，在 TODO 5-7 添加步骤间 `flow from ... to ...;`，在 TODO 8 把 `ChargingProcess` 暴露到视图。若显示“已恢复草稿”，请检查这些内容是否位于对应结构位置；需要重新练习时点击“重置为课程模板”。"
+    },
+    {
+      "type": "code",
+      "language": "sysml",
+      "sourceFile": "starter.sysml"
+    }
+  ],
+  "workspace": {
+    "files": [
+      {
+        "path": "main.sysml",
+        "source": "starter.sysml",
+        "editable": true
+      }
+    ],
+    "entryFile": "main.sysml"
+  },
+  "tasks": [
+    {
+      "id": "task-01",
+      "type": "model-challenge",
+      "prompt": "在课程模板的 TODO 位置，或在已恢复草稿中的对应结构位置，完成 ChargingProcess 的输入输出、时序步骤、步骤间数据流和行为视图暴露。",
+      "hints": [
+        "`then action` 只表达步骤先后，例如握手之后做预充检查；它不会自动把上一步输出交给下一步输入。",
+        "`flow from ... to ...` 才表达数据传递：把握手步骤输出的 `chargerReady` 送进预充检查步骤的同名输入，例如 `flow from handshakeWithCharger.chargerReady to preChargeCheck.chargerReady;`。",
+        "本课固定输出名称是 `currentSetpointA` 和 `chargingComplete`；不要把完成状态只命名为 `complete`。",
+        "后两条 flow 的工程含义是“预充检查通过后才调节电流”“电流命令进入监控步骤”：端点分别是 `preChargeCheck.systemReady` 到 `regulateCurrent.systemReady`、`regulateCurrent.currentCommandA` 到 `monitorCharge.currentCommandA`。",
+        "`source` / `target` 是接口端点名称；如果在接口定义里改名，`flow source.power to target.power` 也要同步改名。",
+        "`dcIn` / `dcOut` 是端口名称中的方向提示；行为参数方向必须用行首 `in` / `out` 关键字表达。",
+        "参数类型写完整限定名 `ScalarValues::Real` 和 `ScalarValues::Boolean`；不要把中文全角冒号 `：` 当作类型冒号。",
+        "`chargingActionFlowView` 聚焦行为流；`chargingBehaviorView` 是混合评审视图，负责把结构边界和行为过程放在一起。"
+      ]
+    }
+  ],
+  "validation": {
+    "strictSysml": true,
+    "rulesFile": "rules.json"
+  },
+  "completion": {
+    "requiresStrictValidation": true,
+    "requiresAllLessonRules": true
+  },
+  "glossaryTerms": [
+    "action def",
+    "then",
+    "flow",
+    "view",
+    "expose",
+    "Step"
+  ]
+}

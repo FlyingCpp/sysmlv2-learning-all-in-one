@@ -1,0 +1,194 @@
+{
+  "id": "course-10-lesson-02",
+  "title": "行为状态需求集成",
+  "type": "modeling-lesson",
+  "estimatedMinutes": 50,
+  "timePlan": [
+    {
+      "label": "补齐行为流",
+      "minutes": 8,
+      "description": "把驾驶员需求读取结果流向扭矩交付动作。"
+    },
+    {
+      "label": "补齐状态转移",
+      "minutes": 14,
+      "description": "用 first/accept/if/then 建立 Ready、Driving、Charging、SafeState 的运行规则。"
+    },
+    {
+      "label": "补齐需求目标",
+      "minutes": 8,
+      "description": "用 attribute :>> 给 cityRange 赋值，保持 C07 需求骨架并沿用 EV_C10_Baseline 的整车类型。"
+    },
+    {
+      "label": "建立追踪视图",
+      "minutes": 10,
+      "description": "用 satisfy 与 view/expose 把行为、状态、需求和样车放到同一视图。"
+    },
+    {
+      "label": "校验与复盘",
+      "minutes": 10,
+      "description": "确认这不是行为、状态、需求拼盘，而是互相服务的系统模型。"
+    }
+  ],
+  "practiceStages": [
+    {
+      "id": "behavior-flow",
+      "title": "阶段 1：完成功能行为流",
+      "todos": "TODO 1",
+      "goal": "DriveCycle 不再是动作清单，而能读出驾驶员扭矩请求如何进入扭矩交付步骤。",
+      "ruleIds": [
+        "drive-cycle-flow"
+      ]
+    },
+    {
+      "id": "state-machine",
+      "title": "阶段 2：完成运行状态切换",
+      "todos": "TODO 2-5",
+      "goal": "VehicleOperatingState 能覆盖 Ready、Driving、Charging、SafeState 的关键切换和故障降级。",
+      "ruleIds": [
+        "ready-to-driving-transition",
+        "ready-to-charging-transition",
+        "charging-to-ready-transition",
+        "driving-to-safe-transition"
+      ]
+    },
+    {
+      "id": "requirement-trace",
+      "title": "阶段 3：完成需求责任",
+      "todos": "TODO 6-7",
+      "goal": "cityRange 获得 480 km 目标，并通过 satisfy 绑定到同一辆 cityVehicle。",
+      "ruleIds": [
+        "city-range-target",
+        "city-range-satisfied"
+      ]
+    },
+    {
+      "id": "review-view",
+      "title": "阶段 4：形成评审视图",
+      "todos": "TODO 8-9",
+      "goal": "behaviorStateRequirementView 同时暴露行为、状态、需求和样车。",
+      "ruleIds": [
+        "view-exposes-city-range",
+        "view-exposes-city-vehicle"
+      ]
+    }
+  ],
+  "scenario": {
+    "title": "工程场景",
+    "body": "最终项目第二阶段把功能行为、运行状态和续航需求接到同一辆样车上。评审者要看到 DriveCycle 如何传递扭矩请求，VehicleOperatingState 如何定义运行模式，cityRange 如何继续作为需求主线。",
+    "visual": {
+      "type": "interactive-flow",
+      "variant": "10-behavior-state-requirement",
+      "title": "行为、状态与需求的集成",
+      "caption": "综合模型需要说明车辆做什么、处于什么模式、要满足什么目标。",
+      "nodes": [
+        {
+          "id": "behavior",
+          "icon": "B",
+          "label": "功能行为",
+          "detail": "DriveCycle 用 action 和 flow 表达驾驶需求如何变成扭矩请求。",
+          "code": "action def DriveCycle"
+        },
+        {
+          "id": "state",
+          "icon": "S",
+          "label": "运行状态",
+          "detail": "VehicleOperatingState 用 transition 说明 Ready、Driving、Charging 和 SafeState 的切换。",
+          "code": "transition"
+        },
+        {
+          "id": "requirement",
+          "icon": "R",
+          "label": "需求目标",
+          "detail": "cityRange 保持完整需求骨架，并通过 satisfy 连接到 cityVehicle。",
+          "code": "requirement cityRange"
+        },
+        {
+          "id": "view",
+          "icon": "V",
+          "label": "集成视图",
+          "detail": "behaviorStateRequirementView 把行为、状态、需求和样车放入同一评审视图。",
+          "code": "view behaviorStateRequirementView"
+        }
+      ]
+    }
+  },
+  "learningBlocks": [
+    {
+      "type": "image-gallery",
+      "title": "课程导引图",
+      "content": "本图按当前 lesson 的工程任务和模型主题生成，用于先理解课程场景，再进入 SysML v2 建模练习。",
+      "generatedBy": "scripts/generate-course-lesson-illustrations.js",
+      "images": [
+        {
+          "src": "/api/course-assets/assets/course-visuals/generated-lesson-guides/ev-course-10-lesson-02-state.svg",
+          "title": "C10.L02 行为状态需求集成",
+          "caption": "围绕 状态机/State / 转移/Transition / 安全模式/Safety 组织汽车工程语境，把本课对象放进可追踪的 SysML v2 模型。",
+          "alt": "电动汽车 SysML v2 建模课程导引图：行为状态需求集成"
+        }
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "工程意图：综合项目第二阶段不能把 `action def`、`state def`、`requirement def` 并排摆放就结束。DriveCycle 要有输入、输出和 flow；VehicleOperatingState 要有事件和条件；cityRange 复用 `EV_C10_Baseline` 中的整车与续航需求模式，通过 subject、参数和判据接回同一辆样车。"
+    },
+    {
+      "type": "markdown",
+      "content": "读模要点：`perform action driveCycle : DriveCycle` 把行为绑定到 ElectricVehicle；`state operatingState : VehicleOperatingState` 把状态机绑定到整车；`satisfy cityRange by cityVehicle` 把需求责任绑定到同一辆样车。"
+    },
+    {
+      "type": "markdown",
+      "content": "练习步骤：如果编辑器顶部显示“课程模板”，按右侧“分阶段练习解锁”依次完成 TODO 1、TODO 2-5、TODO 6-7、TODO 8-9。每完成一个阶段就运行校验，前一阶段通过后再进入下一阶段。如果显示“已恢复草稿”，请检查这些内容是否仍在 DriveCycle、VehicleOperatingState、cityRange 和 behaviorStateRequirementView 的对应位置；如需重来，点击“重置为课程模板”。"
+    },
+    {
+      "type": "code",
+      "language": "sysml",
+      "sourceFile": "starter.sysml"
+    }
+  ],
+  "workspace": {
+    "files": [
+      {
+        "path": "ev-c10-baseline.sysml",
+        "source": "../../../shared/c10-baseline.sysml",
+        "editable": false
+      },
+      {
+        "path": "main.sysml",
+        "source": "starter.sysml",
+        "editable": true
+      }
+    ],
+    "entryFile": "main.sysml"
+  },
+  "tasks": [
+    {
+      "id": "task-01",
+      "type": "model-challenge",
+      "prompt": "在课程模板 TODO 位置，或在已恢复草稿中的对应结构位置，把行为、状态和续航需求接成同一辆车的综合模型。",
+      "hints": [
+        "行为 flow 应连接 readDriverDemand.torqueRequestNm 到 deliverTorque.torqueRequestNm。",
+        "状态转移要使用 C06 的 official first/accept/if/then 风格。",
+        "cityRange 不能是空壳需求，必须重定义 targetRangeKm。",
+        "view/expose 只选择已有元素，不在 view 内重新定义模型。"
+      ]
+    }
+  ],
+  "validation": {
+    "strictSysml": true,
+    "rulesFile": "rules.json"
+  },
+  "completion": {
+    "requiresStrictValidation": true,
+    "requiresAllLessonRules": true
+  },
+  "glossaryTerms": [
+    "action def",
+    "flow",
+    "state def",
+    "transition",
+    "requirement",
+    "satisfy",
+    "view"
+  ]
+}

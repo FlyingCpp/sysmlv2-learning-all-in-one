@@ -1,0 +1,885 @@
+{
+  "schemaVersion": "1.0",
+  "reviewStatus": "reviewed",
+  "generatedBy": "automotive-design-subagent",
+  "generatedAt": "2026-06-05",
+  "publicationStatus": "reviewed_for_local_rag_test",
+  "cards": [
+    {
+      "cardId": "automotive.ev.bev-system-boundary",
+      "status": "reviewed",
+      "language": "zh-CN",
+      "domain": "automotive-ev",
+      "cardType": "concept",
+      "title": "BEV 系统边界：电机、牵引电池与外部充电",
+      "summary": "BEV 使用电机而非内燃机，牵引电池为电机供能，车辆需要通过外部电源或 EVSE 充电。",
+      "body": {
+        "teachingExplanation": "DOE AFDC 的 all-electric vehicle 页面把 BEV 描述为使用电机、牵引电池和外部充电设备的车辆。用于建模时，可把车辆系统边界划分为车内能量存储、驱动、充电接口、低压供电、热管理和车外 EVSE。",
+        "keyPoints": [
+          "BEV 的外部接口通常包括充电连接和驾驶/环境交互。",
+          "车内核心子系统可先建模为 tractionBatteryPack、electricTractionMotor、powerElectronicsController、thermalSystem、chargePort。",
+          "不要把 EVSE 当成车内部件，除非课程明确要求扩展系统边界。"
+        ],
+        "sysmlSnippet": "part def BatteryElectricVehicle {\n  part tractionBatteryPack;\n  part electricTractionMotor;\n  part chargePort;\n}",
+        "commonMistakes": [
+          "把充电桩建成车辆内部 part。",
+          "只建电池和电机，漏掉能量转换与热管理边界。"
+        ],
+        "diagnosticHints": [
+          "如果学生问“车内包含哪些主要部件”，先给系统边界，再给逐层细化建议。"
+        ]
+      },
+      "scope": {
+        "coursePackIds": [
+          "ev-sysml-v2-foundation-c2"
+        ],
+        "courseIds": [
+          "course-01",
+          "course-02"
+        ],
+        "lessonIds": [],
+        "concepts": [
+          "BEV",
+          "system boundary",
+          "traction battery",
+          "EVSE"
+        ],
+        "intents": [
+          "free_answer",
+          "next_step"
+        ]
+      },
+      "retrieval": {
+        "keywords": [
+          "BEV",
+          "battery electric vehicle",
+          "traction battery pack",
+          "electric motor",
+          "EVSE",
+          "system boundary"
+        ],
+        "aliases": [
+          "纯电动车",
+          "电池电动车",
+          "系统边界"
+        ],
+        "priority": 84
+      },
+      "source": {
+        "authorityLevel": "B",
+        "sourceType": "government_reference",
+        "sourceTitle": "DOE AFDC: How Do All-Electric Cars Work?",
+        "sourceUrl": "https://afdc.energy.gov/vehicles/how-do-all-electric-cars-work",
+        "sourceVersion": "checked 2026-06-05",
+        "section": "How Do All-Electric Cars Work?",
+        "summary": "AFDC states that BEVs use an electric motor, a traction battery pack, and external charging equipment."
+      },
+      "review": {
+        "reviewedBy": "project-owner-local-rag-test",
+        "reviewedAt": "2026-06-06",
+        "reviewNotes": "Reviewed status enabled by project owner for local real-LLM RAG context testing. Formal course publication still requires full domain review records where applicable."
+      },
+      "reviewStatus": "reviewed",
+      "metadata": {
+        "contentGate": "reviewed-for-local-rag-test"
+      }
+    },
+    {
+      "cardId": "automotive.ev.traction-battery-pack-storage",
+      "status": "reviewed",
+      "language": "zh-CN",
+      "domain": "automotive-ev",
+      "cardType": "concept",
+      "title": "牵引电池包：电能存储与驱动供能",
+      "summary": "牵引电池包存储供电机使用的电能，是 BEV 能量链的核心存储部件。",
+      "body": {
+        "teachingExplanation": "DOE AFDC 将 traction battery pack 定义为存储供电机使用电能的部件。建模时可先把电池包作为能量存储黑盒，再根据课程需要细化为 cell、module、pack、管理与热控。",
+        "keyPoints": [
+          "第一层模型可只暴露电能输出、充电输入和热接口。",
+          "后续细化时再拆分 cell/module/pack 层级。",
+          "安全、寿命、温度和 SOC 通常作为约束或需求继续建模。"
+        ],
+        "sysmlSnippet": "part def TractionBatteryPack {\n  port dcPower;\n  attribute stateOfCharge;\n}",
+        "commonMistakes": [
+          "一开始就把电芯细节展开，导致初学者模型失焦。",
+          "忽略电池包与热管理/充电控制的接口。"
+        ],
+        "diagnosticHints": [
+          "当学生要求“建电池模型”，先确认建模深度：黑盒、子系统、还是电芯级。"
+        ]
+      },
+      "scope": {
+        "coursePackIds": [
+          "ev-sysml-v2-foundation-c2"
+        ],
+        "courseIds": [
+          "course-01",
+          "course-03"
+        ],
+        "lessonIds": [],
+        "concepts": [
+          "traction battery pack",
+          "energy storage",
+          "SOC"
+        ],
+        "intents": [
+          "free_answer",
+          "next_step"
+        ]
+      },
+      "retrieval": {
+        "keywords": [
+          "traction battery pack",
+          "battery pack",
+          "stores electricity",
+          "SOC",
+          "energy storage"
+        ],
+        "aliases": [
+          "牵引电池包",
+          "动力电池包",
+          "电池储能"
+        ],
+        "priority": 82
+      },
+      "source": {
+        "authorityLevel": "B",
+        "sourceType": "government_reference",
+        "sourceTitle": "DOE AFDC: Key Components of an All-Electric Car",
+        "sourceUrl": "https://afdc.energy.gov/vehicles/how-do-all-electric-cars-work",
+        "sourceVersion": "checked 2026-06-05",
+        "section": "Key Components / Traction battery pack",
+        "summary": "AFDC describes the traction battery pack as storing electricity for the electric traction motor."
+      },
+      "review": {
+        "reviewedBy": "project-owner-local-rag-test",
+        "reviewedAt": "2026-06-06",
+        "reviewNotes": "Reviewed status enabled by project owner for local real-LLM RAG context testing. Formal course publication still requires full domain review records where applicable."
+      },
+      "reviewStatus": "reviewed",
+      "metadata": {
+        "contentGate": "reviewed-for-local-rag-test"
+      }
+    },
+    {
+      "cardId": "automotive.ev.battery-management-system",
+      "status": "reviewed",
+      "language": "zh-CN",
+      "domain": "automotive-ev",
+      "cardType": "concept",
+      "title": "BMS：电池包运行管理软件与硬件",
+      "summary": "EV 电池包包含互连电芯、硬件和管理电池运行的软件，常称为 Battery Management System。",
+      "body": {
+        "teachingExplanation": "NHTSA 的电动/混动车安全页面说明，EV battery packs 包含互连 cells、硬件和用于管理电池运行的软件，即 BMS。用于 SysML 建模时，可把 BMS 作为控制/监测子系统，与电池包、充电器和热管理系统交互。",
+        "keyPoints": [
+          "BMS 可监测电压、电流、温度和荷电状态等信息。",
+          "BMS 与 thermal management 的边界需要清晰，不要把冷却回路和控制逻辑混成一个无边界部件。",
+          "安全相关模型需区分监测、控制、保护和告警。"
+        ],
+        "sysmlSnippet": "part def BatteryManagementSystem {\n  port sensorInputs;\n  port controlOutputs;\n}",
+        "commonMistakes": [
+          "把 BMS 当成单纯传感器。",
+          "把 BMS 与电池包本体完全等同。"
+        ],
+        "diagnosticHints": [
+          "学生问 BMS 时，先建议建立“被管理对象、测量输入、控制输出、保护需求”。"
+        ]
+      },
+      "scope": {
+        "coursePackIds": [
+          "ev-sysml-v2-foundation-c2"
+        ],
+        "courseIds": [
+          "course-03",
+          "course-04"
+        ],
+        "lessonIds": [],
+        "concepts": [
+          "BMS",
+          "battery management",
+          "monitoring",
+          "control"
+        ],
+        "intents": [
+          "free_answer",
+          "next_step"
+        ]
+      },
+      "retrieval": {
+        "keywords": [
+          "BMS",
+          "battery management system",
+          "battery operation",
+          "voltage",
+          "current",
+          "temperature",
+          "state of charge"
+        ],
+        "aliases": [
+          "电池管理系统",
+          "电池控制器"
+        ],
+        "priority": 80
+      },
+      "source": {
+        "authorityLevel": "B",
+        "sourceType": "government_reference",
+        "sourceTitle": "NHTSA: Electric and Hybrid Vehicles",
+        "sourceUrl": "https://www.nhtsa.gov/vehicle-safety/electric-and-hybrid-vehicles",
+        "sourceVersion": "checked 2026-06-05",
+        "section": "Batteries and Temperature",
+        "summary": "NHTSA describes EV battery packs as including cells, hardware, and software to manage battery operation, referred to as BMS."
+      },
+      "review": {
+        "reviewedBy": "project-owner-local-rag-test",
+        "reviewedAt": "2026-06-06",
+        "reviewNotes": "Reviewed status enabled by project owner for local real-LLM RAG context testing. Formal course publication still requires full domain review records where applicable."
+      },
+      "reviewStatus": "reviewed",
+      "metadata": {
+        "contentGate": "reviewed-for-local-rag-test"
+      }
+    },
+    {
+      "cardId": "automotive.ev.traction-motor-regenerative-function",
+      "status": "reviewed",
+      "language": "zh-CN",
+      "domain": "automotive-ev",
+      "cardType": "concept",
+      "title": "牵引电机与再生功能",
+      "summary": "电动牵引电机使用牵引电池供电驱动车轮；一些车辆使用兼具驱动和再生功能的电机发电机。",
+      "body": {
+        "teachingExplanation": "DOE AFDC 说明 electric traction motor 使用牵引电池包的电能驱动车轮，并指出一些车辆使用 motor generators 执行驱动和 regeneration。建模时可以把 motoring 与 regenerating 作为两种运行模式或 action。",
+        "keyPoints": [
+          "驱动模式能量链为 battery -> power electronics -> motor -> wheels。",
+          "再生模式通常把机械能经电机/电力电子回收至电池侧。",
+          "不要在初始模型中承诺具体再生效率，除非有课程数据。"
+        ],
+        "sysmlSnippet": "part def ElectricTractionMotor {\n  port electricalPower;\n  port mechanicalTorque;\n}",
+        "commonMistakes": [
+          "只建一个 motor part，不表达机械/电气两个接口。",
+          "把再生制动写成独立电池部件，而不是运行模式或能量流。"
+        ],
+        "diagnosticHints": [
+          "学生要求示例代码时，先给端口和能量方向，再决定是否加状态/行为。"
+        ]
+      },
+      "scope": {
+        "coursePackIds": [
+          "ev-sysml-v2-foundation-c2"
+        ],
+        "courseIds": [
+          "course-02",
+          "course-03"
+        ],
+        "lessonIds": [],
+        "concepts": [
+          "electric traction motor",
+          "regeneration",
+          "motor generator",
+          "torque"
+        ],
+        "intents": [
+          "free_answer",
+          "next_step"
+        ]
+      },
+      "retrieval": {
+        "keywords": [
+          "traction motor",
+          "electric motor",
+          "regeneration",
+          "regenerative braking",
+          "motor generator",
+          "torque"
+        ],
+        "aliases": [
+          "牵引电机",
+          "再生制动",
+          "电机发电机"
+        ],
+        "priority": 79
+      },
+      "source": {
+        "authorityLevel": "B",
+        "sourceType": "government_reference",
+        "sourceTitle": "DOE AFDC: Key Components of an All-Electric Car",
+        "sourceUrl": "https://afdc.energy.gov/vehicles/how-do-all-electric-cars-work",
+        "sourceVersion": "checked 2026-06-05",
+        "section": "Key Components / Electric traction motor",
+        "summary": "AFDC describes electric traction motors and notes that some vehicles use motor generators for drive and regeneration functions."
+      },
+      "review": {
+        "reviewedBy": "project-owner-local-rag-test",
+        "reviewedAt": "2026-06-06",
+        "reviewNotes": "Reviewed status enabled by project owner for local real-LLM RAG context testing. Formal course publication still requires full domain review records where applicable."
+      },
+      "reviewStatus": "reviewed",
+      "metadata": {
+        "contentGate": "reviewed-for-local-rag-test"
+      }
+    },
+    {
+      "cardId": "automotive.ev.power-electronics-controller",
+      "status": "reviewed",
+      "language": "zh-CN",
+      "domain": "automotive-ev",
+      "cardType": "concept",
+      "title": "电力电子控制器：能量流、速度与转矩控制",
+      "summary": "电力电子控制器管理牵引电池输出到电机的电能流，并控制电机速度和转矩。",
+      "body": {
+        "teachingExplanation": "DOE AFDC 将 power electronics controller 描述为管理牵引电池提供给电机的电能流，并控制电机速度与转矩。建模时可把它放在电池包与牵引电机之间，承担控制与能量转换边界。",
+        "keyPoints": [
+          "把电力电子控制器建在 battery 与 motor 之间，有助于说明能量链。",
+          "速度/转矩控制可以建为控制输出或需求，不必先进入电路级。",
+          "若课程需要 inverter，可作为电力电子控制器的细分部件。"
+        ],
+        "sysmlSnippet": "part def PowerElectronicsController {\n  port dcInput;\n  port motorDriveOutput;\n}",
+        "commonMistakes": [
+          "直接让电池端口连接电机端口，忽略中间控制/转换部件。",
+          "把 torque command 和 power flow 混为同一端口。"
+        ],
+        "diagnosticHints": [
+          "学生模型能量链不清时，提示加上 power electronics controller 或 inverter 边界。"
+        ]
+      },
+      "scope": {
+        "coursePackIds": [
+          "ev-sysml-v2-foundation-c2"
+        ],
+        "courseIds": [
+          "course-02",
+          "course-03"
+        ],
+        "lessonIds": [],
+        "concepts": [
+          "power electronics",
+          "controller",
+          "torque control",
+          "energy flow"
+        ],
+        "intents": [
+          "free_answer",
+          "next_step",
+          "explain_selection"
+        ]
+      },
+      "retrieval": {
+        "keywords": [
+          "power electronics controller",
+          "inverter",
+          "torque",
+          "speed",
+          "energy flow",
+          "DC AC"
+        ],
+        "aliases": [
+          "电力电子控制器",
+          "逆变器",
+          "驱动控制器"
+        ],
+        "priority": 81
+      },
+      "source": {
+        "authorityLevel": "B",
+        "sourceType": "government_reference",
+        "sourceTitle": "DOE AFDC: Key Components of an All-Electric Car",
+        "sourceUrl": "https://afdc.energy.gov/vehicles/how-do-all-electric-cars-work",
+        "sourceVersion": "checked 2026-06-05",
+        "section": "Key Components / Power electronics controller",
+        "summary": "AFDC describes the power electronics controller as managing energy flow from the traction battery and controlling motor speed and torque."
+      },
+      "review": {
+        "reviewedBy": "project-owner-local-rag-test",
+        "reviewedAt": "2026-06-06",
+        "reviewNotes": "Reviewed status enabled by project owner for local real-LLM RAG context testing. Formal course publication still requires full domain review records where applicable."
+      },
+      "reviewStatus": "reviewed",
+      "metadata": {
+        "contentGate": "reviewed-for-local-rag-test"
+      }
+    },
+    {
+      "cardId": "automotive.ev.dc-dc-low-voltage-system",
+      "status": "reviewed",
+      "language": "zh-CN",
+      "domain": "automotive-ev",
+      "cardType": "concept",
+      "title": "DC/DC 与低压系统",
+      "summary": "DC/DC converter 将高压电池侧直流电降为低压，用于附件供电并为低压电池补能。",
+      "body": {
+        "teachingExplanation": "DOE AFDC 和 NHTSA 都把 DC/DC converter 描述为把 traction battery pack 的高压 DC 转换成低压 DC，以供车辆附件并给辅助/12V 电池充电。建模时应把高压牵引回路与低压辅助回路分开。",
+        "keyPoints": [
+          "高压能源链和低压附件链是不同边界。",
+          "DC/DC converter 是二者之间的能量转换部件。",
+          "低压电池服务照明、仪表等附件时，不等于牵引电池。"
+        ],
+        "sysmlSnippet": "part def DCDCConverter {\n  port highVoltageInput;\n  port lowVoltageOutput;\n}",
+        "commonMistakes": [
+          "把 12V 电池当成牵引电池。",
+          "忽略低压附件供电需求。"
+        ],
+        "diagnosticHints": [
+          "学生混淆高压/低压时，建议先建两个电气域再建立 DC/DC 接口。"
+        ]
+      },
+      "scope": {
+        "coursePackIds": [
+          "ev-sysml-v2-foundation-c2"
+        ],
+        "courseIds": [
+          "course-02",
+          "course-03"
+        ],
+        "lessonIds": [],
+        "concepts": [
+          "DC/DC converter",
+          "low voltage",
+          "auxiliary battery",
+          "high voltage"
+        ],
+        "intents": [
+          "free_answer",
+          "next_step"
+        ]
+      },
+      "retrieval": {
+        "keywords": [
+          "DC/DC converter",
+          "12V",
+          "low-voltage",
+          "auxiliary battery",
+          "high-voltage",
+          "accessories"
+        ],
+        "aliases": [
+          "DC/DC",
+          "低压系统",
+          "辅助电池"
+        ],
+        "priority": 78
+      },
+      "source": {
+        "authorityLevel": "B",
+        "sourceType": "government_reference",
+        "sourceTitle": "DOE AFDC and NHTSA EV component descriptions",
+        "sourceUrl": "https://afdc.energy.gov/vehicles/how-do-all-electric-cars-work",
+        "sourceVersion": "checked 2026-06-05",
+        "section": "Key Components / DC/DC converter",
+        "summary": "AFDC and NHTSA describe DC/DC conversion from high-voltage pack power to low-voltage accessory and auxiliary battery power."
+      },
+      "review": {
+        "reviewedBy": "project-owner-local-rag-test",
+        "reviewedAt": "2026-06-06",
+        "reviewNotes": "Reviewed status enabled by project owner for local real-LLM RAG context testing. Formal course publication still requires full domain review records where applicable."
+      },
+      "reviewStatus": "reviewed",
+      "metadata": {
+        "contentGate": "reviewed-for-local-rag-test"
+      }
+    },
+    {
+      "cardId": "automotive.ev.charging-boundary",
+      "status": "reviewed",
+      "language": "zh-CN",
+      "domain": "automotive-ev",
+      "cardType": "concept",
+      "title": "充电边界：charge port、onboard charger 与 EVSE",
+      "summary": "charge port 连接外部电源；onboard charger 接收经充电口输入的 AC 电并转换为 DC 为牵引电池充电。",
+      "body": {
+        "teachingExplanation": "DOE AFDC 说明 charge port 让车辆连接外部电源；onboard charger 接收充电口输入的 AC 电并转换为 DC 给牵引电池充电，同时与充电设备通信并监测电池特征。建模时需要区分车内充电部件与车外 EVSE。",
+        "keyPoints": [
+          "EVSE 通常是车外系统。",
+          "charge port 是车辆边界接口。",
+          "onboard charger 与 battery/BMS 的通信或监测接口应分开建模。"
+        ],
+        "sysmlSnippet": "part def ChargingSubsystem {\n  part chargePort;\n  part onboardCharger;\n}",
+        "commonMistakes": [
+          "把外部充电设备建成车内 part。",
+          "把 charge port 和 charger 混为一个没有边界的部件。"
+        ],
+        "diagnosticHints": [
+          "若学生要建充电场景，先明确 system of interest 是否包含 EVSE。"
+        ]
+      },
+      "scope": {
+        "coursePackIds": [
+          "ev-sysml-v2-foundation-c2"
+        ],
+        "courseIds": [
+          "course-02",
+          "course-03",
+          "course-04"
+        ],
+        "lessonIds": [],
+        "concepts": [
+          "charge port",
+          "onboard charger",
+          "EVSE",
+          "charging"
+        ],
+        "intents": [
+          "free_answer",
+          "next_step"
+        ]
+      },
+      "retrieval": {
+        "keywords": [
+          "charge port",
+          "onboard charger",
+          "EVSE",
+          "AC",
+          "DC",
+          "charging equipment",
+          "plug"
+        ],
+        "aliases": [
+          "充电口",
+          "车载充电机",
+          "充电边界"
+        ],
+        "priority": 80
+      },
+      "source": {
+        "authorityLevel": "B",
+        "sourceType": "government_reference",
+        "sourceTitle": "DOE AFDC: Key Components of an All-Electric Car",
+        "sourceUrl": "https://afdc.energy.gov/vehicles/how-do-all-electric-cars-work",
+        "sourceVersion": "checked 2026-06-05",
+        "section": "Key Components / Charge port and Onboard charger",
+        "summary": "AFDC describes the charge port, onboard charger, charging equipment, and charger monitoring functions."
+      },
+      "review": {
+        "reviewedBy": "project-owner-local-rag-test",
+        "reviewedAt": "2026-06-06",
+        "reviewNotes": "Reviewed status enabled by project owner for local real-LLM RAG context testing. Formal course publication still requires full domain review records where applicable."
+      },
+      "reviewStatus": "reviewed",
+      "metadata": {
+        "contentGate": "reviewed-for-local-rag-test"
+      }
+    },
+    {
+      "cardId": "automotive.ev.battery-thermal-management",
+      "status": "reviewed",
+      "language": "zh-CN",
+      "domain": "automotive-ev",
+      "cardType": "concept",
+      "title": "电池热管理：性能、寿命与安全",
+      "summary": "温度和温度均匀性会影响储能装置的性能、寿命与安全；电池热管理需要考虑 cell、module、pack 与整车集成。",
+      "body": {
+        "teachingExplanation": "NLR/NREL energy storage thermal management 页面指出温度与温度均匀性显著影响储能装置性能、寿命和安全，并评估从材料、电芯、模组、pack 到完整系统与 EV 集成的热行为。建模时可把热管理作为跨电池、电驱、HVAC 的系统问题。",
+        "keyPoints": [
+          "热管理不是单独的冷却器，而是一组需求、部件、控制和接口。",
+          "温度均匀性可以建成约束或需求。",
+          "电池性能、寿命、安全与热设计强相关。"
+        ],
+        "sysmlSnippet": "requirement batteryTemperatureUniformity;\npart batteryThermalManagementSystem;",
+        "commonMistakes": [
+          "只建 coolingSystem，不表达电池温度需求。",
+          "把 cell/module/pack 热行为与整车热集成完全割裂。"
+        ],
+        "diagnosticHints": [
+          "学生问热管理时，建议先列出被控对象、传感输入、执行器、约束和安全需求。"
+        ]
+      },
+      "scope": {
+        "coursePackIds": [
+          "ev-sysml-v2-foundation-c2"
+        ],
+        "courseIds": [
+          "course-03",
+          "course-04",
+          "course-05"
+        ],
+        "lessonIds": [],
+        "concepts": [
+          "battery thermal management",
+          "temperature uniformity",
+          "lifespan",
+          "safety"
+        ],
+        "intents": [
+          "free_answer",
+          "next_step",
+          "explain_selection"
+        ]
+      },
+      "retrieval": {
+        "keywords": [
+          "battery thermal management",
+          "temperature uniformity",
+          "lifespan",
+          "safety",
+          "cell",
+          "module",
+          "pack",
+          "thermal runaway"
+        ],
+        "aliases": [
+          "电池热管理",
+          "温度均匀性",
+          "热安全"
+        ],
+        "priority": 86
+      },
+      "source": {
+        "authorityLevel": "B",
+        "sourceType": "government_lab_reference",
+        "sourceTitle": "NLR/NREL: Energy Storage Thermal Management",
+        "sourceUrl": "https://www.nrel.gov/transportation/energy-storage-thermal-mgmt",
+        "sourceVersion": "checked 2026-06-05",
+        "section": "Energy Storage Thermal Management",
+        "summary": "The source links temperature and temperature uniformity to energy storage performance, lifespan, safety, and full EV integration."
+      },
+      "review": {
+        "reviewedBy": "project-owner-local-rag-test",
+        "reviewedAt": "2026-06-06",
+        "reviewNotes": "Reviewed status enabled by project owner for local real-LLM RAG context testing. Formal course publication still requires full domain review records where applicable."
+      },
+      "reviewStatus": "reviewed",
+      "metadata": {
+        "contentGate": "reviewed-for-local-rag-test"
+      }
+    },
+    {
+      "cardId": "automotive.ev.vehicle-thermal-tradeoff",
+      "status": "reviewed",
+      "language": "zh-CN",
+      "domain": "automotive-ev",
+      "cardType": "concept",
+      "title": "整车热管理权衡：续航、性能与可靠性",
+      "summary": "优化空调、废热与部件热管理会影响车辆续航、性能、可靠性以及能源使用。",
+      "body": {
+        "teachingExplanation": "NLR/NREL vehicle thermal management 页面说明，先进车辆热控制对 EV 高效运行很关键，优化空调、废热与部件热管理可影响续航、性能、可靠性并降低能源使用。建模时可把热管理作为整车级权衡问题，而不是单个子系统问题。",
+        "keyPoints": [
+          "热管理需求会跨 battery、motor、power electronics 和 cabin。",
+          "续航、舒适性、性能和可靠性之间可能存在权衡。",
+          "早期模型可用 requirement/trade study 表达，不必直接进入详细热仿真。"
+        ],
+        "sysmlSnippet": "requirement thermalEfficiency;\nrequirement cabinComfort;\nrequirement batteryReliability;",
+        "commonMistakes": [
+          "把 HVAC 看成只影响乘员舒适性，不影响能耗。",
+          "只局部优化电池温度，忽略整车热负载。"
+        ],
+        "diagnosticHints": [
+          "学生提出热管理设计方案时，要求列出目标函数、约束和受影响部件。"
+        ]
+      },
+      "scope": {
+        "coursePackIds": [
+          "ev-sysml-v2-foundation-c2"
+        ],
+        "courseIds": [
+          "course-04",
+          "course-05"
+        ],
+        "lessonIds": [],
+        "concepts": [
+          "vehicle thermal management",
+          "range",
+          "performance",
+          "reliability",
+          "HVAC"
+        ],
+        "intents": [
+          "free_answer",
+          "next_step"
+        ]
+      },
+      "retrieval": {
+        "keywords": [
+          "vehicle thermal management",
+          "HVAC",
+          "range",
+          "performance",
+          "reliability",
+          "energy use",
+          "tradeoff"
+        ],
+        "aliases": [
+          "整车热管理",
+          "续航权衡",
+          "热系统优化"
+        ],
+        "priority": 83
+      },
+      "source": {
+        "authorityLevel": "B",
+        "sourceType": "government_lab_reference",
+        "sourceTitle": "NLR/NREL: Vehicle Thermal Management",
+        "sourceUrl": "https://www.nrel.gov/transportation/vtm",
+        "sourceVersion": "checked 2026-06-05",
+        "section": "Advanced Thermal System Controls",
+        "summary": "The source states that EV thermal controls affect range, performance, reliability, and energy/fuel use."
+      },
+      "review": {
+        "reviewedBy": "project-owner-local-rag-test",
+        "reviewedAt": "2026-06-06",
+        "reviewNotes": "Reviewed status enabled by project owner for local real-LLM RAG context testing. Formal course publication still requires full domain review records where applicable."
+      },
+      "reviewStatus": "reviewed",
+      "metadata": {
+        "contentGate": "reviewed-for-local-rag-test"
+      }
+    },
+    {
+      "cardId": "automotive.ev.hvac-energy-impact",
+      "status": "reviewed",
+      "language": "zh-CN",
+      "domain": "automotive-ev",
+      "cardType": "concept",
+      "title": "HVAC 与电动车能耗",
+      "summary": "优化 HVAC 系统会显著影响车辆续航与性能，尤其是在电动车和极端环境中。",
+      "body": {
+        "teachingExplanation": "NLR/NREL vehicle thermal management 页面指出优化 HVAC 系统会显著影响车辆 range 和 performance，并会考虑乘员舒适、隔热、电池尺寸、车身颜色和玻璃透射等因素。建模时可把 HVAC 作为乘员舒适与能耗之间的权衡来源。",
+        "keyPoints": [
+          "HVAC 不只是舒适性部件，也会消耗电池能量。",
+          "热管理需求可连接到 range、comfort、battery sizing 等约束。",
+          "初学模型应避免凭空设定定量能耗。"
+        ],
+        "sysmlSnippet": "part def HVACSystem;\nrequirement cabinComfort;\nrequirement drivingRange;",
+        "commonMistakes": [
+          "在没有数据时给出精确能耗比例。",
+          "把 HVAC 与 battery thermal management 完全独立建模。"
+        ],
+        "diagnosticHints": [
+          "学生要求优化续航时，提示检查 HVAC、battery thermal management 和 powertrain 效率。"
+        ]
+      },
+      "scope": {
+        "coursePackIds": [
+          "ev-sysml-v2-foundation-c2"
+        ],
+        "courseIds": [
+          "course-04",
+          "course-05"
+        ],
+        "lessonIds": [],
+        "concepts": [
+          "HVAC",
+          "energy use",
+          "range",
+          "comfort"
+        ],
+        "intents": [
+          "free_answer",
+          "next_step"
+        ]
+      },
+      "retrieval": {
+        "keywords": [
+          "HVAC",
+          "range",
+          "performance",
+          "comfort",
+          "battery sizing",
+          "energy use",
+          "thermal management"
+        ],
+        "aliases": [
+          "空调能耗",
+          "乘员舒适",
+          "续航影响"
+        ],
+        "priority": 76
+      },
+      "source": {
+        "authorityLevel": "B",
+        "sourceType": "government_lab_reference",
+        "sourceTitle": "NLR/NREL: Vehicle Thermal Management",
+        "sourceUrl": "https://www.nrel.gov/transportation/vtm",
+        "sourceVersion": "checked 2026-06-05",
+        "section": "Efficient Mobile Heating, Ventilation, and Air Conditioning",
+        "summary": "The source says optimized HVAC systems can significantly affect vehicle range and performance."
+      },
+      "review": {
+        "reviewedBy": "project-owner-local-rag-test",
+        "reviewedAt": "2026-06-06",
+        "reviewNotes": "Reviewed status enabled by project owner for local real-LLM RAG context testing. Formal course publication still requires full domain review records where applicable."
+      },
+      "reviewStatus": "reviewed",
+      "metadata": {
+        "contentGate": "reviewed-for-local-rag-test"
+      }
+    },
+    {
+      "cardId": "automotive.ev.battery-temperature-and-range",
+      "status": "reviewed",
+      "language": "zh-CN",
+      "domain": "automotive-ev",
+      "cardType": "concept",
+      "title": "电池温控与续航消耗",
+      "summary": "热管理系统让电池保持合适温度，但热管理用能可能减少用于驱动的电量，从而影响续航。",
+      "body": {
+        "teachingExplanation": "NHTSA 说明极端温度会影响电池性能并缩短寿命；热管理系统保持电池在合适温度，但部分电池能量会用于热管理而不是驱动电机。建模时应把温控收益和能耗代价同时纳入需求或权衡。",
+        "keyPoints": [
+          "热管理有保护电池性能/寿命/安全的收益。",
+          "热管理也会消耗电池能量。",
+          "这适合建成 tradeoff，而不是单向“热管理越强越好”。"
+        ],
+        "sysmlSnippet": "requirement batteryOperatingTemperature;\nrequirement rangeImpactLimit;",
+        "commonMistakes": [
+          "只写 thermal management improves safety，不写能耗代价。",
+          "在没有数据时估算具体里程损失。"
+        ],
+        "diagnosticHints": [
+          "学生做需求建模时，建议增加 temperature requirement 和 range impact requirement。"
+        ]
+      },
+      "scope": {
+        "coursePackIds": [
+          "ev-sysml-v2-foundation-c2"
+        ],
+        "courseIds": [
+          "course-04",
+          "course-05"
+        ],
+        "lessonIds": [],
+        "concepts": [
+          "battery temperature",
+          "range impact",
+          "thermal management energy"
+        ],
+        "intents": [
+          "free_answer",
+          "next_step"
+        ]
+      },
+      "retrieval": {
+        "keywords": [
+          "battery temperature",
+          "thermal management",
+          "range",
+          "driving range",
+          "energy used",
+          "motor use"
+        ],
+        "aliases": [
+          "电池温控",
+          "续航消耗",
+          "热管理能耗"
+        ],
+        "priority": 82
+      },
+      "source": {
+        "authorityLevel": "B",
+        "sourceType": "government_reference",
+        "sourceTitle": "NHTSA: Electric and Hybrid Vehicles",
+        "sourceUrl": "https://www.nhtsa.gov/vehicle-safety/electric-and-hybrid-vehicles",
+        "sourceVersion": "checked 2026-06-05",
+        "section": "Batteries and Temperature",
+        "summary": "NHTSA states that thermal management keeps batteries at optimal temperature but can negatively affect driving range because battery energy is used for thermal management instead of motor use."
+      },
+      "review": {
+        "reviewedBy": "project-owner-local-rag-test",
+        "reviewedAt": "2026-06-06",
+        "reviewNotes": "Reviewed status enabled by project owner for local real-LLM RAG context testing. Formal course publication still requires full domain review records where applicable."
+      },
+      "reviewStatus": "reviewed",
+      "metadata": {
+        "contentGate": "reviewed-for-local-rag-test"
+      }
+    }
+  ]
+}

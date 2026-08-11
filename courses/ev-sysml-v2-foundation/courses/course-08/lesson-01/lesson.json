@@ -1,0 +1,88 @@
+{
+  "id": "course-08-lesson-01",
+  "title": "分析成熟度 1：建立可复用续航计算",
+  "type": "modeling-lesson",
+  "estimatedMinutes": 40,
+  "timePlan": [
+    { "label": "识别输入来源", "minutes": 8, "description": "从只读车型基线读取 78.0 kWh 与 16.0 kWh/100km。" },
+    { "label": "实现纯计算", "minutes": 20, "description": "定义 EstimateRange 并在 calc usage 中绑定输入、暴露输出。" },
+    { "label": "解释结果边界", "minutes": 12, "description": "区分原始计算、490 km 报告预测和 488 km 道路观测。" }
+  ],
+  "scenario": {
+    "title": "工程场景：参数如何变成可复核预测",
+    "body": "需求团队已经冻结 480.0 km 目标。分析工程师先建立最小可复用计算：78.0 kWh × 100 / 16.0 kWh/100km 得到 487.5 km 原始计算值。项目报告把它显示为 490.0 km 预测；488.0 km 道路观测属于 C09，不能进入本课计算输入。",
+    "visual": {
+      "type": "interactive-flow",
+      "variant": "08-maturity-calc",
+      "title": "计算证据第一层",
+      "nodes": [
+        { "id": "inputs", "label": "设计输入", "detail": "78.0 kWh / 16.0 kWh per 100km", "code": "in" },
+        { "id": "formula", "label": "可复用公式", "detail": "同输入产生同输出", "code": "calc def" },
+        { "id": "raw", "label": "原始结果", "detail": "487.5 km，不是道路实测", "code": "return rawRangeKm" }
+      ]
+    }
+  },
+  "learningBlocks": [
+    {
+      "type": "image-gallery",
+      "title": "课程导引图",
+      "images": [
+        {
+          "src": "/api/course-assets/assets/course-visuals/generated-lesson-guides/ev-course-08-lesson-01-analysis.svg",
+          "title": "续航计算",
+          "caption": "只聚焦 calc 的输入、公式和输出。",
+          "alt": "电动汽车续航计算教学图"
+        }
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "工程意图：本课只练 `calc def` 与 `calc usage`，不再同时重写 constraint、analysis、requirement 和 satisfy。`EstimateRange` 是可复用纯计算；`candidateRangeEstimate` 把 78.0 与 16.0 的车型参数绑定为输入，并暴露 `rawRangeKm` return。"
+    },
+    {
+      "type": "hint-card",
+      "title": "487.5、490.0 和 488.0 分别是什么？",
+      "label": "三种证据角色",
+      "content": "487.5 是公式原始结果；490.0 是项目采用的报告预测值；488.0 是独立道路观测。预测可支持测试计划，但判定必须使用测量证据。"
+    },
+    {
+      "type": "hint-card",
+      "title": "为什么 calc usage 还要写 return？",
+      "label": "暴露计算输出",
+      "content": "calc def 定义输出接口，calc usage 在当前上下文中暴露该输出，外层 analysis 才能稳定引用 `estimateRange.rawRangeKm`。"
+    },
+    {
+      "type": "markdown",
+      "content": "权威依据：OMG SysML v2 Clause 7.19 把 calc 作为带输入和 result/return 的计算；官方 Analysis 示例在 analysis 内使用计算步骤并返回结果。`assert constraint` 用于必须恒成立的方程或不变量，不在本课承担需求通过判定。"
+    },
+    {
+      "type": "markdown",
+      "content": "练习步骤：在“课程模板”中按 TODO 1 补 `return rawRangeKm : ScalarValues::Real = usableEnergyKWh * 100.0 / energyPer100Km`，按 TODO 2 暴露 calc usage return。使用“已恢复草稿”时保持输入来源不变；需要恢复时点击“重置为课程模板”。"
+    },
+    { "type": "code", "language": "sysml", "sourceFile": "starter.sysml" }
+  ],
+  "workspace": {
+    "files": [
+      { "path": "ev-program-baseline.sysml", "source": "../../../shared/ev-program-baseline.sysml", "editable": false },
+      { "path": "ev-requirement-baseline.sysml", "source": "../../../shared/c07-requirement-baseline.sysml", "editable": false },
+      { "path": "main.sysml", "source": "starter.sysml", "editable": true }
+    ],
+    "entryFile": "main.sysml"
+  },
+  "tasks": [
+    {
+      "id": "task-01",
+      "type": "model-challenge",
+      "prompt": "为续航分析建立可复用纯计算，并把同一辆样车的电池能量和能耗参数绑定到具体计算使用中。",
+      "hints": [
+        "EstimateRange 只接收 usableEnergyKWh 与 energyPer100Km。",
+        "return 名称固定为 rawRangeKm，供下一课分析用例引用。",
+        "calc usage 的两个 in 已绑定到 evPrototype。",
+        "不要把 488.0 km 道路观测写进本课公式。"
+      ]
+    }
+  ],
+  "validation": { "strictSysml": true, "rulesFile": "rules.json" },
+  "completion": { "requiresStrictValidation": true, "requiresAllLessonRules": true },
+  "glossaryTerms": ["calc def", "calc usage", "in", "return", "pure calculation", "prediction"]
+}

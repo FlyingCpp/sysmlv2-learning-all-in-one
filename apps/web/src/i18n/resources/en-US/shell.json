@@ -1,0 +1,44 @@
+{
+  "document": {
+    "title": "Complex Systems Modeling Lab"
+  },
+  "brand": {
+    "name": "Complex Systems Modeling Lab",
+    "tagline": "An open MBSE engineering learning environment",
+    "homeAria": "Return to the platform guide",
+    "loginAria": "Return to the sign-in page"
+  },
+  "navigation": {
+    "ariaLabel": "Primary navigation",
+    "guide": "Guide",
+    "knowledge": "Knowledge",
+    "modeling": "Modeling",
+    "courses": "Courses",
+    "glossary": "Glossary",
+    "apps": "Apps",
+    "admin": "Admin"
+  },
+  "account": {
+    "logoutAria": "Sign out",
+    "login": "Sign in to the platform"
+  },
+  "language": {
+    "label": "Interface language",
+    "zhCN": "中文（简体）",
+    "enUS": "English",
+    "changing": "Changing language",
+    "changeFailed": "Language change failed. The previous language was restored.",
+    "persistenceFailed": "Language changed for this session, but the preference could not be saved."
+  },
+  "routes": {
+    "notFoundEyebrow": "Route",
+    "notFoundTitle": "Page not found",
+    "notFoundDescription": "There is no page at this address. Continue from Courses, the Modeling Workbench, or Admin.",
+    "adminEyebrow": "Administration",
+    "auditTitle": "Audit log placeholder",
+    "auditDescription": "Audit logs are still being planned. Use Account Operations or Course Pack Management for now."
+  },
+  "phase0": {
+    "gatesAria": "Phase 0 checks"
+  }
+}

@@ -1,0 +1,185 @@
+{
+  "id": "course-06-lesson-03",
+  "title": "电驱降级状态与模型组织",
+  "type": "modeling-lesson",
+  "estimatedMinutes": 45,
+  "timePlan": [
+    {
+      "label": "理解模型组织",
+      "minutes": 8,
+      "description": "区分 .sysml 文件、package、import 和 view 的职责。"
+    },
+    {
+      "label": "分析电驱状态",
+      "minutes": 8,
+      "description": "识别 Disabled、Running.Normal、Running.Degraded、Fault 的工程语义。"
+    },
+    {
+      "label": "补全降级转移",
+      "minutes": 12,
+      "description": "用 motorTempC 守卫条件建模 Normal、PowerLimit50、LimpHome 之间的切换。"
+    },
+    {
+      "label": "绑定行为与视图",
+      "minutes": 10,
+      "description": "在状态中添加 do/entry action，并把 PropulsionState 暴露到状态视图。"
+    },
+    {
+      "label": "校验与工程复盘",
+      "minutes": 7,
+      "description": "检查 import、状态使用、转移规则和 view 与文件关系是否理解清楚。"
+    }
+  ],
+  "scenario": {
+    "title": "工程场景",
+    "body": "电驱控制不仅要区分是否输出扭矩，还要表达过温时如何降级、温度恢复后如何回到正常模式、硬件故障时如何进入 Fault。同时，模型已经包含结构、行为和状态，学生需要理解真实工程中这些 package、文件和 view 如何组织。",
+    "visual": {
+      "type": "interactive-flow",
+      "variant": "06-propulsion-organization",
+      "title": "状态模型与工程组织",
+      "caption": "同一个电驱模型分为结构、行为、状态和视图四个 package；view 只是投影，不是文件。",
+      "nodes": [
+        {
+          "id": "packages",
+          "icon": "P",
+          "label": "Package",
+          "detail": "EV_C06_Structure、EV_C06_Behavior、EV_C06_States 分别组织结构、行为和状态。",
+          "code": "package"
+        },
+        {
+          "id": "imports",
+          "icon": "I",
+          "label": "Import",
+          "detail": "private import 让状态 package 可以引用行为定义，让顶层 package 可以组合结构和状态。",
+          "code": "private import"
+        },
+        {
+          "id": "degrade",
+          "icon": "D",
+          "label": "降级状态",
+          "detail": "Running.Degraded.PowerLimit50 和 LimpHome 表达电驱过温后的受限运行模式。",
+          "code": "Degraded.PowerLimit50"
+        },
+        {
+          "id": "view",
+          "icon": "V",
+          "label": "View",
+          "detail": "propulsionStateView expose 结构和状态元素，说明 view 是观察模型的投影，不等于代码文件。",
+          "code": "view propulsionStateView"
+        }
+      ]
+    }
+  },
+  "learningBlocks": [
+    {
+      "type": "image-gallery",
+      "title": "课程导引图",
+      "content": "本图按当前 lesson 的工程任务和模型主题生成，用于先理解课程场景，再进入 SysML v2 建模练习。",
+      "generatedBy": "scripts/generate-course-lesson-illustrations.js",
+      "images": [
+        {
+          "src": "/api/course-assets/assets/course-visuals/generated-lesson-guides/ev-course-06-lesson-03-state.svg",
+          "title": "C06.L03 电驱降级状态与模型组织",
+          "caption": "围绕 状态机/State / 转移/Transition / 安全模式/Safety 组织汽车工程语境，把本课对象放进可追踪的 SysML v2 模型。",
+          "alt": "电动汽车 SysML v2 建模课程导引图：电驱降级状态与模型组织"
+        }
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "模型组织：真实 SysML v2 项目通常不是一个巨大的文件。可以按 `EV_Structure.sysml`、`EV_Behavior.sysml`、`EV_States.sysml`、`EV_Requirements.sysml` 拆分文件；每个文件里放一个或多个 package；通过 `private import EV_C06_Behavior::*;` 引用其他 package 中的定义。本站为了练习方便把这些 package 放在一个编辑器文件里，但组织思想相同。"
+    },
+    {
+      "type": "hint-card",
+      "title": "view 是一个单独文件吗？",
+      "label": "点击查看视图和图形呈现边界",
+      "content": "代码文件负责存储模型，package 负责命名空间，import 负责跨 package 引用，view 负责从模型中选择要展示的内容。一个 `.sysml` 文件可以定义多个 view；一个 view 也可以 expose 来自多个 package 或多个文件的元素。不要把 view 理解成文件。"
+    },
+    {
+      "type": "markdown",
+      "content": "图形预览说明：模板保留了两种 view 入口。`propulsionStateView : StandardViewDefinitions::GeneralView` 是默认通用评审视图，用来同时看 ElectricDriveUnit 和它承载的 `driveMode : PropulsionState`；`propulsionStateTransitionView : StandardViewDefinitions::StateTransitionView` 更聚焦 state、transition、guard 和 entry/do/exit action。课程默认保留 GeneralView，方便结构和状态一起评审；如果你想只看状态迁移，可以启用 StateTransitionView，并在其中 `expose PropulsionState`。两种 view 都是对已有模型的投影，不改变状态机本身。"
+    },
+    {
+      "type": "markdown",
+      "content": "电驱状态方法：`Running.Normal` 是全扭矩运行，`Running.Degraded.PowerLimit50` 是过温后的限扭模式，`Running.Degraded.LimpHome` 是更严重的跛行回家模式，`Fault` 是硬件故障后的停机状态。状态名是工程语言，transition 才说明何时切换。"
+    },
+    {
+      "type": "hint-card",
+      "title": "状态里的 do/entry action 和结构绑定有什么关系？",
+      "label": "点击查看状态/行为语义说明",
+      "content": "本课同时使用两种组合方式。第一，状态内部用 `do action fullTorque : FullTorqueDelivery;` 表达该状态激活期间执行什么行为；`entry action shutdown : MotorShutdownAction` 表达进入 Fault 时执行什么。第二，顶层 `part driveUnit : ElectricDriveUnit { state driveMode : PropulsionState; }` 把状态机绑定回结构对象，说明谁呈现这套状态。C05 的 `perform action` 说明结构或行为上下文承担/调用某个行为，和这里的状态动作不是同一个语法位置。"
+    },
+    {
+      "type": "markdown",
+      "content": "transition 写法示例：模板已经先写出 `transition limit50_to_limp first PowerLimit50 accept MotorTooHotSignal if motorTempC > 180.0 then LimpHome;`。TODO 4/5 同样需要 `if motorTempC ...` 守卫：过温降额不是只收到事件就切换，还要温度超过阈值；温度恢复也不是只收到事件就恢复，还要温度低于恢复阈值。TODO 6、7、9 这类外层事件转移可以省略 `if ...`。"
+    },
+    {
+      "type": "hint-card",
+      "title": "MotorOvertempSignal 是 Boolean guard 吗？",
+      "label": "点击查看状态/行为语义说明",
+      "content": "`if motorTempC > 120.0` 这类 guard 是内联 Boolean 表达式，不需要单独定义 guard；但 `motorTempC` 必须先作为 `PropulsionState` 的 `in` 参数存在，才能在状态机内部 transition 中引用。`MotorOvertempSignal`、`MotorTempNormalSignal`、`MotorHardwareFaultSignal` 是被 `accept` 接收的事件类型，不是 Boolean。"
+    },
+    {
+      "type": "hint-card",
+      "title": "transition usage 名称必须固定吗？",
+      "label": "点击查看状态/行为语义说明",
+      "content": "`limit50_to_limp`、`normal_to_limited`、`limited_to_normal`、`disabled_to_running`、`running_to_disabled`、`running_to_fault` 是推荐示例名，不是本课通过条件。课程检查关注父级、源状态、目标状态、事件和 guard。状态动作名称仍需按任务写 `fullTorque`、`limitedTorque`、`shutdown`，因为这些名称用来对应三种行为责任。"
+    },
+    {
+      "type": "markdown",
+      "content": "练习步骤：如果编辑器顶部显示“课程模板”，先读 PowerLimit50 -> LimpHome 示例，再按 TODO 2-10 补齐 Normal/PowerLimit50/Fault 的状态动作、过温降额/恢复转移、Disabled/Running/Fault 的外层转移和状态视图暴露。如果显示“已恢复草稿”，请确认 import、状态层级和 view expose 都仍位于对应 package 中；如果草稿已经无法对应练习步骤，可以点击“重置为课程模板”回到原始模板。"
+    },
+    {
+      "type": "code",
+      "language": "sysml",
+      "sourceFile": "starter.sysml"
+    }
+  ],
+  "workspace": {
+    "files": [
+      {
+        "path": "main.sysml",
+        "source": "starter.sysml",
+        "editable": true
+      }
+    ],
+    "entryFile": "main.sysml"
+  },
+  "tasks": [
+    {
+      "id": "task-01",
+      "type": "model-challenge",
+      "prompt": "在课程模板的 TODO 位置，或在已恢复草稿中的对应结构位置，完成电驱降级状态机、状态内 action、结构状态绑定和 PropulsionState 的状态视图暴露，并用工程语言说明 package/import/view 的分工。",
+      "hints": [
+        "`private import` 是跨 package 引用，不是复制模型元素。",
+        "`Running.Degraded.PowerLimit50` 是嵌套状态路径，表示 Running 内部 Degraded 子状态下的限扭模式。",
+        "照着模板中的 PowerLimit50 -> LimpHome 示例写 TODO 4/5：`first` 源状态、`accept` 事件、`if motorTempC ...` 守卫、`then` 目标状态都要有。",
+        "TODO 4/5 的温度降级和恢复都必须引用 `motorTempC`；`if` 后可以直接写内联 guard 表达式，不需要单独定义 guard。",
+        "`MotorOvertempSignal` 等是 signal 类型，供 `accept` 接收事件使用，不是 Boolean guard。",
+        "状态动作写在具体 `state` 块内，语法骨架是 `do action 名称 : 动作类型;` 或 `entry action 名称 : 动作类型;`；冒号左边是状态里的动作 usage，冒号右边引用 C05 风格的 action def。",
+        "`do action` 表示 Normal、PowerLimit50 这类状态激活/停留期间执行控制行为；`entry action` 表示进入 Fault 的瞬间执行停机动作。`perform action` 则是结构或行为上下文承担/调用行为，不写在 state 内。",
+        "transition usage 名称可以自定义；推荐示例名是 `normal_to_limited`、`limited_to_normal`、`disabled_to_running`、`running_to_disabled`、`running_to_fault`。TODO 4/5 通过条件关注源/目标状态、事件和 `motorTempC` 守卫，不关注 transition 名称。",
+        "view 只 expose 已有模型元素，不要在 view 内重新定义状态机。",
+        "默认 GeneralView 用来同时显示结构和状态机承载关系；StateTransitionView 用来聚焦状态迁移。课程检查接受任一状态视图 expose `PropulsionState`，不要在 view 中重新定义状态机。"
+      ]
+    }
+  ],
+  "validation": {
+    "strictSysml": true,
+    "rulesFile": "rules.json"
+  },
+  "completion": {
+    "requiresStrictValidation": true,
+    "requiresAllLessonRules": true
+  },
+  "glossaryTerms": [
+    "state def",
+    "state",
+    "transition",
+    "guard",
+    "import",
+    "view",
+    "ActionUsage",
+    "SafeState"
+  ]
+}

@@ -1,0 +1,155 @@
+{
+  "id": "course-10-lesson-01",
+  "title": "结构接口基线交付",
+  "type": "modeling-lesson",
+  "estimatedMinutes": 45,
+  "timePlan": [
+    {
+      "label": "冻结结构对象",
+      "minutes": 8,
+      "description": "确认 BatteryPack、Inverter、Motor、Wheel 和 ElectricVehicle 的组成关系与关键参数。"
+    },
+    {
+      "label": "补全端口边界",
+      "minutes": 8,
+      "description": "为 Motor 添加 powerIn，使电池 dcOut 有真实连接目标。"
+    },
+    {
+      "label": "绑定接口使用",
+      "minutes": 12,
+      "description": "用 interface usage connect 建立 battery.dcOut -> inverter.dcIn -> motor.powerIn 的功率链路。"
+    },
+    {
+      "label": "形成阶段视图",
+      "minutes": 9,
+      "description": "用 view/expose 输出结构接口评审视图。"
+    },
+    {
+      "label": "校验与复盘",
+      "minutes": 8,
+      "description": "确认综合模型不是只有 interface def，而是有具体连接。"
+    }
+  ],
+  "scenario": {
+    "title": "工程场景",
+    "body": "最终项目第一阶段交付结构和接口基线。评审者不仅要看到电池、逆变器、电机和车轮，还要看到电池直流功率如何先进入逆变器，再由逆变器输出到电机输入端口，以及结构接口视图暴露哪些对象。",
+    "visual": {
+      "type": "interactive-flow",
+      "variant": "10-structure-interface",
+      "title": "结构到接口的集成",
+      "caption": "综合项目从具体结构和端口连接开始，避免只定义接口类型却没有使用。",
+      "nodes": [
+        {
+          "id": "structure",
+          "icon": "S",
+          "label": "结构基线",
+          "detail": "ElectricVehicle 拥有 battery、inverter、motor 和 wheels[4]，并保留能耗参数。",
+          "code": "part def ElectricVehicle"
+        },
+        {
+          "id": "ports",
+          "icon": "P",
+          "label": "端口边界",
+          "detail": "BatteryPack.dcOut、Inverter.dcIn/acOut 和 IntegrationMotor.powerIn 形成更可信的电驱功率边界。",
+          "code": "port powerIn"
+        },
+        {
+          "id": "interface",
+          "icon": "I",
+          "label": "接口使用",
+          "detail": "两条 interface usage 把接口定义应用到 finalVehicle 的具体部件端口；usage 名称由建模者自定义。",
+          "code": "interface ... connect"
+        },
+        {
+          "id": "view",
+          "icon": "V",
+          "label": "交付视图",
+          "detail": "structureInterfaceView 暴露 finalVehicle 和 PropulsionPowerInterface，形成阶段评审入口。",
+          "code": "view structureInterfaceView"
+        }
+      ]
+    }
+  },
+  "learningBlocks": [
+    {
+      "type": "image-gallery",
+      "title": "课程导引图",
+      "content": "本图按当前 lesson 的工程任务和模型主题生成，用于先理解课程场景，再进入 SysML v2 建模练习。",
+      "generatedBy": "scripts/generate-course-lesson-illustrations.js",
+      "images": [
+        {
+          "src": "/api/course-assets/assets/course-visuals/generated-lesson-guides/ev-course-10-lesson-01-structure.svg",
+          "title": "C10.L01 结构接口基线交付",
+          "caption": "围绕 结构/Structure / BOM层级/BOM / 组成/Composition 组织汽车工程语境，把本课对象放进可追踪的 SysML v2 模型。",
+          "alt": "电动汽车 SysML v2 建模课程导引图：结构接口基线交付"
+        }
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "工程意图：综合项目不能只把 C03/C04 的元素列出来。本站把 C03 电池包参数链、C04 功率端口和接口契约沉淀到只读文件 `ev-c10-baseline.sysml` 的 `EV_C10_Baseline` package；本课通过 `private import EV_C10_Baseline::*;` 复用稳定基线，再在 `main.sysml` 中完成最终项目特有的接口绑定。"
+    },
+    {
+      "type": "markdown",
+      "content": "读模要点：导入的 BatteryPack 已有 `usableEnergyKWh` 和 `dcOut`；电池是直流源，Inverter 提供 `dcIn` 和 `acOut`，承担 DC/AC 转换与电机功率控制；本课用 `IntegrationMotor :> Motor` 在 C03 的 Motor 基础上补 `powerIn`。finalVehicle 内的 interface usage 是集成证据；view/expose 是阶段交付物，不复制模型元素。"
+    },
+    {
+      "type": "markdown",
+      "content": "功率边界说明：`EV_C10_Baseline` 中 ElectricalPower 使用 `continuousPowerKW = 100.0` 表示接口连续功率能力，Motor 使用 `peakPowerKw = 150.0` 表示电机峰值能力。两个数值不是同一个工程指标，不能直接比较成矛盾。"
+    },
+    {
+      "type": "markdown",
+      "content": "练习步骤：如果编辑器顶部显示“课程模板”，按 TODO 1-4 补齐 IntegrationMotor.powerIn、两条 interface usage 和结构接口视图暴露。两条 interface usage 的名称可以按工程语义自定义，例如 `batteryToInverter`、`inverterToMotor`、`dcPowerLink`、`motorPowerLink`；课程检查关注接口类型和端口路径。如果显示“已恢复草稿”，请检查这些内容是否仍在 IntegrationMotor、finalVehicle 和 structureInterfaceView 的对应位置；如需重来，点击“重置为课程模板”。"
+    },
+    {
+      "type": "code",
+      "language": "sysml",
+      "sourceFile": "starter.sysml"
+    }
+  ],
+  "workspace": {
+    "files": [
+      {
+        "path": "ev-c10-baseline.sysml",
+        "source": "../../../shared/c10-baseline.sysml",
+        "editable": false
+      },
+      {
+        "path": "main.sysml",
+        "source": "starter.sysml",
+        "editable": true
+      }
+    ],
+    "entryFile": "main.sysml"
+  },
+  "tasks": [
+    {
+      "id": "task-01",
+      "type": "model-challenge",
+      "prompt": "在课程模板 TODO 位置，或在已恢复草稿中的对应结构位置，把最终项目结构接口基线补成真实连接模型。",
+      "hints": [
+        "Motor 必须有 powerIn，才能作为 inverter.acOut 的连接目标。",
+        "interface usage connect 应写在 finalVehicle 内，因为它绑定的是具体部件端口。",
+        "先建 battery.dcOut -> inverter.dcIn，再建 inverter.acOut -> motor.powerIn，不要把电池直接接电机。",
+        "interface usage 名称可以自定义；同一个 finalVehicle 内不要和已有成员重名。",
+        "structureInterfaceView 要 expose 接口定义，方便评审者理解连接契约。"
+      ]
+    }
+  ],
+  "validation": {
+    "strictSysml": true,
+    "rulesFile": "rules.json"
+  },
+  "completion": {
+    "requiresStrictValidation": true,
+    "requiresAllLessonRules": true
+  },
+  "glossaryTerms": [
+    "part def",
+    "port def",
+    "interface def",
+    "interface connect",
+    "view",
+    "expose"
+  ]
+}

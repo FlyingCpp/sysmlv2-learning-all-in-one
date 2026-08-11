@@ -1,0 +1,433 @@
+{
+  "version": "2026-05-30",
+  "locale": "zh-CN",
+  "source": "official-sysml-v2-pilot-2026-04",
+  "fallback": {
+    "studentTitle": "官方 validator 返回了底层诊断",
+    "studentMessage": "先检查这一行附近的关键字、名称拼写、冒号、分号和花括号。原始官方信息仍然保留，方便继续查证。",
+    "fixSteps": [
+      "从标红行和上一行开始检查，确认语句是否完整。",
+      "如果这一行引用了类型或元素名，确认它已经在模型中定义或通过 import 引入。",
+      "修正后再次点击“校验”，让官方 validator 重新判断。"
+    ]
+  },
+  "rules": [
+    {
+      "id": "syntax.fullwidth-colon",
+      "priority": 140,
+      "match": {
+        "contextRegex": [
+          "："
+        ]
+      },
+      "studentTitle": "冒号用了中文全角符号",
+      "studentMessage": "错误原理：SysML v2 文本语法中的类型分隔符是 ASCII 冒号 `:`。你当前行附近出现了中文全角冒号 `：`，validator 不能把它当成 `名称 : 类型` 的类型冒号继续解析，所以后面的参数、端口路径、connect 或 flow 可能会被连带误判。",
+      "fixSteps": [
+        "在高亮行附近查找 `：`，把它改成 ASCII `:`。",
+        "再检查这一行是否仍然满足当前语句结构，例如 `out 名称 : 类型;`、`part 名称 : 类型;` 或 `interface 名称 : 接口类型 connect 端口路径 to 端口路径;`。",
+        "修正后再次点击“校验并生成视图”，让官方 validator 重新给出更准确的诊断。"
+      ],
+      "badExample": "out systemReady ： Boolean;",
+      "goodExample": "out systemReady : Boolean;",
+      "relatedConcepts": [
+        "textual syntax",
+        "type annotation",
+        "action parameter"
+      ]
+    },
+    {
+      "id": "syntax.previous-line-missing-terminator",
+      "priority": 125,
+      "match": {
+        "category": "syntax",
+        "locationAdjustmentReason": "previous-line-missing-terminator",
+        "messageRegex": [
+          "no viable alternative",
+          "mismatched input",
+          "extraneous input"
+        ]
+      },
+      "studentTitle": "这一行声明可能少了分号",
+      "studentMessage": "官方 validator 有时会在读到下一行关键字时才发现上一句没有结束。平台已经把位置回溯到更可能需要修改的这一行。SysML v2 里，已经写完的声明通常要用分号 `;` 结束；如果后面还要写内部成员，就要用 `{ ... }` 包成定义块。",
+      "fixSteps": [
+        "先检查高亮行末尾是否缺少 `;`。",
+        "如果这行不是单行声明，而是要继续写内部成员，把声明改成 `名称 { ... }` 这种块结构。",
+        "修正后再次点击“校验并生成视图”，确认官方 validator 不再把错误报到下一条声明上。"
+      ],
+      "badExample": "package EV {\n  part def Driver\n  part def RoadEnvironment;\n}",
+      "goodExample": "package EV {\n  // 单行声明：用分号结束\n  part def Driver;\n  part def RoadEnvironment;\n\n  // 带内部成员：用花括号包住\n  part def ElectricVehicle {\n    part driver : Driver;\n  }\n}"
+    },
+    {
+      "id": "syntax.missing-right-brace",
+      "priority": 120,
+      "match": {
+        "category": "syntax",
+        "messageRegex": [
+          "expecting '}'",
+          "missing '}'",
+          "no viable alternative at input '<EOF>'"
+        ]
+      },
+      "studentTitle": "模型块没有正确闭合",
+      "studentMessage": "某个 `package`、`part def`、`interface def` 或其他带 `{ ... }` 的块少了右花括号。SysML v2 的层级关系依赖花括号闭合，缺失后后面的语句都会被放进错误的上下文。",
+      "fixSteps": [
+        "从报错行往上找最近的 `{`。",
+        "确认这个块内的内容已经写完，然后补上匹配的 `}`。",
+        "如果块后面还有普通声明，确认它们在正确的花括号层级外。"
+      ],
+      "badExample": "package EV {\n  part def BatteryPack;",
+      "goodExample": "package EV {\n  part def BatteryPack;\n}"
+    },
+    {
+      "id": "syntax.statement-terminator",
+      "priority": 110,
+      "match": {
+        "category": "syntax",
+        "messageRegex": [
+          "no viable alternative at input '}'",
+          "mismatched input '}'",
+          "extraneous input '}'"
+        ],
+        "contextRegex": [
+          "^\\s*(part|port|item|attribute|interface|action|state|requirement|analysis|verification|constraint|calc)\\b"
+        ]
+      },
+      "studentTitle": "上一条声明可能少了分号",
+      "studentMessage": "错误原理：SysML v2 的声明通常只有两种结尾：已经写完的单行声明用 `;` 结束；还要继续写内部成员的定义块用 `{ ... }` 包起来。当前错误通常表示上一条声明没有正确结束，validator 读到 `}` 时还以为上一条语句没写完。",
+      "fixSteps": [
+        "先看标红行上一条声明是否已经写完整。",
+        "如果这条声明不需要内部成员，在末尾补 `;`，例如 `part def Wheel;`。",
+        "如果这条声明需要内部成员，把它写成 `{ ... }` 定义块，并确认最后有匹配的 `}`。",
+        "补完后再看下一条声明是否回到正确层级。"
+      ],
+      "badExample": "package EV {\n  part def Wheel\n  part wheel : Wheel;\n}",
+      "goodExample": "package EV {\n  // 单行声明：用分号结束\n  part def Wheel;\n\n  // 定义块：用花括号包住内部成员\n  part def BatteryPack {\n    part cell;\n  }\n\n  part wheel : Wheel;\n}"
+    },
+    {
+      "id": "syntax.package-shape",
+      "priority": 100,
+      "match": {
+        "category": "syntax",
+        "messageRegex": [
+          "mismatched input",
+          "no viable alternative",
+          "extraneous input"
+        ],
+        "contextRegex": [
+          "^\\s*package\\s+[A-Za-z_]\\w*\\s*;?\\s*$",
+          "^\\s*package\\b\\s*$"
+        ]
+      },
+      "studentTitle": "package 的外形不完整",
+      "studentMessage": "`package` 是模型文件的外层容器，通常写成 `package 名称 { ... }`。课程练习里先把所有可校验内容放进一个 package。",
+      "fixSteps": [
+        "确认 `package` 后面有合法名称。",
+        "确认名称后面有 `{`，文件末尾有对应的 `}`。",
+        "把 part、interface、requirement 等建模语句放在 package 块内部。"
+      ],
+      "badExample": "package EV_C01_L00;",
+      "goodExample": "package EV_C01_L00 {\n  part def Vehicle;\n}"
+    },
+    {
+      "id": "semantic.unresolved-type",
+      "priority": 100,
+      "match": {
+        "category": "semantic",
+        "codeRegex": [
+          "Linking"
+        ],
+        "messageRegex": [
+          "Couldn't resolve reference to Type",
+          "Couldn't resolve reference to .*Type"
+        ]
+      },
+      "studentTitle": "{{missingName}} 这个类型没有定义",
+      "studentMessage": "错误原理：冒号 `:` 右侧的 `{{missingName}}` 必须是已经定义或已经导入的类型。你当前写的是 `{{lineText}}`，validator 找不到 `{{missingName}}`，所以无法判断冒号左侧这个模型对象应该按什么类型建模。常见原因有两类：一是把已有类型名拼错了；二是确实需要这个新类型，但忘了先写对应的 `def`。",
+      "fixSteps": [
+        "先看冒号 `:` 后面的名字：这里是 `{{missingName}}`。",
+        "在当前文件或已导入的 package 中搜索是否存在完全一致的类型定义，例如 `part def {{missingName}};`、`item def {{missingName}};` 或 `port def {{missingName}};`。",
+        "如果没有找到，先判断是不是拼写错误；把冒号右侧改成已经存在的类型名。",
+        "如果确实要新增这个类型，先写对应的 `def`，再创建 usage。",
+        "注意 SysML v2 名称区分大小写，大小写或数字不同就是不同名字。"
+      ],
+      "badExample": "package EV {\n  part def BatteryPack;\n\n  part def ElectricVehicle {\n    part battery : {{missingName}};\n  }\n}",
+      "goodExample": "package EV {\n  part def BatteryPack;\n\n  part def ElectricVehicle {\n    // 路径 A：如果是拼写错，改回已有类型\n    part battery : BatteryPack;\n  }\n}\n\npackage EV_NewType {\n  // 路径 B：如果确实需要新类型，先定义它\n  part def {{missingName}};\n\n  part def ElectricVehicle {\n    part battery : {{missingName}};\n  }\n}"
+    },
+    {
+      "id": "semantic.unresolved-element",
+      "priority": 96,
+      "match": {
+        "category": "semantic",
+        "codeRegex": [
+          "Linking"
+        ],
+        "messageRegex": [
+          "Couldn't resolve reference to Element",
+          "Couldn't resolve reference to .*Element"
+        ]
+      },
+      "studentTitle": "关系语句引用了不存在的模型元素",
+      "studentMessage": "错误原理：关系语句只是把已有模型元素连起来，不会自动创建元素。当前标红行里至少有一个名字在模型中找不到，或者它定义在当前语句看不见的 package / part 层级里。常见场景包括：`satisfy` 连接需求和设计对象，`expose` 把已有元素放进 view，`verify` 指向已有需求或验证对象。",
+      "fixSteps": [
+        "把关系语句里的每个名字圈出来，逐个确认它们是否已经定义。",
+        "确认大小写完全一致，SysML 名称区分大小写。",
+        "确认被引用元素和关系语句在同一个 package 中，或已经通过 import 引入。",
+        "如果是 `satisfy`，确认需求 usage 和满足它的 part/action/analysis usage 都存在。",
+        "如果是 `expose`，确认 view 中 expose 的对象已经在 view 外部定义。",
+        "如果你只写了 `requirement def` 或 `part def`，还要确认是否已经创建了具体的 requirement usage 或 part usage。"
+      ],
+      "badExample": "satisfy usableRange by evPreview;",
+      "goodExample": "package EV {\n  requirement def VehicleNeed;\n  part def ElectricVehicle;\n\n  requirement usableRange : VehicleNeed;\n  part evPreview : ElectricVehicle;\n\n  // satisfy 连接的是上面已经存在的两个 usage\n  satisfy usableRange by evPreview;\n\n  view reviewView : StandardViewDefinitions::GeneralView {\n    // expose 也只能选择已经存在的模型元素\n    expose usableRange;\n    expose evPreview;\n  }\n}"
+    },
+    {
+      "id": "semantic.duplicate-owned-member-name",
+      "priority": 96,
+      "match": {
+        "messageRegex": [
+          "Duplicate of other owned member name",
+          "Duplicate of owned member name"
+        ]
+      },
+      "studentTitle": "同一个父级里出现了重名成员",
+      "studentMessage": "错误原理：同一个 `{}` 父级不能拥有两个同名成员。你当前行附近的 `{{lineText}}` 和同一父级中的另一条声明名称重复了。课程页面显示“已恢复草稿”时，草稿可能已经包含一条 interface usage；这时应编辑已有行，而不是按 TODO 再新增同名行。",
+      "fixSteps": [
+        "先在当前 `{}` 块内搜索同名 usage 或定义。",
+        "如果两条表达的是同一个工程对象，保留一条并补全它，删除或改名另一条。",
+        "如果你想重新从 TODO 起点练习，点击“重置为课程模板”，再按当前课程模板补全。"
+      ],
+      "badExample": "part def ElectricVehicle {\n  interface powerLink : BatteryToInverter connect battery.dcOut to inverter.dcIn;\n  interface powerLink : BatteryToInverter connect battery.dcOut to inverter.dcIn;\n}",
+      "goodExample": "part def ElectricVehicle {\n  interface powerLink : BatteryToInverter connect battery.dcOut to inverter.dcIn;\n  interface commandLink : ControllerToInverter connect controller.commandOut to inverter.commandIn;\n}",
+      "relatedConcepts": [
+        "namespace",
+        "owned member",
+        "interface usage"
+      ]
+    },
+    {
+      "id": "semantic.unresolved-feature",
+      "priority": 95,
+      "match": {
+        "category": "semantic",
+        "codeRegex": [
+          "Linking"
+        ],
+        "messageRegex": [
+          "Couldn't resolve reference to Feature",
+          "Couldn't resolve reference to .*Feature"
+        ]
+      },
+      "studentTitle": "端口路径或部件特征找不到",
+      "studentMessage": "错误原理：带点号的路径会分段查找。以 `battery.dcOut` 为例，`battery` 必须是当前结构里的 part usage；`dcOut` 必须是 `battery` 所属类型上已经定义的端口或特征。只定义 `battery` 不够，`BatteryPack` 类型里也要真的有 `dcOut`。",
+      "fixSteps": [
+        "先检查点号左侧的名字，例如 `battery`，是否是当前 part def 内的 part usage。",
+        "再检查点号右侧的名字，例如 `dcOut`，是否定义在 `battery` 的类型上。",
+        "对 connect 右侧也做同样检查，例如 `motor.powerIn`。",
+        "如果端口或类型来自其他 package，确认 import 和类型绑定都存在。"
+      ],
+      "badExample": "connect battery.dcOut to motor.powerIn;",
+      "goodExample": "package EV {\n  port def PowerPort;\n  part def BatteryPack { port dcOut : PowerPort; }\n  part def Motor { port powerIn : PowerPort; }\n\n  part def ElectricVehicle {\n    part battery : BatteryPack;\n    part motor : Motor;\n    connect battery.dcOut to motor.powerIn;\n  }\n}"
+    },
+    {
+      "id": "semantic.port-owned-usages",
+      "priority": 94,
+      "match": {
+        "category": "semantic",
+        "messageRegex": [
+          "Owned usages of a port definition",
+          "Owned usages of .*port definition"
+        ]
+      },
+      "studentTitle": "port def 内部只能放适合端口的 usage",
+      "studentMessage": "错误原理：`port def` 描述系统边界上的接口规格，也就是这个端口对外交换什么；它不是用来描述系统内部由哪些部件组成的地方。因此端口里通常放 `ref item` 这类交换对象，不把 `part battery : BatteryPack;` 这样的内部组成放进去。",
+      "fixSteps": [
+        "检查 `port def` 块内部是否误写了普通 `part`。",
+        "如果要表达通过端口交换的对象，使用 `ref item 名称 : ItemType;`。",
+        "如果要表达部件组成，把 `part` 移到系统或部件的 `part def` 内部。"
+      ],
+      "badExample": "port def PowerPort { part battery : BatteryPack; }",
+      "goodExample": "package EV {\n  item def ElectricalPower;\n  port def PowerPort { ref item power : ElectricalPower; }\n\n  part def BatteryPack { port dcOut : PowerPort; }\n}"
+    },
+    {
+      "id": "semantic.occurrence-usage-type",
+      "priority": 93,
+      "match": {
+        "category": "semantic",
+        "messageRegex": [
+          "An occurrence, item or part must be typed by occurrence definitions"
+        ]
+      },
+      "studentTitle": "part/item usage 后面的类型类别不合适",
+      "studentMessage": "错误原理：这不是“名字找不到”，而是“名字找到了但种类不对”。例如 `part inlet : PowerPort;` 中，`PowerPort` 如果是 `port def`，它是端口规格，不能当成 `part` 的部件类型。简单对应关系是：`part` 通常配 `part def`，`item` 通常配 `item def`，`port` 通常配 `port def`。",
+      "fixSteps": [
+        "先确认冒号右侧的名字已经定义；如果未定义，优先处理“类型没有定义”的提示。",
+        "如果这是一个部件实例，冒号后面通常应是 `part def` 定义出来的结构类型。",
+        "如果这是一个交换对象，冒号后面通常应是 `item def` 定义出来的对象类型。",
+        "如果这是端口规格，应写成 `port name : PortType;`，并由 `port def PortType` 定义端口。"
+      ],
+      "badExample": "package EV {\n  port def PowerPort;\n  part def ElectricVehicle {\n    part inlet : PowerPort;\n  }\n}",
+      "goodExample": "package EV {\n  port def PowerPort;\n  part def ChargeInlet { port plug : PowerPort; }\n\n  part def ElectricVehicle {\n    part inlet : ChargeInlet;\n    port dcIn : PowerPort;\n  }\n}"
+    },
+    {
+      "id": "syntax.flow-to",
+      "priority": 92,
+      "match": {
+        "category": "syntax",
+        "messageRegex": [
+          "expecting 'to'",
+          "mismatched input .*to",
+          "no viable alternative.*flow"
+        ],
+        "contextRegex": [
+          "\\bflow\\b"
+        ]
+      },
+      "studentTitle": "flow 需要写清楚从哪里流向哪里",
+      "studentMessage": "错误原理：`flow` 表达一个交换对象从哪个端点流向哪个端点。validator 看到 `flow source.power target.power;` 时，中间缺少 `to`，无法判断 `target.power` 是目标端还是上一段路径的继续内容。课程中常用写法是 `flow source.power to target.power;`，`to` 左边是来源，右边是目标。",
+      "fixSteps": [
+        "确认 flow 语句包含 `to`。",
+        "确认 `to` 两边都是已经存在的端点特征，例如 `source.power`。",
+        "确认 `source` 和 `target` 是当前 interface def 内已经定义的两个 `end`。",
+        "确认 `power` 是端口类型里通过 `ref item power : ElectricalPower;` 定义的交换对象。",
+        "确认语句末尾有 `;`。"
+      ],
+      "badExample": "package EV {\n  item def ElectricalPower;\n  port def PowerPort { ref item power : ElectricalPower; }\n  interface def PowerInterface {\n    end source : PowerPort;\n    end target : PowerPort;\n    flow source.power target.power;\n  }\n}",
+      "goodExample": "package EV {\n  item def ElectricalPower;\n  port def PowerPort { ref item power : ElectricalPower; }\n\n  interface def PowerInterface {\n    end source : PowerPort;\n    end target : PowerPort;\n    flow source.power to target.power;\n  }\n}"
+    },
+    {
+      "id": "semantic.interface-ends",
+      "priority": 90,
+      "match": {
+        "category": "semantic",
+        "messageRegex": [
+          "at least two related elements",
+          "must have at least two"
+        ],
+        "contextRegex": [
+          "\\b(interface|connection)\\b"
+        ]
+      },
+      "studentTitle": "接口或连接至少需要两个端点",
+      "studentMessage": "错误原理：`interface def` 或 `connection def` 表达两个或多个系统边界之间的关系，因此至少要说明两个端点参与交换。`end source : PowerPort;` 和 `end target : PowerPort;` 中，`source`、`target` 是端点名字，`PowerPort` 是端点使用的端口类型。",
+      "fixSteps": [
+        "在 interface/connection 块内检查是否有两个 `end`。",
+        "确认两个端点引用的端口类型已经定义。",
+        "再检查 flow/connect 是否使用了这些端点名称。"
+      ],
+      "badExample": "interface def PowerInterface { end source : PowerPort; }",
+      "goodExample": "package EV {\n  port def PowerPort;\n  interface def PowerInterface {\n    end source : PowerPort;\n    end target : PowerPort;\n  }\n}"
+    },
+    {
+      "id": "syntax.attribute-value",
+      "priority": 86,
+      "match": {
+        "category": "syntax",
+        "messageRegex": [
+          "mismatched input",
+          "no viable alternative"
+        ],
+        "contextRegex": [
+          "\\battribute\\b"
+        ]
+      },
+      "studentTitle": "attribute 的类型或赋值写法不完整",
+      "studentMessage": "错误原理：`attribute` 表达工程参数，通常要把三件事写清楚：参数名、参数类型、可选的默认值。`attribute massKg : ScalarValues::Real = 1200.0;` 中，`massKg` 是参数名，`ScalarValues::Real` 是数值类型，`1200.0` 是默认值。只写名字和数值，validator 无法确认这个参数应该按什么类型解释。",
+      "fixSteps": [
+        "确认 attribute 后面先写参数名。",
+        "确认冒号后面有类型，例如 `ScalarValues::Real`。",
+        "如果写了默认值或计算式，确认等号和分号都存在。",
+        "如果参数属于某个部件，把 attribute 放在对应的 `part def { ... }` 内。"
+      ],
+      "badExample": "package EV {\n  part def ElectricVehicle {\n    attribute massKg = 1200.0;\n  }\n}",
+      "goodExample": "package EV {\n  part def ElectricVehicle {\n    attribute massKg : ScalarValues::Real = 1200.0;\n    attribute usableEnergyKWh : ScalarValues::Real = 72.0;\n  }\n}"
+    },
+    {
+      "id": "syntax.redefines",
+      "priority": 84,
+      "match": {
+        "messageRegex": [
+          ":>>",
+          "redefines",
+          "no viable alternative"
+        ],
+        "contextRegex": [
+          ":>>"
+        ]
+      },
+      "studentTitle": ":>> 是重定义，不是普通冒号",
+      "studentMessage": "错误原理：`:>>` 只能修改已经从定义、模板或继承关系中带来的特征，不能用来新建一个全新的 attribute。比如需求模板里已经有 `minRangeKm`，具体需求中才可以写 `attribute :>> minRangeKm = 480.0;` 来覆盖默认值。",
+      "fixSteps": [
+        "先确认 `:>>` 后面的特征名在上层定义或模板中已经存在。",
+        "如果你只是要新建参数，不要用 `:>>`，改写普通 `attribute name : Type = value;`。",
+        "如果确实是重定义，使用 `attribute :>> featureName = value;`，并用分号结束。"
+      ],
+      "badExample": "attribute minRangeKm :>> 480.0;",
+      "goodExample": "package EV {\n  requirement def RangeNeed {\n    attribute minRangeKm : ScalarValues::Real = 400.0;\n  }\n\n  requirement usableRange : RangeNeed {\n    attribute :>> minRangeKm = 480.0;\n  }\n}"
+    },
+    {
+      "id": "semantic.perform-action",
+      "priority": 82,
+      "match": {
+        "category": "semantic",
+        "messageRegex": [
+          "perform",
+          "action"
+        ],
+        "contextRegex": [
+          "\\bperform\\b"
+        ]
+      },
+      "studentTitle": "perform action 要写成结构中的行为 usage",
+      "studentMessage": "错误原理：`perform action` 要写在执行者 part 的内部，表示“这个控制器/系统负责执行某个行为”。它不是写成 `perform DriveCycle by controller;` 这样的关系句，而是写成 `perform action driveControl : DriveCycle;`，其中 `driveControl` 是本次执行的名字，`DriveCycle` 是已经定义好的行为类型。",
+      "fixSteps": [
+        "先确认行为类型已经定义，例如 `action def DriveCycle;`。",
+        "再找到执行者的 `part def`，例如 `part def VehicleController { ... }`。",
+        "在执行者内部写 `perform action 名称 : 行为类型;`。",
+        "确认冒号左侧是本次执行名称，冒号右侧才是 action def 类型。"
+      ],
+      "badExample": "package EV {\n  action def DriveCycle;\n  part def VehicleController;\n  perform DriveCycle by controller;\n}",
+      "goodExample": "package EV {\n  action def DriveCycle;\n\n  part def VehicleController {\n    perform action driveControl : DriveCycle;\n  }\n\n  part controller : VehicleController;\n}"
+    },
+    {
+      "id": "semantic.binding-feature-value-override",
+      "priority": 81,
+      "match": {
+        "category": "semantic",
+        "messageRegex": [
+          "Cannot override a binding feature value"
+        ]
+      },
+      "studentTitle": "同一个 subject 被重复绑定了",
+      "studentMessage": "错误原理：`satisfy <需求> by <对象>;` 会把 requirement 的 subject 绑定到满足它的对象。如果你已经在同一个 requirement usage 内写了 `subject vehicle = evPrototype` 或 `subject :>> vehicle = evPrototype`，再写外部 `satisfy usableRange by evPrototype;`，validator 会认为你在覆盖一个已经绑定过的 feature value。",
+      "fixSteps": [
+        "保留 requirement def 里的 `subject vehicle : ElectricVehicle;`，它定义需求讨论的对象类型。",
+        "具体 requirement usage 先写成 `requirement usableRange : VehicleNeed;`，不要在里面手动绑定 subject。",
+        "用 `satisfy usableRange by evPrototype;` 建立满足责任，并让 satisfy 完成 requirement subject 绑定。",
+        "analysis usage 如果需要围绕样车展开，可以单独写 `subject vehicle = evPrototype;`，它和 requirement 的 satisfy 不是同一个绑定。"
+      ],
+      "badExample": "package EV {\n  part def ElectricVehicle;\n  part evPrototype : ElectricVehicle;\n\n  requirement def VehicleNeed {\n    subject vehicle : ElectricVehicle;\n  }\n\n  requirement usableRange : VehicleNeed {\n    subject vehicle = evPrototype;\n  }\n\n  satisfy usableRange by evPrototype;\n}",
+      "goodExample": "package EV {\n  part def ElectricVehicle;\n  part evPrototype : ElectricVehicle;\n\n  requirement def VehicleNeed {\n    subject vehicle : ElectricVehicle;\n  }\n\n  requirement usableRange : VehicleNeed;\n  satisfy usableRange by evPrototype;\n}"
+    },
+    {
+      "id": "semantic.satisfy-references",
+      "priority": 80,
+      "match": {
+        "messageRegex": [
+          "satisfy",
+          "Couldn't resolve reference"
+        ],
+        "contextRegex": [
+          "\\bsatisfy\\b"
+        ]
+      },
+      "studentTitle": "satisfy 两端必须都是真实模型元素",
+      "studentMessage": "错误原理：`satisfy <需求usage> by <已有元素usage>;` 表示某个已有设计对象满足某条已有需求。尖括号里的内容不是要照抄的关键字，而是你模型里的真实名称。`satisfy` 不会自动创建需求或设计对象，只会把已经存在的两端连起来。",
+      "fixSteps": [
+        "确认 `satisfy` 后面的需求 usage 已经定义。",
+        "确认 `by` 后面的对象、行为或分析结果已经定义。",
+        "如果只是写了 requirement def，还需要创建具体 requirement usage。"
+      ],
+      "badExample": "satisfy usableRange by evPreview;",
+      "goodExample": "package EV {\n  requirement def VehicleNeed;\n  part def ElectricVehicle;\n\n  requirement usableRange : VehicleNeed;\n  part evPreview : ElectricVehicle;\n\n  satisfy usableRange by evPreview;\n}"
+    }
+  ]
+}

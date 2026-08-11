@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 236" role="img" aria-labelledby="t d">
+  <title id="t">Course 09 Verification cases and evidence</title>
+  <desc id="d">Verification case checks road-test evidence and returns a pass verdict.</desc>
+  <rect width="420" height="236" rx="18" fill="#f7fcf9"/>
+  <rect x="42" y="50" width="132" height="132" rx="14" fill="#fff" stroke="#b8dfc8"/>
+  <text x="65" y="82" font-family="Segoe UI,Arial" font-size="16" font-weight="800">Road Test</text>
+  <path d="M72 122h72M72 146h50" stroke="#147a4d" stroke-width="5" stroke-linecap="round"/>
+  <rect x="244" y="54" width="126" height="126" rx="63" fill="#1769aa"/>
+  <path d="M277 118l24 24 45-56" fill="none" stroke="#fff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M174 116h70" stroke="#64748b" stroke-width="4" stroke-linecap="round" marker-end="url(#a)"/>
+  <defs><marker id="a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 8 4 0 8z" fill="#64748b"/></marker></defs>
+  <text x="104" y="211" font-family="Consolas,monospace" font-size="14" fill="#0f172a">verification  objective  PassIf</text>
+</svg>

@@ -1,0 +1,90 @@
+{
+  "id": "course-09-lesson-01",
+  "title": "验证成熟度 1：先做验证策划与覆盖",
+  "type": "modeling-lesson",
+  "estimatedMinutes": 45,
+  "timePlan": [
+    { "label": "读取需求与分析证据", "minutes": 10, "description": "区分 480 km requirement 与 490 km prediction。" },
+    { "label": "建立验证计划", "minutes": 22, "description": "定义 subject、objective、VerificationMethod 和计划输入。" },
+    { "label": "形成覆盖视图", "minutes": 13, "description": "把需求、预测、被测对象与验证计划放进评审入口。" }
+  ],
+  "scenario": {
+    "title": "工程场景：测试前先证明覆盖关系",
+    "body": "道路测试尚未执行。验证负责人需要先回答：验证哪条 480.0 km 需求、针对哪辆样车、参考哪项 490.0 km 分析预测、采用哪些方法。此时还没有 488.0 km 实测，因此计划 verdict 保持 inconclusive，不能提前写 PassIf。",
+    "visual": {
+      "type": "interactive-flow",
+      "variant": "09-maturity-plan",
+      "title": "验证计划覆盖链",
+      "nodes": [
+        { "id": "requirement", "label": "验证目标", "detail": "vehicleRange = 480 km", "code": "objective + verify" },
+        { "id": "method", "label": "计划方法", "detail": "test + analyze", "code": "VerificationMethod" },
+        { "id": "coverage", "label": "覆盖入口", "detail": "需求、预测、样车、计划", "code": "view + expose" }
+      ]
+    }
+  },
+  "learningBlocks": [
+    {
+      "type": "image-gallery",
+      "title": "课程导引图",
+      "images": [
+        {
+          "src": "/api/course-assets/assets/course-visuals/generated-lesson-guides/ev-course-09-lesson-01-verification.svg",
+          "title": "验证策划",
+          "caption": "先建立覆盖和方法，再进入测试执行。",
+          "alt": "电动汽车验证策划教学图"
+        }
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "工程意图：`verification def RangeVerificationPlan` 定义被测 subject 与 objective；objective 中 `verify vehicleRange` 建立需求覆盖；`@VerificationMethod` 记录 test 与 analyze 方法。具体 verification usage 绑定 evPrototype、480.0 km requiredRangeKm 和 490.0 km predictedRangeKm。"
+    },
+    {
+      "type": "hint-card",
+      "title": "为什么验证计划先返回 inconclusive？",
+      "label": "尚无执行证据",
+      "content": "VerdictKind 包含 pass、fail、inconclusive、error。计划阶段尚未采集 488.0 km 道路观测，因此 inconclusive 比预写 PassIf 更诚实。"
+    },
+    {
+      "type": "hint-card",
+      "title": "490 km 预测能不能直接让验证通过？",
+      "label": "预测不是测量",
+      "content": "不能。分析预测支持测试方案、风险判断与预期结果，但 C09 L2 的正式判定必须使用独立 488.0 km measurement。"
+    },
+    {
+      "type": "markdown",
+      "content": "权威依据：VerificationCases 标准库定义 VerdictKind、PassIf、VerificationMethod 与 test/analyze/demo/inspect；官方 Vehicle Example 用 VerificationMethod 元数据标注验证 case/action。"
+    },
+    {
+      "type": "markdown",
+      "content": "练习步骤：在“课程模板”中按 TODO 1-2 补 objective 与 VerificationMethod，按 TODO 3-4 绑定需求阈值和预测输入，再按 TODO 5 补 expose。subject testVehicle 已作为首参数绑定 evPrototype。使用“已恢复草稿”时不要添加测量判定；需要恢复时点击“重置为课程模板”。"
+    },
+    { "type": "code", "language": "sysml", "sourceFile": "starter.sysml" }
+  ],
+  "workspace": {
+    "files": [
+      { "path": "ev-program-baseline.sysml", "source": "../../../shared/ev-program-baseline.sysml", "editable": false },
+      { "path": "ev-requirement-baseline.sysml", "source": "../../../shared/c07-requirement-baseline.sysml", "editable": false },
+      { "path": "ev-range-calc-baseline.sysml", "source": "../../../shared/c08-range-calc-baseline.sysml", "editable": false },
+      { "path": "ev-analysis-baseline.sysml", "source": "../../../shared/c08-analysis-baseline.sysml", "editable": false },
+      { "path": "main.sysml", "source": "starter.sysml", "editable": true }
+    ],
+    "entryFile": "main.sysml"
+  },
+  "tasks": [
+    {
+      "id": "task-01",
+      "type": "model-challenge",
+      "prompt": "在道路测试执行前建立需求覆盖、被测对象、方法和预测参考完整的验证计划，并输出覆盖评审视图。",
+      "hints": [
+        "objective 中 verify vehicleRange，不要验证分析本身。",
+        "VerificationMethod 同时记录 test 和 analyze。",
+        "requiredRangeKm 来自 vehicleRange.minRangeKm。",
+        "predictedRangeKm 来自 cityRangePrediction，不是 measurement。"
+      ]
+    }
+  ],
+  "validation": { "strictSysml": true, "rulesFile": "rules.json" },
+  "completion": { "requiresStrictValidation": true, "requiresAllLessonRules": true },
+  "glossaryTerms": ["verification def", "objective", "verify", "VerificationMethod", "VerdictKind", "inconclusive", "coverage"]
+}

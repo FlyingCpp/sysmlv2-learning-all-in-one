@@ -1,0 +1,58 @@
+{
+  "rules": [
+    {
+      "id": "strict-valid",
+      "type": "strictValidationPassed",
+      "severity": "error",
+      "message": "模型必须通过严格 SysML v2 校验。"
+    },
+    {
+      "id": "calc-return",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "EstimateRange",
+        "kind": "return",
+        "name": "rawRangeKm",
+        "typeName": "ScalarValues::Real",
+        "valueIncludes": "usableEnergyKWh * 100.0 / energyPer100Km"
+      },
+      "message": "EstimateRange 需要用两个输入计算 rawRangeKm。"
+    },
+    {
+      "id": "calc-usage-energy",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "candidateRangeEstimate",
+        "kind": "in",
+        "name": "usableEnergyKWh",
+        "valueIncludes": "evPrototype.battery.usableEnergyKWh"
+      },
+      "message": "calc usage 的能量输入必须来自 78.0 kWh 车型基线。"
+    },
+    {
+      "id": "calc-usage-consumption",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "candidateRangeEstimate",
+        "kind": "in",
+        "name": "energyPer100Km",
+        "valueIncludes": "evPrototype.energyPer100Km"
+      },
+      "message": "calc usage 的能耗输入必须来自 16.0 kWh/100km 基线。"
+    },
+    {
+      "id": "calc-usage-return",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "candidateRangeEstimate",
+        "kind": "return",
+        "name": "rawRangeKm"
+      },
+      "message": "candidateRangeEstimate 需要暴露 rawRangeKm return。"
+    }
+  ]
+}

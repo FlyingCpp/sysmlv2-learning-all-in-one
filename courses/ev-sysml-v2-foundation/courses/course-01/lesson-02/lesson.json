@@ -1,0 +1,199 @@
+{
+  "id": "course-01-lesson-02",
+  "title": "在已有模型上扩展系统边界",
+  "type": "modeling-lesson",
+  "estimatedMinutes": 25,
+  "scenario": {
+    "title": "工程场景",
+    "body": "项目启动评审要求明确系统边界：电池包属于车辆结构，驾驶员和道路环境不一定是产品零件，但它们决定驾驶行为、人机交互、续航工况和验证场景。本课在 L01 的模型上增量加入 `Driver` 和 `RoadEnvironment`。",
+    "visual": {
+      "type": "interactive-flow",
+      "variant": "02",
+      "title": "从结构基线到系统上下文",
+      "caption": "本课不重写模型，而是在 L01 产出上增加外部参与者和环境边界。",
+      "nodes": [
+        {
+          "id": "baseline",
+          "icon": "1",
+          "label": "继承 L01",
+          "detail": "BatteryPack、ElectricVehicle、battery 和 evPrototype 是上一课结构基线。本课要保留它们。",
+          "code": "evPrototype"
+        },
+        {
+          "id": "actor",
+          "icon": "2",
+          "label": "驾驶员",
+          "detail": "Driver 不是车辆零件，但它是驾驶行为、HMI 和控制命令的重要来源，所以需要进入系统上下文视图。",
+          "code": "Driver"
+        },
+        {
+          "id": "environment",
+          "icon": "3",
+          "label": "道路环境",
+          "detail": "RoadEnvironment 支撑续航、道路工况和验证场景建模。它让模型能表达车辆在什么环境中被使用。",
+          "code": "RoadEnvironment"
+        },
+        {
+          "id": "context",
+          "icon": "4",
+          "label": "上下文使用",
+          "detail": "driver : Driver 和 environment : RoadEnvironment 放在 ElectricVehicle 中，是课程简化的系统上下文表达，用来说明驾驶员和道路环境参与车辆使用场景；它们不是产品 BOM 零件。",
+          "code": "part"
+        }
+      ]
+    }
+  },
+  "learningBlocks": [
+    {
+      "type": "image-gallery",
+      "title": "课程导引图",
+      "content": "本图按当前 lesson 的工程任务和模型主题生成，用于先理解课程场景，再进入 SysML v2 建模练习。",
+      "generatedBy": "scripts/generate-course-lesson-illustrations.js",
+      "images": [
+        {
+          "src": "/api/course-assets/assets/course-visuals/generated-lesson-guides/ev-course-01-lesson-02-boundary.svg",
+          "title": "C01.L02 在已有模型上扩展系统边界",
+          "caption": "围绕 系统边界/Boundary / 上下文/Context / 任务范围/Scope 组织汽车工程语境，把本课对象放进可追踪的 SysML v2 模型。",
+          "alt": "电动汽车 SysML v2 建模课程导引图：在已有模型上扩展系统边界"
+        }
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "工程意图：SysML v2 模型应能增量扩展，而不是每课另起一段孤立代码。本 lesson 复用 L01 的结构基线，并把驾驶员和道路环境加入模型上下文，为后续行为、需求和验证场景提供来源。这里把 driver 和 environment 放入 ElectricVehicle 是教学上的上下文承载，不表示它们是车辆 BOM 零件。"
+    },
+    {
+      "type": "markdown",
+      "content": "读模要点：`part def ElectricVehicle` 已包含 `battery : BatteryPack`；你要新增 `part def Driver;`、`part def RoadEnvironment;`，并在 ElectricVehicle 中补全 `driver : Driver` 与 `environment : RoadEnvironment`。"
+    },
+    {
+      "type": "markdown",
+      "content": "练习步骤：如果编辑器顶部显示“课程模板”，先不要删除 L01 已有结构；在 TODO 1 处定义 `Driver` 和 `RoadEnvironment` 两个上下文类型；在 `ElectricVehicle` 内补全 `part driver : Driver;` 和 `part environment : RoadEnvironment;`。如果显示“已恢复草稿”，先检查这些对应结构行是否已经存在且拼写正确，必要时点击“重置为课程模板”回到 TODO 起点。运行校验，确认旧结构和新增上下文都存在。"
+    },
+    {
+      "type": "code",
+      "language": "sysml",
+      "sourceFile": "starter.sysml"
+    }
+  ],
+  "workspace": {
+    "files": [
+      {
+        "path": "main.sysml",
+        "source": "starter.sysml",
+        "editable": true
+      }
+    ],
+    "entryFile": "main.sysml"
+  },
+  "tasks": [
+    {
+      "id": "task-01",
+      "type": "model-challenge",
+      "prompt": "在课程模板的 TODO 位置，或在已恢复草稿中的对应结构位置，基于 L01 模型补全 `Driver`、`RoadEnvironment`、`driver : Driver` 和 `environment : RoadEnvironment`，并保持 `battery : BatteryPack` 与 `evPrototype : ElectricVehicle` 不丢失。",
+      "hints": [
+        "Driver 和 RoadEnvironment 可以先作为 part def 建模，因为它们是当前系统上下文中的参与对象。",
+        "不要把 `driver` 和 `environment` 写成新的 part def，它们应是 ElectricVehicle 内部的 part usage。",
+        "如果你认为 Driver 不属于车辆产品本体，也可以把它理解为本课程视图中的上下文对象，而不是 BOM 零件。"
+      ]
+    }
+  ],
+  "codeGuideExplanations": [
+    {
+      "lineIncludes": [
+        "part def BatteryPack"
+      ],
+      "explanation": "这行保留 BatteryPack（电池包类型）。它来自上一课，是 ElectricVehicle 内部 battery 使用的类型来源。"
+    },
+    {
+      "lineIncludes": [
+        "part def Driver"
+      ],
+      "explanation": "这行定义 Driver（驾驶员类型）。本课把它作为系统上下文对象，用来支持后续驾驶行为、人机交互和验证场景讨论。"
+    },
+    {
+      "lineIncludes": [
+        "part def RoadEnvironment"
+      ],
+      "explanation": "这行定义 RoadEnvironment（道路环境类型）。它表示车辆运行场景中的外部环境，不是车辆产品零件。"
+    },
+    {
+      "lineIncludes": [
+        "part def ElectricVehicle"
+      ],
+      "explanation": "这行保留 ElectricVehicle（电动汽车类型）。本课要在它已有 battery 的基础上加入 driver 和 environment 上下文使用。"
+    },
+    {
+      "lineIncludes": [
+        "part battery",
+        "BatteryPack"
+      ],
+      "explanation": "这行保留 battery（电池包使用）。它说明 ElectricVehicle 内部仍然包含一份 BatteryPack 类型的电池包。"
+    },
+    {
+      "lineIncludes": [
+        "part driver",
+        "Driver"
+      ],
+      "explanation": "这行创建 driver（驾驶员上下文使用）。它帮助模型表达驾驶员参与车辆使用场景，不表示驾驶员是车辆零件。"
+    },
+    {
+      "lineIncludes": [
+        "part environment",
+        "RoadEnvironment"
+      ],
+      "explanation": "这行创建 environment（道路环境上下文使用）。它帮助模型表达车辆运行环境，为后续续航工况和验证场景做准备。"
+    },
+    {
+      "lineIncludes": [
+        "part evPrototype",
+        "ElectricVehicle"
+      ],
+      "explanation": "这行保留 evPrototype（样车使用）。它是后续需求、分析和验证会追踪到的具体电动车模型对象。"
+    },
+    {
+      "lineIncludes": [
+        "view def SystemBoundaryView"
+      ],
+      "explanation": "这行定义 SystemBoundaryView（系统边界视图类型）。它用于查看车辆、驾驶员和道路环境之间的上下文边界。"
+    },
+    {
+      "lineIncludes": [
+        "view systemBoundaryView"
+      ],
+      "explanation": "这行创建 systemBoundaryView（具体系统边界视图）。后续 expose 语句决定本课图形视图展示哪些对象。"
+    },
+    {
+      "lineIncludes": [
+        "expose ElectricVehicle"
+      ],
+      "explanation": "这行把 ElectricVehicle（电动汽车类型）放入视图，用来检查本课上下文是否挂在正确结构上。"
+    },
+    {
+      "lineIncludes": [
+        "expose evPrototype"
+      ],
+      "explanation": "这行把 evPrototype（样车使用）放入视图，让学生看到具体样车对象仍然连接到 ElectricVehicle 类型。"
+    },
+    {
+      "lineIncludes": [
+        "expose BatteryPack"
+      ],
+      "explanation": "这行把 BatteryPack（电池包类型）放入视图，保留上一课结构基线的关键部件类型。"
+    }
+  ],
+  "validation": {
+    "strictSysml": true,
+    "rulesFile": "rules.json"
+  },
+  "completion": {
+    "requiresStrictValidation": true,
+    "requiresAllLessonRules": true
+  },
+  "glossaryTerms": [
+    "package",
+    "part def",
+    "part",
+    "model boundary"
+  ]
+}

@@ -1,0 +1,99 @@
+{
+  "id": "course-08-lesson-02",
+  "title": "分析成熟度 2：把计算组织成分析用例",
+  "type": "modeling-lesson",
+  "estimatedMinutes": 50,
+  "timePlan": [
+    { "label": "复用计算基线", "minutes": 8, "description": "读取只读 EstimateRange，不重复定义公式。" },
+    { "label": "建立分析上下文", "minutes": 24, "description": "补齐 subject、objective、输入来源、计算使用和 analysis return。" },
+    { "label": "审查证据角色", "minutes": 18, "description": "确认预测支持决策但不替代道路验证。" }
+  ],
+  "scenario": {
+    "title": "工程场景：公式如何成为项目决策证据",
+    "body": "单个公式还不能回答“针对哪辆车、哪个目标、什么输入、输出供谁使用”。本课复用 L1 只读计算，把 evPrototype、480.0 km 目标和 490.0 km 报告预测放入 RangeEvidenceAnalysis；488.0 km 测量仍保留给 C09。",
+    "visual": {
+      "type": "interactive-flow",
+      "variant": "08-maturity-analysis",
+      "title": "分析用例证据链",
+      "nodes": [
+        { "id": "context", "label": "分析上下文", "detail": "subject + target", "code": "analysis def" },
+        { "id": "reuse", "label": "复用计算", "detail": "绑定车型输入", "code": "calc estimateRange" },
+        { "id": "decision", "label": "决策输出", "detail": "raw result + 490 km report", "code": "objective + return" }
+      ]
+    }
+  },
+  "learningBlocks": [
+    {
+      "type": "image-gallery",
+      "title": "课程导引图",
+      "images": [
+        {
+          "src": "/api/course-assets/assets/course-visuals/generated-lesson-guides/ev-course-08-lesson-02-analysis.svg",
+          "title": "分析用例",
+          "caption": "把计算放进车型、工况和目标上下文。",
+          "alt": "电动汽车分析用例教学图"
+        }
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "工程意图：`analysis def RangeEvidenceAnalysis` 用 subject 指定被分析车型，用 in 参数接收需求目标与报告预测，用 objective 说明分析目标，用 calc usage 复用 L1 公式，用唯一的 analysis return 输出预测证据。rawRangeKm 保留为嵌套 calc 输出，避免违反 case 只能有一个 result 的语义。这里不使用 `assert constraint` 充当需求通过检查。"
+    },
+    {
+      "type": "hint-card",
+      "title": "为什么同时保留 rawRangeKm 与 predictedRangeKm？",
+      "label": "计算值与报告值",
+      "content": "rawRangeKm 是嵌套 calc 的可复核输出；analysis 唯一 return predictedRangeKm 返回项目报告采用的 490.0 km 值。两者都属于分析证据，均不是 488.0 km 道路测量。"
+    },
+    {
+      "type": "hint-card",
+      "title": "analysis objective 和 requirement 有什么关系？",
+      "label": "目标上下文",
+      "content": "requirement 定义系统必须达到的目标；analysis objective 定义本次分析要回答的问题。分析支持需求评审，但不自动证明 satisfy，也不产生测试 verdict。"
+    },
+    {
+      "type": "markdown",
+      "content": "权威依据：官方 `Analysis Case Definition Example.sysml` 使用 subject、objective、场景输入、计算/行为和 return 组织分析证据；其中 assert constraint 用于方程一致性，而不是通用合规判定。"
+    },
+    {
+      "type": "markdown",
+      "content": "练习步骤：在“课程模板”中按 TODO 1-4 完成 objective、calc in 参数绑定、calc return 与唯一 analysis return，再按 TODO 5 完成报告预测输入。具体 analysis usage 的 subject 已预置为首参数。使用“已恢复草稿”时不要复制只读 EstimateRange；需要恢复时点击“重置为课程模板”。"
+    },
+    { "type": "code", "language": "sysml", "sourceFile": "starter.sysml" }
+  ],
+  "workspace": {
+    "files": [
+      { "path": "ev-program-baseline.sysml", "source": "../../../shared/ev-program-baseline.sysml", "editable": false },
+      { "path": "ev-requirement-baseline.sysml", "source": "../../../shared/c07-requirement-baseline.sysml", "editable": false },
+      { "path": "ev-range-calc-baseline.sysml", "source": "../../../shared/c08-range-calc-baseline.sysml", "editable": false },
+      { "path": "main.sysml", "source": "starter.sysml", "editable": true }
+    ],
+    "entryFile": "main.sysml"
+  },
+  "tasks": [
+    {
+      "id": "task-01",
+      "type": "model-challenge",
+      "prompt": "把已验证的续航计算组织成针对 evPrototype 和 480 km 目标的分析用例，并输出可审计的预测证据。",
+      "hints": [
+        "rangeDecisionObjective 比较 reportedPredictionKm 与 targetRangeKm。",
+        "estimateRange 的 in 绑定到 vehicle.battery 和 vehicle.energyPer100Km。",
+        "cityRangeAnalysis 的 subject 已作为首参数绑定 evPrototype。",
+        "reportedPredictionKm 输入来自 evPrototype.reportedPredictionKm。"
+      ]
+    }
+  ],
+  "challenges": [
+    {
+      "id": "winter-scenario",
+      "title": "冬季工况敏感性",
+      "context": "冬季能耗会上升，但课程主线参数不能被偷偷改写。",
+      "task": "复制分析用例并显式增加冬季能耗输入，比较输出差异。",
+      "acceptance": "保留 78/16/480/490 主基线，并把冬季值标成独立场景输入。",
+      "watchOut": "不要把冬季分析结果改名为道路实测或验证 verdict。"
+    }
+  ],
+  "validation": { "strictSysml": true, "rulesFile": "rules.json" },
+  "completion": { "requiresStrictValidation": true, "requiresAllLessonRules": true },
+  "glossaryTerms": ["analysis def", "subject", "objective", "calc usage", "in binding", "analysis return"]
+}

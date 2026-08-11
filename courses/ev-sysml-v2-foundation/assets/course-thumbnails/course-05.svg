@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 236" role="img" aria-labelledby="t d">
+  <title id="t">Course 05 Behavior modeling and function views</title>
+  <desc id="d">Action flow linked to vehicle structure and view exposure.</desc>
+  <rect width="420" height="236" rx="18" fill="#f8fbff"/>
+  <rect x="42" y="46" width="112" height="54" rx="27" fill="#1769aa"/><text x="68" y="79" font-family="Segoe UI,Arial" font-size="16" fill="#fff" font-weight="800">sense</text>
+  <rect x="154" y="91" width="112" height="54" rx="27" fill="#147a4d"/><text x="185" y="124" font-family="Segoe UI,Arial" font-size="16" fill="#fff" font-weight="800">drive</text>
+  <rect x="266" y="136" width="112" height="54" rx="27" fill="#9a5b00"/><text x="292" y="169" font-family="Segoe UI,Arial" font-size="16" fill="#fff" font-weight="800">report</text>
+  <path d="M154 73l34 18M266 118l34 18" stroke="#64748b" stroke-width="4" stroke-linecap="round"/>
+  <rect x="46" y="158" width="128" height="40" rx="8" fill="#fff" stroke="#b9d4ee"/><text x="62" y="183" font-family="Consolas,monospace" font-size="13" fill="#0f172a">perform action</text>
+  <rect x="238" y="42" width="128" height="40" rx="8" fill="#fff" stroke="#b9d4ee"/><text x="273" y="67" font-family="Consolas,monospace" font-size="13" fill="#0f172a">view</text>
+</svg>

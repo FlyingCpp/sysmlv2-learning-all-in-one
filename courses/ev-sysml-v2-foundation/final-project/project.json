@@ -1,0 +1,48 @@
+{
+  "id": "ev-final-project",
+  "title": "简化电动汽车系统综合项目",
+  "summary": "交付一个覆盖结构、接口、行为、状态、需求、分析和验证的 SysML v2 电动汽车模型。",
+  "estimatedMinutes": 90,
+  "workspace": {
+    "files": [
+      {
+        "path": "main.sysml",
+        "source": "starter.sysml",
+        "editable": true
+      }
+    ],
+    "entryFile": "main.sysml"
+  },
+  "tasks": [
+    {
+      "id": "final-structure",
+      "type": "model-challenge",
+      "prompt": "完善 ElectricVehicle 结构，包含电池、逆变器、电机、车轮、热管理和控制器。"
+    },
+    {
+      "id": "final-traceability",
+      "type": "model-challenge",
+      "prompt": "保持 finalRange、fastCharge、hvSafety 到结构和验证活动的 satisfy/verify 追踪。"
+    }
+  ],
+  "validation": {
+    "strictSysml": true,
+    "rulesFile": "rules.json"
+  },
+  "completion": {
+    "requiresStrictValidation": true,
+    "requiresAllLessonRules": true
+  },
+  "glossaryTerms": [
+    "part def",
+    "port def",
+    "interface",
+    "action def",
+    "state def",
+    "requirement def",
+    "analysis def",
+    "verification def",
+    "satisfy",
+    "verify"
+  ]
+}

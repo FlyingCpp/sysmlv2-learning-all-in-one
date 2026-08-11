@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 236" role="img" aria-labelledby="t d">
+  <title id="t">Course 01 SysML v2 overview</title>
+  <desc id="d">Electric vehicle model boundary with first SysML package and traceability line.</desc>
+  <rect width="420" height="236" rx="18" fill="#eef6ff"/>
+  <path d="M0 172c62-25 113-21 166-4 72 22 133 24 214-8v76H0z" fill="#dff0e8"/>
+  <path d="M72 148c19-45 60-64 122-64h70c45 0 79 17 108 54l29 10H49z" fill="#1769aa"/>
+  <path d="M145 92h112c29 0 51 10 71 33H107c12-16 25-27 38-33z" fill="#d9efff"/>
+  <circle cx="128" cy="150" r="28" fill="#12233a"/><circle cx="337" cy="150" r="28" fill="#12233a"/>
+  <rect x="31" y="32" width="135" height="58" rx="12" fill="#fff" stroke="#b9d4ee"/>
+  <text x="48" y="56" font-family="Segoe UI,Arial" font-size="13" fill="#64748b" font-weight="700">PACKAGE</text>
+  <text x="48" y="77" font-family="Segoe UI,Arial" font-size="17" fill="#0f172a" font-weight="800">EV model</text>
+  <path d="M166 61h68" stroke="#1769aa" stroke-width="3"/>
+  <rect x="234" y="31" width="145" height="60" rx="12" fill="#fff" stroke="#b8dfc8"/>
+  <text x="251" y="56" font-family="Segoe UI,Arial" font-size="13" fill="#64748b" font-weight="700">FIRST TRACE</text>
+  <text x="251" y="78" font-family="Segoe UI,Arial" font-size="17" fill="#0f172a" font-weight="800">satisfy</text>
+</svg>

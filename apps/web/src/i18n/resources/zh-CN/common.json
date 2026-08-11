@@ -1,0 +1,9 @@
+{
+  "states": {
+    "loading": "正在加载"
+  },
+  "errors": {
+    "loadFailed": "加载失败",
+    "requestFailed": "请求失败"
+  }
+}

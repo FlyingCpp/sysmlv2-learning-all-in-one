@@ -1,0 +1,16 @@
+.git/
+node_modules/
+apps/web/dist/
+apps/teacher/dist/
+apps/validator/official/classes/
+.env
+.env.*
+!.env.example
+data/
+.cache/
+.tmp/
+artifacts/
+outputs/
+backups/
+npm-debug.log*
+.DS_Store

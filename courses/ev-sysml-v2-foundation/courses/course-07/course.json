@@ -1,0 +1,251 @@
+{
+  "id": "course-07",
+  "order": 7,
+  "title": "需求证据成熟度：契约、谱系与责任",
+  "summary": "围绕同一辆 78 kWh 试点样车，按三步成熟需求：L1 建立可计算、可分责、可验收的需求契约；L2 用 RequirementDerivation 维护来源与派生谱系；L3 区分 assume 前提与 require 系统责任，并形成 V&V 入口。",
+  "thumbnail": {
+    "src": "/api/course-assets/assets/course-thumbnails/course-07.svg",
+    "alt": "Course 07 需求定义分解和追踪缩略图"
+  },
+  "objectives": [
+    "用 doc、subject、attribute 和命名 require constraint 建立可验收需求契约",
+    "区分 subject 描述对象、satisfy 设计责任和 verification 证明活动",
+    "用 #derivation connection、#original 与 #derive 维护需求来源和分解谱系",
+    "区分 assume constraint 的适用边界与 require constraint 的系统责任",
+    "复用稳定需求基线，为 C08 分析与 C09 验证提供同一追踪源"
+  ],
+  "concepts": [
+    "requirement def",
+    "requirement",
+    "doc",
+    "subject",
+    "attribute",
+    "attribute :>>",
+    "require constraint",
+    "assume constraint",
+    "#derivation connection",
+    "satisfy",
+    "verify",
+    "view",
+    "expose"
+  ],
+  "lessons": [
+    "lesson-01/lesson.json",
+    "lesson-02/lesson.json",
+    "lesson-03/lesson.json"
+  ],
+  "references": [
+    {
+      "type": "standard",
+      "source": "OMG SysML v2.0 Language Specification",
+      "title": "Requirements 标准章节",
+      "section": "Clause 7.21 Requirements; Clause 8.2.2.21 Requirements Textual Notation; Clause 8.4.17 Requirements Semantics",
+      "url": "https://www.omg.org/spec/SysML/2.0/Language/PDF",
+      "note": "支撑 requirement def、requirement、subject、require constraint、satisfy 和 requirement objective 的标准语义。"
+    },
+    {
+      "type": "example",
+      "source": "Systems-Modeling/SysML-v2-Release",
+      "title": "Official Requirements Training Examples",
+      "section": "sysml/src/training/32. Requirements / Requirement Definitions, Requirement Usages, Requirement Satisfaction, Requirement Groups",
+      "url": "https://github.com/Systems-Modeling/SysML-v2-Release/tree/master/sysml/src/training/32.%20Requirements",
+      "note": "官方示例展示 doc、subject、attribute、require/assume constraint、requirement group 和 satisfy 的写法。"
+    },
+    {
+      "type": "example",
+      "source": "Systems-Modeling/SysML-v2-Release",
+      "title": "Official Requirement Derivation Examples",
+      "section": "sysml/src/examples/Requirements Examples / RequirementDerivationExample.sysml, VehicleRequirementDerivation.sysml",
+      "url": "https://github.com/Systems-Modeling/SysML-v2-Release/tree/master/sysml/src/examples/Requirements%20Examples",
+      "note": "官方示例使用 private import RequirementDerivation::* 和 #derivation connection 表达需求派生。"
+    },
+    {
+      "type": "example",
+      "source": "Systems-Modeling/SysML-v2-Release",
+      "title": "Official Vehicle Example",
+      "section": "Vehicle Example / SysML v2 Spec Annex A SimpleVehicleModel.sysml requirement packages",
+      "url": "https://github.com/Systems-Modeling/SysML-v2-Release/tree/master/sysml/src/examples/Vehicle%20Example",
+      "note": "对照车辆模型中整车、发动机、质量需求和派生关系如何连接。"
+    }
+  ],
+  "codeGuideExplanations": [
+    {
+      "id": "c07-requirement-def",
+      "lineStartsWith": "requirement def",
+      "explanation": "这行定义需求类型。好的 requirement def 不应只是空壳名称，而应包含 doc、subject、参数和判据，让需求可读、可分配、可分析、可验证。"
+    },
+    {
+      "id": "c07-doc",
+      "lineStartsWith": "doc",
+      "explanation": "这行写需求正文。doc 用自然语言说明工程目标、约束条件和验证背景，是需求区别于普通模型元素的核心内容。"
+    },
+    {
+      "id": "c07-subject",
+      "lineStartsWith": "subject",
+      "explanation": "这行声明需求、分析或验证针对的对象。subject 回答“需求约束谁”，不同于 satisfy 回答“哪个设计元素承担满足责任”。"
+    },
+    {
+      "id": "c07-attribute",
+      "lineStartsWith": "attribute ",
+      "explanation": "这行定义需求参数，例如最小续航、最小电池能量、最大快充时间。参数让需求从一句话变成可配置、可追踪的模型对象。"
+    },
+    {
+      "id": "c07-attribute-redefine",
+      "lineStartsWith": "attribute :>>",
+      "explanation": "这行在具体 requirement usage 中重定义需求参数值。它把通用需求模板变成某个车型或场景下的具体指标。"
+    },
+    {
+      "id": "c07-require-constraint",
+      "lineStartsWith": "require constraint",
+      "explanation": "这行表达必须满足的验收判据。它不是求解器本身，而是把“怎样才算满足需求”的逻辑放入标准模型。"
+    },
+    {
+      "id": "c07-assume-constraint",
+      "lineStartsWith": "assume constraint",
+      "explanation": "这行表达需求成立时的前提假设，例如测试温度、SOC 区间或工况边界。assume 与 require 分开，避免把环境假设误写成系统责任。"
+    },
+    {
+      "id": "c07-derivation",
+      "lineStartsWith": "#derivation connection",
+      "explanation": "这行使用官方 RequirementDerivation library 表达需求派生。它把整车需求和系统/部件需求连成来源清楚的追踪链。"
+    },
+    {
+      "id": "c07-original",
+      "lineStartsWith": "end #original",
+      "explanation": "这行标出派生关系的来源需求，例如 cityRange 是整车层目标。"
+    },
+    {
+      "id": "c07-derive",
+      "lineStartsWith": "end #derive",
+      "explanation": "这行标出从来源需求派生出的下级需求，例如电池能量需求或整车能耗需求。"
+    },
+    {
+      "id": "c07-satisfy",
+      "lineStartsWith": "satisfy",
+      "explanation": "这行说明哪个结构、接口、行为或状态相关模型元素承担满足需求的设计责任。satisfy 不是验证通过证明，验证会在 C09 用 verify 建立。"
+    },
+    {
+      "id": "c07-verify",
+      "lineStartsWith": "verify",
+      "explanation": "这行出现在验证活动 objective 中，说明验证用例要证明哪条需求。C07 只做入口预览，C09 会系统展开。"
+    },
+    {
+      "id": "c07-view",
+      "lineStartsWith": "view ",
+      "explanation": "这行创建需求评审视图。view 不复制需求或结构，只选择要一起审查的模型元素。"
+    },
+    {
+      "id": "c07-expose",
+      "lineStartsWith": "expose",
+      "explanation": "这行把已有模型元素纳入当前 view，帮助评审者同时看到需求、结构、行为、状态和验证入口。"
+    }
+  ],
+  "conceptExplanations": [
+    {
+      "id": "RequirementDefinition",
+      "term": "RequirementDefinition",
+      "aliases": [
+        "requirement def"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass RequirementDefinition",
+      "standardEnglish": "A RequirementDefinition is a ConstraintDefinition that defines a requirement used in the context of a specification as a constraint that a valid solution must satisfy. The specification is relative to a specified subject, possibly in collaboration with one or more external actors.",
+      "chineseTranslation": "RequirementDefinition 是 ConstraintDefinition 的一种，用于定义规范上下文中的一类需求；有效方案必须满足该需求，且需求相对于某个 subject 和可能的外部参与者成立。",
+      "explanation": "它是需求模板。工程上不能只写一个名字，还要写清需求正文、约束对象、目标参数和判据。",
+      "engineeringExample": "requirement def RangeRequirement { doc /* 城市工况续航应不低于 minRangeKm */ subject vehicle : ElectricVehicle; attribute minRangeKm : ScalarValues::Real; require constraint { vehicle.estimatedRangeKm >= minRangeKm } }"
+    },
+    {
+      "id": "RequirementUsage",
+      "term": "RequirementUsage",
+      "aliases": [
+        "requirement"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass RequirementUsage",
+      "standardEnglish": "A RequirementUsage is a Usage of a RequirementDefinition.",
+      "chineseTranslation": "RequirementUsage 是 RequirementDefinition 的一次使用。",
+      "explanation": "它是某个车型、版本或场景下的具体需求，可用 attribute :>> 给需求参数赋值。",
+      "engineeringExample": "requirement cityRange : RangeRequirement { attribute :>> minRangeKm = 480.0; } 表示当前车型的城市续航目标。"
+    },
+    {
+      "id": "Documentation",
+      "term": "Documentation",
+      "aliases": [
+        "doc"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass Documentation",
+      "standardEnglish": "Documentation is a Comment that specifically documents a documentedElement, which must be its owner.",
+      "chineseTranslation": "Documentation 是一种 Comment，专门用于记录其拥有者元素的说明文本。",
+      "explanation": "需求首先是可沟通的工程陈述。doc 把自然语言需求正文和模型元素绑定在一起，避免需求只剩一个缩写名称。",
+      "engineeringExample": "doc /* DC 快充从 10% 到 80% SOC 的时间应不超过 maxChargeMinutes。 */"
+    },
+    {
+      "id": "SubjectMembership",
+      "term": "SubjectMembership",
+      "aliases": [
+        "subject"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass SubjectMembership",
+      "standardEnglish": "A SubjectMembership is a ParameterMembership that indicates that its ownedSubjectParameter is the subject of its owningType. The owningType of a SubjectMembership must be a RequirementDefinition, RequirementUsage, CaseDefinition, or CaseUsage.",
+      "chineseTranslation": "SubjectMembership 是一种 ParameterMembership，用于指出所属 Requirement 或 Case 的 subject 参数。",
+      "explanation": "subject 说明需求约束哪个对象。它不是 satisfy；satisfy 是设计责任关系，subject 是需求陈述本身的语义对象。",
+      "engineeringExample": "subject vehicle : ElectricVehicle 表示续航需求描述的是 ElectricVehicle 的能力。"
+    },
+    {
+      "id": "RequirementConstraintMembership",
+      "term": "RequirementConstraintMembership",
+      "aliases": [
+        "require constraint",
+        "assume constraint"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass RequirementConstraintMembership",
+      "standardEnglish": "A RequirementConstraintMembership is a FeatureMembership for an assumed or required ConstraintUsage of a RequirementDefinition or RequirementUsage.",
+      "chineseTranslation": "RequirementConstraintMembership 是 RequirementDefinition 或 RequirementUsage 中 assume/require constraint usage 的成员关系。",
+      "explanation": "它把验收判据和前提假设放入需求结构。工程上要把“系统必须满足什么”和“在什么假设下判断”分清楚。",
+      "engineeringExample": "assume constraint { testAmbientTempC >= 18.0 } 是测试边界；require constraint { vehicle.estimatedRangeKm >= minRangeKm } 是系统责任。"
+    },
+    {
+      "id": "SatisfyRequirementUsage",
+      "term": "SatisfyRequirementUsage",
+      "aliases": [
+        "satisfy"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass SatisfyRequirementUsage",
+      "standardEnglish": "A SatisfyRequirementUsage is an AssertConstraintUsage that asserts, by default, that a satisfied RequirementUsage is true for a specific satisfyingFeature, or, if isNegated = true, that the RequirementUsage is false. The satisfied RequirementUsage is related to the SatisfyRequirementUsage by a ReferenceSubsetting Relationship.",
+      "chineseTranslation": "SatisfyRequirementUsage 是一种 AssertConstraintUsage，默认断言某个 satisfyingFeature 使被满足的 RequirementUsage 为真。",
+      "explanation": "satisfy 是需求分配和设计责任关系，不等价于测试已通过。后续 C09 还需要 verify 证明这条需求。",
+      "engineeringExample": "satisfy usableBatteryEnergy by evPrototype.battery 表示共享样车的电池包承担电池能量需求。"
+    },
+    {
+      "id": "RequirementVerificationMembership",
+      "term": "RequirementVerificationMembership",
+      "aliases": [
+        "verify"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass RequirementVerificationMembership",
+      "standardEnglish": "A RequirementVerificationMembership is a RequirementConstraintMembership used in the objective of a VerificationCase to identify a RequirementUsage that is verified by the VerificationCase.",
+      "chineseTranslation": "RequirementVerificationMembership 是 VerificationCase 的 objective 中用于识别被验证 RequirementUsage 的需求约束成员关系。",
+      "explanation": "verify 把需求和验证活动连接起来。C07 只让学生知道验证入口，C09 会展开验证用例、证据和闭环。",
+      "engineeringExample": "verification def RequirementReviewCase { subject reviewVehicle : ElectricVehicle; objective { verify fastChargeTime; } } verification chargeSafetyReview : RequirementReviewCase { subject reviewVehicle :> chargeVehicle; }"
+    },
+    {
+      "id": "Dependency",
+      "term": "Dependency",
+      "aliases": [
+        "traceability",
+        "derivation"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore and SysML v2 RequirementDerivation library examples",
+      "section": "SysML metamodel EClass Dependency; official Requirements Examples / RequirementDerivationExample.sysml",
+      "standardEnglish": "A Dependency is a Relationship that indicates that at least one Element requires at least one other Element for its specification or implementation.",
+      "chineseTranslation": "Dependency 是一种 Relationship，表示至少一个元素在规范或实现上依赖至少一个其他元素。",
+      "explanation": "需求派生是一类追踪关系。官方文本示例中通过 RequirementDerivation library 的 #derivation connection 标出 original 和 derive 端点。",
+      "engineeringExample": "#derivation connection { end #original ::> cityRange; end #derive ::> batteryEnergyReq; } 表示电池能量需求来源于整车续航需求。"
+    }
+  ]
+}

@@ -1,0 +1,185 @@
+{
+  "id": "course-09",
+  "order": 9,
+  "title": "验证证据成熟度：策划、执行与异常闭环",
+  "summary": "复用 C07 需求与 C08 预测基线，按三步成熟验证证据：L1 建立需求覆盖、对象和方法计划；L2 用 collect/process/evaluate 处理 488 km 独立道路观测；L3 用 inspection 与 demonstration 验证高压安全并保留 inconclusive/error 语义。",
+  "thumbnail": {
+    "src": "/api/course-assets/assets/course-thumbnails/course-09.svg",
+    "alt": "Course 09 验证案例证据和追踪闭环缩略图"
+  },
+  "objectives": [
+    "用 verification subject、objective 和 verify 建立需求覆盖计划",
+    "用 VerificationMethod 记录 test、analyze、inspect 与 demo 方法",
+    "用 collectData、processData、evaluateData 和 return 建立可审计执行链",
+    "严格区分 490.0 km prediction 与 488.0 km measurement，PassIf 只使用观测证据",
+    "正确使用 pass、fail、inconclusive、error，并让多方法结果分别可追踪"
+  ],
+  "concepts": [
+    "verification def",
+    "verification",
+    "subject",
+    "objective",
+    "verify",
+    "return",
+    "VerdictKind",
+    "PassIf",
+    "VerificationMethod",
+    "collectData",
+    "processData",
+    "evaluateData",
+    "inconclusive",
+    "error",
+    "satisfy",
+    "analysis evidence",
+    "traceability"
+  ],
+  "lessons": [
+    "lesson-01/lesson.json",
+    "lesson-02/lesson.json",
+    "lesson-03/lesson.json"
+  ],
+  "references": [
+    {
+      "type": "standard",
+      "source": "OMG SysML v2.0 Language Specification",
+      "title": "Verification Cases 标准章节",
+      "section": "Clause 7.24 Verification Cases; Clause 8.2.2.24 Verification Cases Textual Notation; Clause 8.4.20 Verification Cases Semantics; Clause 7.21 Requirements",
+      "url": "https://www.omg.org/spec/SysML/2.0/Language/PDF",
+      "note": "支撑 verification def、verification usage、subject、objective、verify 和返回判定的标准语义。"
+    },
+    {
+      "type": "example",
+      "source": "Systems-Modeling/SysML-v2-Release",
+      "title": "Official Verification Training Examples",
+      "section": "sysml/src/training/34. Verification / Verification Case Definition Example, Verification Case Usage Example",
+      "url": "https://github.com/Systems-Modeling/SysML-v2-Release/tree/master/sysml/src/training/34.%20Verification",
+      "note": "官方示例展示 verification def 中的 subject、objective、verify、动作步骤和 return verdict。"
+    },
+    {
+      "type": "example",
+      "source": "Systems-Modeling/SysML-v2-Release",
+      "title": "Official Verification Simple Test",
+      "section": "sysml/src/examples/Simple Tests/VerificationTest.sysml",
+      "url": "https://github.com/Systems-Modeling/SysML-v2-Release/blob/master/sysml/src/examples/Simple%20Tests/VerificationTest.sysml",
+      "note": "可对照 verification case 如何嵌套 objective 并 verify requirement。"
+    }
+  ],
+  "codeGuideExplanations": [
+    {
+      "id": "c09-verification-def",
+      "lineStartsWith": "verification def",
+      "explanation": "这行定义验证案例类型。一个有教学价值的 verification def 不应只是空壳，应包含 doc、subject、objective、输入参数和 return 判定。"
+    },
+    {
+      "id": "c09-verification",
+      "lineStartsWith": "verification ",
+      "explanation": "这行创建一次具体验证活动，把验证案例应用到某个样车、电池包或高压系统，并绑定测试输入或分析证据。"
+    },
+    {
+      "id": "c09-objective",
+      "lineStartsWith": "objective",
+      "explanation": "这行声明验证目标。objective 内的 verify 指向需求，说明这次验证活动要证明哪条需求。"
+    },
+    {
+      "id": "c09-verify",
+      "lineStartsWith": "verify",
+      "explanation": "这行把验证活动和需求连接起来。verify 是证明活动，不是设计满足关系；设计责任仍由 satisfy 表达。"
+    },
+    {
+      "id": "c09-subject",
+      "lineStartsWith": "subject",
+      "explanation": "这行声明被测对象。verification 的 subject 通常是样车、被测电池包或被检查高压系统。"
+    },
+    {
+      "id": "c09-return",
+      "lineStartsWith": "return",
+      "explanation": "这行给验证案例返回标准判定结果。课程使用 VerificationCases 库里的 VerdictKind 和 PassIf(...) 表达 pass/fail，而不是把普通 Boolean 当作验证结论。"
+    },
+    {
+      "id": "c09-satisfy",
+      "lineStartsWith": "satisfy",
+      "explanation": "这行保留 C07 的设计责任链。C09 需要同时看到 satisfy 和 verify，才能判断需求既有承担者也有证明活动。"
+    }
+  ],
+  "conceptExplanations": [
+    {
+      "id": "VerificationCaseDefinition",
+      "term": "VerificationCaseDefinition",
+      "aliases": [
+        "verification def"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass VerificationCaseDefinition",
+      "standardEnglish": "A VerificationCaseDefinition is a CaseDefinition for the purpose of verification of the subject of the case against its requirements.",
+      "chineseTranslation": "VerificationCaseDefinition 是一种 CaseDefinition，用于针对需求验证某个 case 的 subject。",
+      "explanation": "它是验证方法模板。工程上应写清被测对象、验证目标、测试或检查参数，以及如何用 VerdictKind 给出通过、失败、无法判定或错误等验证结论。",
+      "engineeringExample": "verification def RangeRoadTest { private import VerificationCases::*; subject testVehicle : ElectricVehicle; objective { verify highwayRange; } return verdict : VerdictKind = PassIf(measuredRangeKm >= requiredRangeKm); }"
+    },
+    {
+      "id": "VerificationCaseUsage",
+      "term": "VerificationCaseUsage",
+      "aliases": [
+        "verification"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass VerificationCaseUsage",
+      "standardEnglish": "A VerificationCaseUsage is a Usage of a VerificationCaseDefinition.",
+      "chineseTranslation": "VerificationCaseUsage 是 VerificationCaseDefinition 的一次使用。",
+      "explanation": "它表示某次具体验证活动，例如某台样车的道路续航测试或某个高压系统的绝缘检查。具体验证 usage 应绑定被测对象、需求阈值、分析预测和独立测试或检查观测值。",
+      "engineeringExample": "verification rangeVerification : RangeRoadTest { subject testVehicle = evHighwayVehicle; attribute predictedRangeKm = highwayRangeAnalysis.predictedRangeKm; attribute measuredRangeKm = evHighwayVehicle.roadTestRangeKm; }"
+    },
+    {
+      "id": "RequirementVerificationMembership",
+      "term": "RequirementVerificationMembership",
+      "aliases": [
+        "verify"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass RequirementVerificationMembership",
+      "standardEnglish": "A RequirementVerificationMembership is a RequirementConstraintMembership used in the objective of a VerificationCase to identify a RequirementUsage that is verified by the VerificationCase.",
+      "chineseTranslation": "RequirementVerificationMembership 是 VerificationCase 的 objective 中用于识别被验证 RequirementUsage 的需求约束成员关系。",
+      "explanation": "verify 指出验证活动要证明哪条需求。它不替代 satisfy，也不代表分析已经完成。"
+    },
+    {
+      "id": "SubjectMembership",
+      "term": "SubjectMembership",
+      "aliases": [
+        "subject"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass SubjectMembership",
+      "standardEnglish": "A SubjectMembership is a ParameterMembership that indicates that its ownedSubjectParameter is the subject of its owningType.",
+      "chineseTranslation": "SubjectMembership 是一种 ParameterMembership，用于指出所属类型的 subject 参数。",
+      "explanation": "在 verification 中，subject 是被测或被检查对象；在 requirement 中，subject 是需求约束对象；在 analysis 中，subject 是被分析对象。"
+    },
+    {
+      "id": "VerdictKind",
+      "term": "VerdictKind",
+      "aliases": [
+        "pass",
+        "fail",
+        "inconclusive",
+        "error"
+      ],
+      "source": "SysML v2 Systems Library / VerificationCases.sysml",
+      "section": "standard library package VerificationCases / enum def VerdictKind",
+      "standardEnglish": "VerdictKind is an enumeration of the possible results of a VerificationCase.",
+      "chineseTranslation": "VerdictKind 是 VerificationCase 可能结果的枚举。",
+      "explanation": "课程用 VerdictKind 表达验证结论，避免把普通 Boolean 和正式验证结论混在一起。工程评审时，fail、inconclusive 和 error 都比简单 true/false 更有诊断价值。",
+      "engineeringExample": "return verdict : VerdictKind = PassIf(measuredRangeKm >= requiredRangeKm);"
+    },
+    {
+      "id": "PassIf",
+      "term": "PassIf",
+      "aliases": [
+        "VerificationCases::PassIf"
+      ],
+      "source": "SysML v2 Systems Library / VerificationCases.sysml",
+      "section": "standard library package VerificationCases / calc def PassIf",
+      "standardEnglish": "PassIf returns a pass or fail VerdictKind depending on whether its argument is true or false.",
+      "chineseTranslation": "PassIf 根据输入条件是真还是假，返回 pass 或 fail VerdictKind。",
+      "explanation": "PassIf 把布尔判据转换成验证判定。模型仍然需要清楚说明判据中的 required、predicted、measured 或 observed 值分别来自哪里。",
+      "engineeringExample": "PassIf(observedMinutes <= allowedMinutes) 用于把快充实测时间是否不超过目标时间转换成验证结论。"
+    }
+  ]
+}

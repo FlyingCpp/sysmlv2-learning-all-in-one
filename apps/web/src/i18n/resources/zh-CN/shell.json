@@ -1,0 +1,44 @@
+{
+  "document": {
+    "title": "复杂系统建模实验室"
+  },
+  "brand": {
+    "name": "复杂系统建模实验室",
+    "tagline": "开放的 MBSE 工程教学环境",
+    "homeAria": "返回平台导览",
+    "loginAria": "返回登录页"
+  },
+  "navigation": {
+    "ariaLabel": "主导航",
+    "guide": "导览",
+    "knowledge": "知识",
+    "modeling": "建模",
+    "courses": "课程",
+    "glossary": "术语",
+    "apps": "应用",
+    "admin": "管理"
+  },
+  "account": {
+    "logoutAria": "退出登录",
+    "login": "登录进入平台"
+  },
+  "language": {
+    "label": "界面语言",
+    "zhCN": "中文（简体）",
+    "enUS": "English",
+    "changing": "正在切换语言",
+    "changeFailed": "语言切换失败，已恢复原语言。",
+    "persistenceFailed": "本次已切换，但无法在刷新后保留。"
+  },
+  "routes": {
+    "notFoundEyebrow": "兼容路由",
+    "notFoundTitle": "页面未找到",
+    "notFoundDescription": "当前地址没有对应页面。请从课程、建模试验台或管理后台入口继续。",
+    "adminEyebrow": "后台能力",
+    "auditTitle": "审计日志占位",
+    "auditDescription": "审计日志正在规划中，当前请先使用账号运营和课程包管理入口。"
+  },
+  "phase0": {
+    "gatesAria": "Phase 0 检查项"
+  }
+}

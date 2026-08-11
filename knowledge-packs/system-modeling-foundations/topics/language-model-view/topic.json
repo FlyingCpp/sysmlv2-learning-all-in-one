@@ -1,0 +1,1 @@
+{"id":"language-model-view","title":"语言、模型与视图分别是什么？","summary":"语言规定表达规则，模型保存语义，视图为关注点组织呈现。","order":1,"estimatedMinutes":10,"previousTopicId":"traceability-and-evidence","nextTopicId":"definitions-and-usages","blocks":[{"id":"content","type":"markdown","source":"topics/language-model-view/content.md"},{"id":"refs","type":"references","referenceIds":["omg-sysml-v2"]}]}

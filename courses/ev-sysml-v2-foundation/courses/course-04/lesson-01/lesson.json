@@ -1,0 +1,183 @@
+{
+  "id": "course-04-lesson-01",
+  "title": "从零件边界到功率接口契约",
+  "type": "modeling-lesson",
+  "estimatedMinutes": 30,
+  "scenario": {
+    "title": "工程场景",
+    "body": "电池包和逆变器已经出现在 Course03 的产品结构中，但接口评审不能只看“两个部件相邻”。本课要说明电池包通过 `dcOut` 端口向逆变器 `dcIn` 端口交换 `ElectricalPower`，并用 `BatteryToInverter` 定义这类功率接口契约。",
+    "visual": {
+      "type": "interactive-flow",
+      "variant": "04-power-contract",
+      "title": "功率接口建模链条",
+      "caption": "从交换对象开始，逐步把端口类型、部件边界和接口契约串成可审查模型。",
+      "nodes": [
+        {
+          "id": "flow-object",
+          "icon": "1",
+          "label": "交换对象",
+          "detail": "ElectricalPower 是跨部件传递的对象类型，不是 BatteryPack 或 Inverter 的组成零件。",
+          "code": "item def ElectricalPower"
+        },
+        {
+          "id": "port-type",
+          "icon": "2",
+          "label": "端口类型",
+          "detail": "PowerPort 用 ref item 声明通过端口可交换 power，强调端口引用流项而不拥有流项。",
+          "code": "ref item power"
+        },
+        {
+          "id": "part-boundary",
+          "icon": "3",
+          "label": "部件边界",
+          "detail": "dcOut 和 dcIn 把同一类 PowerPort 分别放到电池包和逆变器边界上。",
+          "code": "port dcOut"
+        },
+        {
+          "id": "interface-contract",
+          "icon": "4",
+          "label": "接口契约",
+          "detail": "BatteryToInverter 用 end 和 flow 定义任意两端 PowerPort 之间应如何交换功率。",
+          "code": "interface def BatteryToInverter"
+        }
+      ]
+    }
+  },
+  "learningBlocks": [
+    {
+      "type": "image-gallery",
+      "title": "课程导引图",
+      "content": "本图按当前 lesson 的工程任务和模型主题生成，用于先理解课程场景，再进入 SysML v2 建模练习。",
+      "generatedBy": "scripts/generate-course-lesson-illustrations.js",
+      "images": [
+        {
+          "src": "/api/course-assets/assets/course-visuals/generated-lesson-guides/ev-course-04-lesson-01-port.svg",
+          "title": "C04.L01 从零件边界到功率接口契约",
+          "caption": "围绕 端口/Ports / 接口/Interface / 流向/Flow 组织汽车工程语境，把本课对象放进可追踪的 SysML v2 模型。",
+          "alt": "电动汽车 SysML v2 建模课程导引图：从零件边界到功率接口契约"
+        }
+      ]
+    },
+    {
+      "type": "concept-map",
+      "title": "L01 新概念工程类比",
+      "intro": "先把新术语映射到汽车研发熟悉的问题，再读下面代码。这里的表格是学习引导，标准语义仍以后续 SysML v2 代码和官方 validator 为准。",
+      "items": [
+        {
+          "engineeringQuestion": "跨部件边界到底交换什么？",
+          "concept": "`item def`",
+          "analogy": "把 ElectricalPower 当成高压接口上交换的功率对象类型。",
+          "code": "item def ElectricalPower",
+          "watchOut": "它不是电池包内部零件，不要建成 `part`。"
+        },
+        {
+          "engineeringQuestion": "端口允许交换哪类对象？",
+          "concept": "`port def` + `ref item`",
+          "analogy": "像定义一种高压插头规格，说明这个端口可引用并交换 power。",
+          "code": "port def PowerPort",
+          "watchOut": "`ref item` 是引用可交换对象，不是拥有一个流项。"
+        },
+        {
+          "engineeringQuestion": "具体零件边界上有哪些连接点？",
+          "concept": "`port` usage",
+          "analogy": "BatteryPack 上有 `dcOut`，Inverter 上有 `dcIn`。",
+          "code": "port dcOut : PowerPort",
+          "watchOut": "Out/In 是工程命名约定，不是 SysML v2 强制方向语法。"
+        },
+        {
+          "engineeringQuestion": "两端端口之间的契约是什么？",
+          "concept": "`interface def` / `end` / `flow`",
+          "analogy": "接口规范规定两端都必须是 PowerPort，并说明 power 从 source 到 target。",
+          "code": "interface def BatteryToInverter",
+          "watchOut": "`source` / `target` 是端点名，不是必须固定使用的保留名。"
+        }
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "视图定位：本课构建的是接口/互连视图内容。结构视图回答有哪些部件，接口视图回答这些部件边界上交换什么；Course05 的行为视图会进一步回答这些接口连上之后发生什么过程。"
+    },
+    {
+      "type": "markdown",
+      "content": "工程意图：Course03 的产品结构回答“整车由哪些部件组成”，Course04 开始回答“这些部件之间交换什么”。接口建模的核心链条是 `item def` -> `port def/ref item` -> `port usage` -> `interface def/end/flow`。"
+    },
+    {
+      "type": "hint-card",
+      "title": "ref item 是在端口里组成一个 item 吗？",
+      "label": "点击展开关键概念说明",
+      "content": "`ref item power : ElectricalPower` 不是在端口里组成一个 ElectricalPower 零件，而是在端口类型上声明“可以通过这个端口引用并交换 ElectricalPower”。这符合端口的非组合语义，也避免把流项错误建成部件结构。"
+    },
+    {
+      "type": "markdown",
+      "content": "语法读法：`port dcOut : PowerPort;` 中，`port` 是标准关键字，`dcOut` 是建模者给电池包端口取的名称，`PowerPort` 是端口类型。`dcOut` / `dcIn` 里的 Out/In 是为了让工程师一眼看出方向的命名约定，不是 SysML v2 对端口名称的强制后缀。"
+    },
+    {
+      "type": "markdown",
+      "content": "读模要点：`interface def BatteryToInverter` 里的 `end source : PowerPort` 和 `end target : PowerPort` 是端点类型约束，不是具体的电池或逆变器；`source`、`target` 是本接口中选用的端点名称。`flow source.power to target.power` 才说明功率从哪一端流向哪一端。"
+    },
+    {
+      "type": "hint-card",
+      "title": "source / target 是固定保留名称吗？",
+      "label": "点击查看课程命名和检查要求",
+      "content": "`end` 是接口/连接中声明端点的标准用法；`source` 和 `target` 不是必须使用的保留名称。也可以写成 `end batterySide : PowerPort; end inverterSide : PowerPort; flow batterySide.power to inverterSide.power;`，只要 flow 使用的端点名和前面的 end 声明一致。课程采用 source/target，是为了在入门阶段把流向读得更直接。"
+    },
+    {
+      "type": "markdown",
+      "content": "练习步骤：如果编辑器顶部显示“课程模板”，在 TODO 1 为 PowerPort 补 `ref item`，说明它引用 ElectricalPower；在 TODO 2/3 给 BatteryPack 与 Inverter 补 `dcOut`、`dcIn` 的 port usage；在 TODO 4 用 `flow` 表达 source.power 到 target.power 的功率流向。如果显示“已恢复草稿”，请检查这些语句是否已经位于对应结构位置；需要重新练习时点击“重置为课程模板”。"
+    },
+    {
+      "type": "code",
+      "language": "sysml",
+      "sourceFile": "starter.sysml"
+    }
+  ],
+  "workspace": {
+    "files": [
+      {
+        "path": "main.sysml",
+        "source": "starter.sysml",
+        "editable": true
+      }
+    ],
+    "entryFile": "main.sysml"
+  },
+  "tasks": [
+    {
+      "id": "task-01",
+      "type": "model-challenge",
+      "prompt": "在课程模板的 TODO 位置，或在已恢复草稿中的对应结构位置，完成高压功率接口契约：PowerPort 必须引用 ElectricalPower，BatteryPack 和 Inverter 必须拥有正确端口，BatteryToInverter 必须说明功率流向。",
+      "hints": [
+        "`ref item` 用于端口可交换对象，不要改成 `part` 或拥有型 `item`。",
+        "`end source : PowerPort` 只是接口端点类型约束，不直接代表 battery.dcOut。",
+        "`source` / `target` 是端点名，不是必须写死的保留字；如果改名，flow 中也要同步改成对应端点名。",
+        "本课先定义可复用接口契约；下一课会区分不同工程流项，最后一课再绑定具体端口。"
+      ]
+    }
+  ],
+  "challenges": [
+    {
+      "id": "c04-l01-charger-interface",
+      "title": "把功率接口迁移到充电场景",
+      "context": "主线通过后，假设项目新增 `Charger` 外部充电设备，需要把功率从 charger 送入 BatteryPack。",
+      "task": "在不破坏主线答案的草稿副本中，尝试定义 `Charger`、`charger.dcOut` 和 `battery.dcIn`，并写出一个新的充电功率接口使用。端点名可以不用 source/target，但 flow 中必须和 end 名保持一致。",
+      "acceptance": "你能说明 `ElectricalPower`、`PowerPort` 和 `interface def` 复用不变，变化的是具体端口 usage 和 interface usage。",
+      "watchOut": "不要把 `Charger` 建成 item，也不要把 TorqueCommand 接到 PowerPort。"
+    }
+  ],
+  "validation": {
+    "strictSysml": true,
+    "rulesFile": "rules.json"
+  },
+  "completion": {
+    "requiresStrictValidation": true,
+    "requiresAllLessonRules": true
+  },
+  "glossaryTerms": [
+    "item def",
+    "ref",
+    "port def",
+    "port",
+    "interface def",
+    "flow"
+  ]
+}

@@ -1,0 +1,89 @@
+{
+  "id": "course-07-lesson-03",
+  "title": "需求成熟度 3：边界、责任与 V&V 入口",
+  "type": "modeling-lesson",
+  "estimatedMinutes": 50,
+  "timePlan": [
+    { "label": "复用需求基线", "minutes": 8, "description": "读取只读的续航需求与派生谱系。" },
+    { "label": "补齐适用边界", "minutes": 18, "description": "用 assume constraint 说明充电与高压工况前提。" },
+    { "label": "形成责任评审视图", "minutes": 14, "description": "把快充和绝缘责任连接到同一辆样车。" },
+    { "label": "预览验证入口", "minutes": 10, "description": "识别 objective/verify，但不提前练习 verdict。" }
+  ],
+  "scenario": {
+    "title": "工程场景：需求基线进入设计与 V&V 评审",
+    "body": "续航需求谱系已冻结为只读基线。项目新增 10%-80% SOC 快充目标与 400 V 高压系统绝缘目标。评审要区分适用前提、系统责任和验证计划入口，避免把 assume constraint 当作产品必须交付的 require constraint。",
+    "visual": {
+      "type": "interactive-flow",
+      "variant": "07-maturity-boundary",
+      "title": "边界到验证入口",
+      "nodes": [
+        { "id": "boundary", "label": "适用前提", "detail": "SOC 窗口与额定电压", "code": "assume constraint" },
+        { "id": "responsibility", "label": "系统责任", "detail": "快充时间与绝缘能力", "code": "require + satisfy" },
+        { "id": "preview", "label": "C09 入口预览", "detail": "验证目标，不做 verdict", "code": "objective + verify" }
+      ]
+    }
+  },
+  "learningBlocks": [
+    {
+      "type": "image-gallery",
+      "title": "课程导引图",
+      "images": [
+        {
+          "src": "/api/course-assets/assets/course-visuals/generated-lesson-guides/ev-course-07-lesson-03-view.svg",
+          "title": "需求责任评审",
+          "caption": "把前提、系统责任和 V&V 入口放进同一视图。",
+          "alt": "电动汽车需求责任评审教学图"
+        }
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "工程意图：`assume constraint` 表达测试/使用前提和适用边界，`require constraint` 表达 subject 必须承担的系统责任。`satisfy fastChargeTime by evPrototype` 与 `satisfy hvIsolationSafety by evPrototype.hvSystem` 记录设计责任。只读 `EV_Requirement_Baseline` 保持 L1-L2 的 480/78/16 需求链稳定。"
+    },
+    {
+      "type": "hint-card",
+      "title": "为什么前提不能写成系统责任？",
+      "label": "assume 与 require",
+      "content": "SOC 起止窗口和额定电压是当前验收场景的前提/边界；快充时间和绝缘能力才是系统责任。把前提写成 require 会错误扩大设计交付范围。"
+    },
+    {
+      "type": "hint-card",
+      "title": "为什么这里只预览 verification？",
+      "label": "C09 入口预览",
+      "content": "`ChargeVerificationPreview` 只示范 subject、objective 和 verify 的追踪入口。收集数据、处理证据、VerdictKind 与 PassIf 都属于 C09，不在本课 TODO 中练习。"
+    },
+    {
+      "type": "markdown",
+      "content": "权威依据：官方 Requirement Definitions 示例展示 assume 与 require 的边界；官方 Verification Case 示例在 objective 中 verify 需求，并将数据采集和 verdict 留在 verification case 行为内。"
+    },
+    {
+      "type": "markdown",
+      "content": "练习步骤：在“课程模板”中按 TODO 1-2 添加两个 assume constraint，按 TODO 3-4 建立 satisfy 责任，再按 TODO 5-6 补充 expose。使用“已恢复草稿”时不要修改只读基线；需要恢复时点击“重置为课程模板”。"
+    },
+    { "type": "code", "language": "sysml", "sourceFile": "starter.sysml" }
+  ],
+  "workspace": {
+    "files": [
+      { "path": "ev-program-baseline.sysml", "source": "../../../shared/ev-program-baseline.sysml", "editable": false },
+      { "path": "ev-requirement-baseline.sysml", "source": "../../../shared/c07-requirement-baseline.sysml", "editable": false },
+      { "path": "main.sysml", "source": "starter.sysml", "editable": true }
+    ],
+    "entryFile": "main.sysml"
+  },
+  "tasks": [
+    {
+      "id": "task-01",
+      "type": "model-challenge",
+      "prompt": "在需求基线评审中补齐快充和高压安全的适用边界、设计责任与评审视图，并保留 C09 验证入口。",
+      "hints": [
+        "socWindow 检查 startSOCPercent == 10.0 and endSOCPercent == 80.0。",
+        "voltageBoundary 检查 system.nominalVoltageV <= maxNominalVoltageV。",
+        "两个 satisfy 的目标分别是整车和具体 hvSystem。",
+        "verification preview 已预置，不要在本课添加 verdict。"
+      ]
+    }
+  ],
+  "validation": { "strictSysml": true, "rulesFile": "rules.json" },
+  "completion": { "requiresStrictValidation": true, "requiresAllLessonRules": true },
+  "glossaryTerms": ["assume constraint", "require constraint", "satisfy", "objective", "verify", "view", "expose"]
+}

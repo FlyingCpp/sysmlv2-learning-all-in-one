@@ -1,0 +1,275 @@
+{
+  "id": "course-10-lesson-03",
+  "title": "最终证据闭环交付",
+  "type": "project-lesson",
+  "estimatedMinutes": 60,
+  "timePlan": [
+    {
+      "label": "确认需求目标",
+      "minutes": 8,
+      "description": "复用 C07 的需求骨架，为 finalRange 设定 480 km 目标。"
+    },
+    {
+      "label": "补齐计算与约束",
+      "minutes": 14,
+      "description": "用 calc def 和 constraint def 把续航估算与目标判据写成可审查模型。"
+    },
+    {
+      "label": "组织分析证据",
+      "minutes": 12,
+      "description": "用 analysis def 绑定整车 subject、输入和计算输出，形成 C08 风格的分析证据。"
+    },
+    {
+      "label": "组织验证判定",
+      "minutes": 12,
+      "description": "用 verification def、objective verify 和 return verdict 建立 C09 风格的验证活动。"
+    },
+    {
+      "label": "形成交付视图",
+      "minutes": 8,
+      "description": "用 satisfy 与 view/expose 把需求、样车、分析和验证放入最终证据视图。"
+    },
+    {
+      "label": "校验与讲解",
+      "minutes": 6,
+      "description": "检查模型是否能从需求一路读到设计责任、分析证据和验证证明。"
+    }
+  ],
+  "practiceStages": [
+    {
+      "id": "requirement-target",
+      "title": "阶段 1：确认最终续航需求",
+      "todos": "TODO 1",
+      "goal": "finalRange 明确 480 km 目标，作为后续分析与验证的同一根需求主线。",
+      "ruleIds": [
+        "final-range-type",
+        "final-range-def-subject",
+        "final-range-usage-subject",
+        "final-range-target"
+      ]
+    },
+    {
+      "id": "analysis-chain",
+      "title": "阶段 2：完成计算与分析证据",
+      "todos": "TODO 2-6",
+      "goal": "RangeBalance、EstimateRange 和 RangeAnalysis 能把 C03 的 78 kWh 电池包基线转换成续航预测证据。",
+      "ruleIds": [
+        "range-balance-expression",
+        "estimate-range-return",
+        "analysis-calc-usage",
+        "calc-battery-binding",
+        "calc-energy-binding",
+        "calc-usage-return",
+        "analysis-return",
+        "analysis-range-check",
+        "range-check-estimated-binding",
+        "range-check-target-binding"
+      ]
+    },
+    {
+      "id": "verification-chain",
+      "title": "阶段 3：完成道路测试验证证据",
+      "todos": "TODO 7-10",
+      "goal": "RangeRoadTest 和 finalRangeVerification 同时绑定需求目标、分析预测和 C09 沿用的 488 km 道路实测。",
+      "ruleIds": [
+        "road-test-return",
+        "verification-required-binding",
+        "verification-predicted-binding",
+        "verification-measured-binding"
+      ]
+    },
+    {
+      "id": "evidence-view",
+      "title": "阶段 4：关闭最终证据视图",
+      "todos": "TODO 11-13",
+      "goal": "satisfy 与 finalEvidenceView 把需求、样车、分析和验证交付成一张评审入口。",
+      "ruleIds": [
+        "final-satisfy",
+        "view-exposes-interface-baseline",
+        "view-exposes-analysis",
+        "view-exposes-verification"
+      ]
+    }
+  ],
+  "scenario": {
+    "title": "工程场景",
+    "body": "项目结题评审要求你提交一份可追踪的整车续航证据包。评审者不是只看一个公式，也不是只看一个测试名称，而是要沿着 finalRange 需求追到 finalVehicle 设计责任、finalRangeAnalysis 分析预测、finalVehicle.roadTestRangeKm 道路实测、finalRangeVerification 验证判定和 finalEvidenceView 交付视图。",
+    "visual": {
+      "type": "interactive-flow",
+      "variant": "10-final-evidence-loop",
+      "title": "需求-设计-分析-验证闭环",
+      "caption": "最终模型要让评审者顺着同一条链路读懂需求、设计责任、分析预测、道路实测和验证活动；行为与状态证据来自前一课，应在项目评审中并列保留。",
+      "nodes": [
+        {
+          "id": "requirement",
+          "icon": "R",
+          "label": "finalRange",
+          "detail": "完整需求包含 doc、subject、targetRangeKm 和 require constraint。",
+          "code": "requirement finalRange"
+        },
+        {
+          "id": "design",
+          "icon": "D",
+          "label": "finalVehicle",
+          "detail": "设计责任由 satisfy 表达，说明哪台样车承担续航需求。",
+          "code": "satisfy finalRange by finalVehicle"
+        },
+        {
+          "id": "analysis",
+          "icon": "A",
+          "label": "finalRangeAnalysis",
+          "detail": "分析案例把电池能量和能耗转换为 estimatedRangeKm，并用 RangeBalance 断言目标是否满足。",
+          "code": "analysis finalRangeAnalysis"
+        },
+        {
+          "id": "verification",
+          "icon": "V",
+          "label": "finalRangeVerification",
+          "detail": "验证案例用 objective verify 指向需求，并用 PassIf 返回 VerdictKind 判定。",
+          "code": "verification finalRangeVerification"
+        },
+        {
+          "id": "view",
+          "icon": "E",
+          "label": "finalEvidenceView",
+          "detail": "最终视图只 expose 已有模型元素，作为评审交付入口。",
+          "code": "view finalEvidenceView"
+        }
+      ]
+    }
+  },
+  "learningBlocks": [
+    {
+      "type": "image-gallery",
+      "title": "课程导引图",
+      "content": "本图按当前 lesson 的工程任务和模型主题生成，用于先理解课程场景，再进入 SysML v2 建模练习。",
+      "generatedBy": "scripts/generate-course-lesson-illustrations.js",
+      "images": [
+        {
+          "src": "/api/course-assets/assets/course-visuals/generated-lesson-guides/ev-course-10-lesson-03-verification.svg",
+          "title": "C10.L03 最终证据闭环交付",
+          "caption": "围绕 验证/Verification / 测试用例/Test case / 证据/Evidence 组织汽车工程语境，把本课对象放进可追踪的 SysML v2 模型。",
+          "alt": "电动汽车 SysML v2 建模课程导引图：最终证据闭环交付"
+        }
+      ]
+    },
+    {
+      "type": "concept-map",
+      "title": "最终项目复用地图",
+      "intro": "C10 不是重新造一个孤立模型，而是把前面课程沉淀为一条可追踪工程证据链。",
+      "items": [
+        {
+          "engineeringQuestion": "产品结构和电池能量从哪里来？",
+          "concept": "C03 产品结构",
+          "analogy": "BatteryPack 的 8 模组、96 电芯、78 kWh 级可用能量进入最终整车。",
+          "code": "BatteryPack",
+          "watchOut": "不要在 C10 改回旧的小容量电芯示例。"
+        },
+        {
+          "engineeringQuestion": "功率接口从哪里来？",
+          "concept": "C04 端口与接口",
+          "analogy": "电池、逆变器、电机通过 PowerPort 和 PropulsionPowerInterface 连接。",
+          "code": "interface ... connect",
+          "watchOut": "最终车不能跳过 Inverter 直接把 battery 接到 motor；真实车辆还要区分电池直流 DC 和逆变器到电机的交流 AC 边界，本课先用同一接口类型保持练习简洁。"
+        },
+        {
+          "engineeringQuestion": "行为和状态证据从哪里来？",
+          "concept": "C05-C06 行为与状态",
+          "analogy": "DriveCycle 说明车辆怎么执行驾驶过程，VehicleOperatingState 说明 Ready、Driving、Charging、SafeState 等模式怎么切换。",
+          "code": "DriveCycle / VehicleOperatingState",
+          "watchOut": "本课代码聚焦续航证据闭环；项目评审时不要把前一课已完成的行为和状态证据丢掉。"
+        },
+        {
+          "engineeringQuestion": "需求目标从哪里来？",
+          "concept": "C07 需求骨架",
+          "analogy": "finalRange 用 FinalRangeRequirement 和 targetRangeKm 表达最终车型续航目标。",
+          "code": "requirement finalRange",
+          "watchOut": "需求不是一句自然语言，必须有 subject、attribute 和 require constraint。"
+        },
+        {
+          "engineeringQuestion": "分析证据从哪里来？",
+          "concept": "C08 分析建模",
+          "analogy": "RangeAnalysis 把电池能量和百公里能耗转换为续航预测。",
+          "code": "analysis finalRangeAnalysis",
+          "watchOut": "官方 validator 不替代数值仿真执行环境。"
+        },
+        {
+          "engineeringQuestion": "验证证据从哪里来？",
+          "concept": "C09 验证建模",
+          "analogy": "RangeRoadTest 用 488 km 道路实测给出 VerdictKind 判定。",
+          "code": "verification finalRangeVerification",
+          "watchOut": "实测值不能直接来自 analysis 输出。"
+        }
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "工程意图：Course10 的最后一课不是语法复习清单，而是一份最小但完整的证据包。`ev-c10-baseline.sysml` 复用 C03 的电池包参数链和 C04 的电池-逆变器-电机接口基线；本课用 `FinalRangeRequirement` 避免遮蔽基线包中的通用 RangeRequirement，并把 `finalRange` 的 subject 明确落到 `FinalVehicle`；`EstimateRange`、`RangeBalance`、`RangeAnalysis` 来自 C08 分析建模，`RangeRoadTest` 和 `finalRangeVerification` 来自 C09 验证建模。"
+    },
+    {
+      "type": "markdown",
+      "content": "读模要点分四段看：1）需求目标：`requirement finalRange : FinalRangeRequirement` 给出 480 km 目标，且 subject 与 FinalVehicle 对齐；2）设计责任：`satisfy finalRange by finalVehicle` 说明最终样车承担这条需求，`FinalVehicle` 中两条 `PropulsionPowerInterface connect` 保留结构接口证据，usage 名称只是局部标签；3）分析预测：`analysis finalRangeAnalysis` 用电池能量和百公里能耗给出 estimatedRangeKm，模板中 `FinalVehicle.estimatedRangeKm = 0.0` 是等待分析输出的占位；4）道路实测与验证：`finalVehicle.roadTestRangeKm = 488.0` 沿用 C09 的道路实测主线，`verification finalRangeVerification` 通过 `objective { verify finalRange; }` 和 `return verdict : VerdictKind = PassIf(...)` 指向被验证需求，`view finalEvidenceView` 把需求、样车、分析和验证放入统一评审入口。"
+    },
+    {
+      "type": "markdown",
+      "content": "练习步骤：如果编辑器顶部显示“课程模板”，按右侧“分阶段练习解锁”依次完成 TODO 1、TODO 2-6、TODO 7-10、TODO 11-13。每阶段校验通过后再进入下一阶段，避免一次性处理 13 个空位。如果显示“已恢复草稿”，请检查这些内容是否仍在 finalRange、RangeBalance、EstimateRange、RangeAnalysis、RangeRoadTest、finalRangeVerification 和 finalEvidenceView 的对应结构位置；如需重来，点击“重置为课程模板”。"
+    },
+    {
+      "type": "hint-card",
+      "title": "最终模型通过校验就等于完成仿真了吗？",
+      "label": "点击展开关键概念说明",
+      "content": "SysML v2 模型在这里表达计算关系和证据链路，官方 validator 负责语法和结构语义校验；实际数值求解仍需要工具执行环境。本课的重点是把需求、设计、分析和验证关系建模到可审查，而不是把建模语言误当作仿真求解器。"
+    },
+    {
+      "type": "code",
+      "language": "sysml",
+      "sourceFile": "starter.sysml"
+    }
+  ],
+  "workspace": {
+    "files": [
+      {
+        "path": "ev-c10-baseline.sysml",
+        "source": "../../../shared/c10-baseline.sysml",
+        "editable": false
+      },
+      {
+        "path": "main.sysml",
+        "source": "starter.sysml",
+        "editable": true
+      }
+    ],
+    "entryFile": "main.sysml"
+  },
+  "tasks": [
+    {
+      "id": "task-01",
+      "type": "model-challenge",
+      "prompt": "在课程模板 TODO 位置，或在已恢复草稿中的对应结构位置，完成 finalRange -> finalVehicle -> finalRangeAnalysis -> finalRangeVerification -> finalEvidenceView 的最终证据闭环。",
+      "hints": [
+        "需求目标用 attribute :>> targetRangeKm = 480.0;，不要把 finalRange 写成空壳需求。",
+        "EstimateRange 的 return 输出应被 RangeAnalysis 继续返回为 estimatedRangeKm。",
+        "verification def 负责定义验证方法，verification usage 同时绑定样车、分析预测值和道路实测值。",
+        "satisfy 说明设计责任，verify 说明验证目标，两者都需要保留。"
+      ]
+    }
+  ],
+  "validation": {
+    "strictSysml": true,
+    "rulesFile": "rules.json"
+  },
+  "completion": {
+    "requiresStrictValidation": true,
+    "requiresAllLessonRules": true
+  },
+  "glossaryTerms": [
+    "requirement",
+    "constraint def",
+    "calc def",
+    "analysis def",
+    "verification def",
+    "satisfy",
+    "verify",
+    "view"
+  ]
+}

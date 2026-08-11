@@ -1,0 +1,166 @@
+{
+  "rules": [
+    {
+      "id": "strict-valid",
+      "type": "strictValidationPassed",
+      "severity": "error",
+      "message": "模型必须通过严格 SysML v2 校验。"
+    },
+    {
+      "id": "drive-input-accel",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "DriveCycle",
+        "kind": "in",
+        "name": "driverAccelCmd",
+        "typeName": "ScalarValues::Real"
+      },
+      "message": "DriveCycle 需要 in driverAccelCmd : ScalarValues::Real，表达驾驶员加速输入。"
+    },
+    {
+      "id": "drive-input-brake",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "DriveCycle",
+        "kind": "in",
+        "name": "driverBrakeCmd",
+        "typeName": "ScalarValues::Real"
+      },
+      "message": "DriveCycle 需要 in driverBrakeCmd : ScalarValues::Real，表达驾驶员制动输入。"
+    },
+    {
+      "id": "drive-input-speed",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "DriveCycle",
+        "kind": "in",
+        "name": "vehicleSpeedKph",
+        "typeName": "ScalarValues::Real"
+      },
+      "message": "DriveCycle 需要 in vehicleSpeedKph : ScalarValues::Real，表达当前车速输入。"
+    },
+    {
+      "id": "drive-output-torque",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "DriveCycle",
+        "kind": "out",
+        "name": "motorTorqueNm",
+        "typeName": "ScalarValues::Real"
+      },
+      "message": "DriveCycle 需要 out motorTorqueNm : ScalarValues::Real，表达行为输出的电机扭矩。"
+    },
+    {
+      "id": "drive-output-brake",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "DriveCycle",
+        "kind": "out",
+        "name": "brakePressureBar",
+        "typeName": "ScalarValues::Real"
+      },
+      "message": "DriveCycle 需要 out brakePressureBar : ScalarValues::Real，表达行为输出的制动压力。"
+    },
+    {
+      "id": "bind-accel-input",
+      "type": "relationshipExists",
+      "severity": "error",
+      "selector": {
+        "parent": "DriveCycle",
+        "kind": "bind",
+        "sourceName": "readPedalSignals.accelCmd",
+        "targetName": "driverAccelCmd"
+      },
+      "message": "DriveCycle 需要 bind readPedalSignals.accelCmd = driverAccelCmd，把外层加速输入接入踏板解析步骤。"
+    },
+    {
+      "id": "bind-brake-input",
+      "type": "relationshipExists",
+      "severity": "error",
+      "selector": {
+        "parent": "DriveCycle",
+        "kind": "bind",
+        "sourceName": "readPedalSignals.brakeCmd",
+        "targetName": "driverBrakeCmd"
+      },
+      "message": "DriveCycle 需要 bind readPedalSignals.brakeCmd = driverBrakeCmd，把外层制动输入接入踏板解析步骤。"
+    },
+    {
+      "id": "bind-speed-input",
+      "type": "relationshipExists",
+      "severity": "error",
+      "selector": {
+        "parent": "DriveCycle",
+        "kind": "bind",
+        "sourceName": "computeMotorTorque.speedKph",
+        "targetName": "vehicleSpeedKph"
+      },
+      "message": "DriveCycle 需要 bind computeMotorTorque.speedKph = vehicleSpeedKph，把外层车速输入接入扭矩计算步骤。"
+    },
+    {
+      "id": "torque-flow",
+      "type": "relationshipExists",
+      "severity": "error",
+      "selector": {
+        "parent": "DriveCycle",
+        "kind": "flow",
+        "sourceName": "readPedalSignals.torqueRequest",
+        "targetName": "computeMotorTorque.torqueRequest"
+      },
+      "message": "DriveCycle 中需要存在 flow readPedalSignals.torqueRequest to computeMotorTorque.torqueRequest。"
+    },
+    {
+      "id": "brake-flow",
+      "type": "relationshipExists",
+      "severity": "error",
+      "selector": {
+        "parent": "DriveCycle",
+        "kind": "flow",
+        "sourceName": "readPedalSignals.brakeRequest",
+        "targetName": "computeBrakePressure.brakeRequest"
+      },
+      "message": "DriveCycle 中需要存在 flow readPedalSignals.brakeRequest to computeBrakePressure.brakeRequest。"
+    },
+    {
+      "id": "bind-torque-output",
+      "type": "relationshipExists",
+      "severity": "error",
+      "selector": {
+        "parent": "DriveCycle",
+        "kind": "bind",
+        "sourceName": "computeMotorTorque.torqueCmd",
+        "targetName": "motorTorqueNm"
+      },
+      "message": "DriveCycle 需要 bind computeMotorTorque.torqueCmd = motorTorqueNm，把内部扭矩结果接回外层输出。"
+    },
+    {
+      "id": "bind-brake-output",
+      "type": "relationshipExists",
+      "severity": "error",
+      "selector": {
+        "parent": "DriveCycle",
+        "kind": "bind",
+        "sourceName": "computeBrakePressure.pressureCmd",
+        "targetName": "brakePressureBar"
+      },
+      "message": "DriveCycle 需要 bind computeBrakePressure.pressureCmd = brakePressureBar，把内部制动压力结果接回外层输出。"
+    },
+    {
+      "id": "behavior-view-exposes-drive-cycle",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "driveBehaviorView",
+        "kind": "expose",
+        "name": "DriveCycle",
+        "targetName": "DriveCycle"
+      },
+      "message": "driveBehaviorView 中需要 expose DriveCycle，把驾驶行为定义纳入行为视图。"
+    }
+  ]
+}

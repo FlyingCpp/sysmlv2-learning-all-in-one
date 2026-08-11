@@ -1,0 +1,38 @@
+{
+  "rules": [
+    {
+      "id": "strict-valid",
+      "type": "strictValidationPassed",
+      "severity": "error",
+      "message": "模型必须通过严格 SysML v2 校验。"
+    },
+    {
+      "id": "trade-study-alternatives",
+      "type": "regex",
+      "severity": "error",
+      "pattern": "subject\\s*:\\s*RangePackageOption\\s*=\\s*\\(standardRangePackage,\\s*longRangePackage\\)",
+      "message": "TradeStudy subject 需要同时包含两个方案 alternatives。"
+    },
+    {
+      "id": "trade-study-objective",
+      "type": "regex",
+      "severity": "error",
+      "pattern": "objective\\s*:\\s*MaximizeObjective",
+      "message": "权衡分析需要 MaximizeObjective。"
+    },
+    {
+      "id": "evaluation-function",
+      "type": "regex",
+      "severity": "error",
+      "pattern": "calc\\s*:>>\\s*evaluationFunction[\\s\\S]*return\\s*:>>\\s*result[\\s\\S]*RangePackageScore",
+      "message": "evaluationFunction 需要调用 RangePackageScore 返回 result。"
+    },
+    {
+      "id": "selected-alternative",
+      "type": "regex",
+      "severity": "error",
+      "pattern": "return\\s+part\\s*:>>\\s*selectedAlternative\\s*:\\s*RangePackageOption",
+      "message": "TradeStudy 需要返回 selectedAlternative。"
+    }
+  ]
+}

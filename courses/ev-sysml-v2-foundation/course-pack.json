@@ -1,0 +1,453 @@
+{
+  "id": "ev-sysml-v2-foundation-c2",
+  "title": "SysML v2 电动汽车建模基础",
+  "description": "通过同一辆 78 kWh 电动车贯穿结构、行为、需求、分析与验证；C07-C09 按契约、谱系、计算、分析、权衡、策划、执行和异常闭环逐级成熟工程证据。",
+  "version": "2.2.0",
+  "license": "EPL-2.0",
+  "authors": ["Josh Chen"],
+  "language": "zh-CN",
+  "domain": "automotive",
+  "sysmlVersion": "2.0",
+  "entryCourseId": "course-01",
+  "finalProjectId": "ev-final-project",
+  "homeVisual": {
+    "type": "image",
+    "src": "/api/course-assets/assets/home-ev-mbse.svg",
+    "alt": "电动汽车 SysML v2 建模课程视觉图：汽车底盘、系统边界、需求、分析和验证关系",
+    "title": "从汽车工程对象到可验证 SysML v2 模型",
+    "caption": "用同一辆电动汽车贯穿结构、接口、行为、状态、需求、分析和验证，把工程设计语言转化为可校验模型。"
+  },
+  "defaultSysonLayoutProfile": "automotive-thermal-v1",
+  "sysonLayoutProfiles": {
+    "automotive-thermal-v1": {
+      "id": "automotive-thermal-v1",
+      "title": "电动汽车热管理教学布局",
+      "description": "在 SysON 官方 diagram 生成后，按热/冷媒/空气/控制/遥测分层写入节点坐标和正交折线。该配置只影响图形布局，不改变 SysML v2 模型语义。",
+      "minClassifiedNodes": 2,
+      "minDomainEdges": 1,
+      "defaultLane": "custom",
+      "canvas": {
+        "paddingX": 120,
+        "paddingY": 80,
+        "columnGap": 330,
+        "laneGap": 390,
+        "stackGap": 185,
+        "edgeClearance": 56,
+        "reverseEdgeDogleg": 170
+      },
+      "lanes": [
+        {
+          "id": "thermal",
+          "order": 0,
+          "title": "热源/冷却液主链路",
+          "match": [
+            "battery|cell|pack",
+            "drive|electronics|motor|inverter",
+            "coolant|thermal|heatpump|heat pump",
+            "octovalve|pump|radiator|chiller"
+          ]
+        },
+        {
+          "id": "refrigerant",
+          "order": 1,
+          "title": "冷媒回路",
+          "match": [
+            "refrigerant",
+            "compressor",
+            "condenser",
+            "evaporator",
+            "expansion|valve",
+            "chiller|heat pump"
+          ]
+        },
+        {
+          "id": "air",
+          "order": 2,
+          "title": "空气边界与换热",
+          "match": [
+            "air|ambient",
+            "cabin|hvac|blower",
+            "radiator|evaporator"
+          ]
+        },
+        {
+          "id": "control",
+          "order": 3,
+          "title": "控制命令",
+          "match": [
+            "control|controller",
+            "command|actuator|request|setpoint|mode"
+          ]
+        },
+        {
+          "id": "telemetry",
+          "order": 4,
+          "title": "温度遥测",
+          "match": [
+            "telemetry|sensor",
+            "signal|temperature|temp|feedback|measurement"
+          ]
+        },
+        {
+          "id": "custom",
+          "order": 5,
+          "title": "自定义/未分类",
+          "match": []
+        }
+      ],
+      "nodeHints": [
+        {
+          "match": [
+            "battery|cell|pack"
+          ],
+          "lane": "thermal",
+          "stage": 0
+        },
+        {
+          "match": [
+            "drive|electronics|motor|inverter"
+          ],
+          "lane": "thermal",
+          "stage": 1
+        },
+        {
+          "match": [
+            "octovalve|router|manifold|pump"
+          ],
+          "lane": "thermal",
+          "stage": 2
+        },
+        {
+          "match": [
+            "heatpump|heat pump|chiller"
+          ],
+          "lane": "thermal",
+          "stage": 3
+        },
+        {
+          "match": [
+            "radiator"
+          ],
+          "lane": "thermal",
+          "stage": 5
+        },
+        {
+          "match": [
+            "compressor"
+          ],
+          "lane": "refrigerant",
+          "stage": 2
+        },
+        {
+          "match": [
+            "condenser|chiller"
+          ],
+          "lane": "refrigerant",
+          "stage": 3
+        },
+        {
+          "match": [
+            "expansion"
+          ],
+          "lane": "refrigerant",
+          "stage": 4
+        },
+        {
+          "match": [
+            "evaporator"
+          ],
+          "lane": "refrigerant",
+          "stage": 5
+        },
+        {
+          "match": [
+            "ambient"
+          ],
+          "lane": "air",
+          "stage": 0
+        },
+        {
+          "match": [
+            "cabin|hvac|blower"
+          ],
+          "lane": "air",
+          "stage": 5
+        },
+        {
+          "match": [
+            "controller|control"
+          ],
+          "lane": "control",
+          "stage": 3
+        },
+        {
+          "match": [
+            "command|actuator|setpoint"
+          ],
+          "lane": "control",
+          "stage": 4
+        },
+        {
+          "match": [
+            "telemetry|sensor|temperature|signal|feedback"
+          ],
+          "lane": "telemetry",
+          "stage": 4
+        }
+      ],
+      "edgeHints": [
+        {
+          "match": [
+            "coolant|thermal|heat"
+          ],
+          "lane": "thermal",
+          "kind": "coolant"
+        },
+        {
+          "match": [
+            "refrigerant|compressor|expansion|evaporator|condenser"
+          ],
+          "lane": "refrigerant",
+          "kind": "refrigerant"
+        },
+        {
+          "match": [
+            "air|ambient|cabin|hvac"
+          ],
+          "lane": "air",
+          "kind": "air"
+        },
+        {
+          "match": [
+            "command|control|setpoint|request"
+          ],
+          "lane": "control",
+          "kind": "command"
+        },
+        {
+          "match": [
+            "telemetry|temperature|sensor|signal|feedback"
+          ],
+          "lane": "telemetry",
+          "kind": "telemetry"
+        }
+      ]
+    }
+  },
+  "courses": [
+    "courses/course-01/course.json",
+    "courses/course-02/course.json",
+    "courses/course-03/course.json",
+    "courses/course-04/course.json",
+    "courses/course-05/course.json",
+    "courses/course-06/course.json",
+    "courses/course-07/course.json",
+    "courses/course-08/course.json",
+    "courses/course-09/course.json",
+    "courses/course-10/course.json"
+  ],
+  "sourceBasis": [
+    {
+      "source": "OMG SysML v2.0 Language Specification",
+      "url": "https://www.omg.org/spec/SysML/2.0/Language/PDF",
+      "scope": "Requirements、Calculations、Constraints、Analysis Cases、Verification Cases 与 Views 的语言语义。"
+    },
+    {
+      "source": "Systems-Modeling/SysML-v2-Release 2026-04 local cache",
+      "path": ".official-cache/SysML-v2-Pilot-2026-04/sysml/src",
+      "scope": "Requirement Definitions、VehicleRequirementDerivation、Analysis Case、Trade Study 与 Verification Case 官方示例。"
+    },
+    {
+      "source": "VerificationCases standard library",
+      "path": ".official-cache/kernel-0.59.0/sysml/sysml.library/Systems Library/VerificationCases.sysml",
+      "scope": "VerdictKind、PassIf、VerificationMethod 与 inspect/analyze/demo/test 方法枚举。"
+    }
+  ],
+  "evidenceRoadmap": [
+    "C03 结构参数：把电池包、车身、电驱等工程对象和关键参数放进同一辆样车。",
+    "C04 接口边界：说明电能、控制命令、冷却液等对象如何跨部件交换。",
+    "C05 行为过程：表达车辆、控制器或充电系统要执行什么动作，以及动作之间传什么数据。",
+    "C06 状态模式：表达车辆或子系统处于什么运行模式，什么事件和条件允许切换。",
+    "C07 需求成熟度：L1 建立 480 km/16 kWh 联合契约，L2 派生 78 kWh 与能耗指标，L3 补适用边界、设计责任和 V&V 入口。",
+    "C08 分析成熟度：L1 形成 78/16 可复用计算，L2 组织 490 km 报告预测，L3 用 TradeStudy 比较多方案；分析不冒充验证。",
+    "C09 验证成熟度：L1 策划需求覆盖和方法，L2 用 488 km 独立道路观测执行判定，L3 组合 inspection/demo 并保留 inconclusive/error。",
+    "C10 综合交付：把结构、接口、行为、状态、需求、分析和验证放入最终评审视图。"
+  ],
+  "codeGuideExplanations": [
+    {
+      "id": "package-boundary",
+      "lineStartsWith": "package ",
+      "explanation": "这行创建一个 package（模型包），相当于本课模型的文件夹。学生通常不用改它，只要确认本课对象都放在这个边界内。"
+    },
+    {
+      "id": "part-definition",
+      "lineStartsWith": "part def",
+      "explanation": "这行定义一个结构类型（part definition）。它像零件图册里的类型模板，不是某一台真实样车上的那一个实物。"
+    },
+    {
+      "id": "part-usage",
+      "lineStartsWith": "part ",
+      "explanation": "这行创建一个结构使用（part usage）。它表示当前车型或系统里实际放入了一份车辆、部件或外部对象。"
+    },
+    {
+      "id": "item-definition",
+      "lineStartsWith": "item def",
+      "explanation": "这行定义一个可交换对象类型。item def 常用于表示电能、扭矩命令、冷却液流等跨接口传递的工程对象。"
+    },
+    {
+      "id": "item-usage",
+      "lineStartsWith": "item ",
+      "explanation": "这行创建一个 item usage，表示模型中实际出现的一份流项或数据对象，通常会被端口、接口或行为引用。"
+    },
+    {
+      "id": "attribute-usage",
+      "lineStartsWith": "attribute ",
+      "explanation": "这行创建一个 attribute（参数/特征使用）。建模时先写 `attribute`，再写工程参数名、冒号右侧类型和可选默认值或表达式；它表达数值、目标或约束输入，不表达物理组成。"
+    },
+    {
+      "id": "port-definition",
+      "lineStartsWith": "port def",
+      "explanation": "这行定义一个端口类型。port def 描述系统边界上允许交换什么 item，是接口契约和连接建模的基础；端口类型内部通常用 `ref item` 引用可交换对象。"
+    },
+    {
+      "id": "port-usage",
+      "lineStartsWith": "port ",
+      "explanation": "这行创建一个端口使用。`port` 是 SysML v2 关键字，后面的名称由建模者自定义，冒号右侧是端口类型；端口要放在拥有该边界的 part def 内，名称里的 In/Out 通常只是工程命名约定。"
+    },
+    {
+      "id": "ref-item",
+      "lineStartsWith": "ref item",
+      "explanation": "这行声明端口中引用的 item，说明通过这个端口交换的工程对象是什么，例如电功率、命令或冷却流。它是端口契约里的引用，不是把这个 item 当成部件组成。"
+    },
+    {
+      "id": "interface-definition",
+      "lineStartsWith": "interface def",
+      "explanation": "这行定义一个接口契约（interface definition）。它说明两个边界之间交换什么，避免接口只剩一条没有工程含义的线。"
+    },
+    {
+      "id": "interface-end",
+      "lineStartsWith": "end ",
+      "explanation": "这行声明接口或连接的端点。`end` 是 SysML v2 标准端点声明，source/target/batterySide 这类词是建模者给端点取的名字，后续 flow 必须引用同一组端点名。"
+    },
+    {
+      "id": "interface-flow",
+      "lineStartsWith": "flow ",
+      "explanation": "这行声明接口中的流向。flow 把交换对象从一个端点指向另一个端点；建模时先引用已声明的 end 端点名，再用点号访问端点上的 ref item。"
+    },
+    {
+      "id": "action-definition",
+      "lineStartsWith": "action def",
+      "explanation": "这行定义一个行为类型。action def 用来表达系统要执行的功能或过程，例如驾驶循环、充电过程或控制动作。"
+    },
+    {
+      "id": "action-usage",
+      "lineStartsWith": "action ",
+      "explanation": "这行创建一个 action usage，表示某个行为类型在当前模型中的具体执行或行为分解节点。"
+    },
+    {
+      "id": "parameter-in",
+      "lineStartsWith": "in ",
+      "explanation": "这行定义输入参数。行首 `in` 是 SysML v2 参数方向关键字，后面的名称由建模者自定义。"
+    },
+    {
+      "id": "parameter-out",
+      "lineStartsWith": "out ",
+      "explanation": "这行定义输出参数。行首 `out` 是 SysML v2 参数方向关键字，不要和 dcOut、powerOut 这类名称后缀混淆。"
+    },
+    {
+      "id": "state-definition",
+      "lineStartsWith": "state def",
+      "explanation": "这行定义一个状态类型。state def 用来描述系统可能处于哪些稳定模式，例如 Ready、Driving、Charging 或 Fault。"
+    },
+    {
+      "id": "state-usage",
+      "lineStartsWith": "state ",
+      "explanation": "这行创建一个 state usage，表示状态模型中的一个具体状态或当前上下文中的状态使用。"
+    },
+    {
+      "id": "requirement-definition",
+      "lineStartsWith": "requirement def",
+      "explanation": "这行定义一个需求类型。requirement def 让需求从自然语言说明变成可命名、可追踪、可校验的模型对象类型。"
+    },
+    {
+      "id": "requirement-usage",
+      "lineStartsWith": "requirement ",
+      "explanation": "这行创建一个具体需求。requirement usage 表示当前车型或场景下必须满足的工程目标，后续可被 satisfy 或 verify 追踪。"
+    },
+    {
+      "id": "analysis-definition",
+      "lineStartsWith": "analysis def",
+      "explanation": "这行定义一个分析类型。analysis def 用来组织分析目的、输入、计算或判断逻辑，帮助回答模型是否支持工程决策。"
+    },
+    {
+      "id": "analysis-usage",
+      "lineStartsWith": "analysis ",
+      "explanation": "这行创建一个具体分析入口。analysis usage 把分析类型放入当前模型上下文，用于承载某次续航、质量或安全分析。"
+    },
+    {
+      "id": "constraint-definition",
+      "lineStartsWith": "constraint def",
+      "explanation": "这行定义一个约束类型，用来表达必须成立的工程关系或限制条件，例如质量预算、能耗平衡或安全阈值。"
+    },
+    {
+      "id": "constraint-usage",
+      "lineStartsWith": "constraint ",
+      "explanation": "这行创建一个具体约束使用，把工程约束放入当前模型上下文，用于分析或验证某个设计是否满足条件。"
+    },
+    {
+      "id": "assume-constraint",
+      "lineStartsWith": "assume constraint",
+      "explanation": "这行声明需求或验证场景的假设约束。assume 通常表达前提条件、测试边界或适用场景，不是被设计对象必须交付的系统目标。"
+    },
+    {
+      "id": "require-constraint",
+      "lineStartsWith": "require constraint",
+      "explanation": "这行声明需求判据。require 表示 subject 指向的设计对象必须满足的系统责任，后续验证会围绕这类判据给出通过或失败结论。"
+    },
+    {
+      "id": "calculation-definition",
+      "lineStartsWith": "calc def",
+      "explanation": "这行定义一个计算类型。calc def 表示可复用的工程计算方法，例如续航估算、能耗估算或质量汇总。"
+    },
+    {
+      "id": "calculation-usage",
+      "lineStartsWith": "calc ",
+      "explanation": "这行创建一个具体计算使用，把计算方法放入当前分析上下文，用于生成可比较的工程结果。"
+    },
+    {
+      "id": "verification-definition",
+      "lineStartsWith": "verification def",
+      "explanation": "这行定义一个验证活动类型（verification definition）。它说明用什么测试、检查或分析方法证明需求，并必须产出独立判定结果。"
+    },
+    {
+      "id": "verification-usage",
+      "lineStartsWith": "verification ",
+      "explanation": "这行创建一个具体验证活动，把验证类型放入当前项目上下文，表示一次测试、检查或证明工作。"
+    },
+    {
+      "id": "satisfy-requirement",
+      "lineStartsWith": "satisfy ",
+      "explanation": "这行建立需求满足追踪。satisfy 左侧是要被满足的需求，右侧是承担该需求的模型对象，用于把需求责任连接到结构或行为。"
+    },
+    {
+      "id": "verify-requirement",
+      "lineStartsWith": "verify ",
+      "explanation": "这行建立验证追踪。verify 把验证活动与需求连接起来，用于说明某个测试、检查或分析要证明哪个需求。"
+    },
+    {
+      "id": "view-definition",
+      "lineStartsWith": "view def",
+      "explanation": "这行定义一种视图类型。`specializes StandardViewDefinitions::...` 说明这类视图期望按哪种标准方式呈现，例如通用关系图、接口连接图、行为流图、状态迁移图、表格或浏览树。"
+    },
+    {
+      "id": "view-usage",
+      "lineStartsWith": "view ",
+      "explanation": "这行创建一个具体视图。view 是模型的一部分，不是 .sysml 文件，也不是截图；它把已有模型内容组织成某个工程评审入口。"
+    },
+    {
+      "id": "view-expose",
+      "lineStartsWith": "expose ",
+      "explanation": "这行把已有模型元素放入当前 view。expose 只选择和呈现对象，不复制、不重新定义模型元素；不要为了画图在 view 里重新建一套结构。"
+    }
+  ]
+}

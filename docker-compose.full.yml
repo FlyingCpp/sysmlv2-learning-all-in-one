@@ -1,0 +1,156 @@
+services:
+  validator:
+    profiles: ["full"]
+
+  teacher:
+    profiles: ["full"]
+    image: synfeld-teacher:0.1.0
+    build:
+      context: .
+      dockerfile: apps/teacher/Dockerfile
+    restart: unless-stopped
+    command: ["sh", "-c", "node scripts/teacher-db-migrate.js && exec node apps/teacher/server.js"]
+    environment:
+      NODE_ENV: production
+      PORT: "7070"
+      AI_TEACHER_PROVIDER: litellm-compatible
+      AI_TEACHER_REAL_LLM_ENABLED: "true"
+      AI_TEACHER_BASE_URL: http://litellm:4000/v1
+      AI_TEACHER_API_KEY: ${LITELLM_MASTER_KEY:-}
+      AI_TEACHER_MODEL: ${AI_TEACHER_MODEL:-ai-teacher-fast}
+      AI_TEACHER_CONVERSATION_BACKEND: postgres
+      AI_TEACHER_RAG_BACKEND: postgres_pgvector
+      AI_TEACHER_REQUIRE_ACTIVE_BUNDLE: ${AI_TEACHER_REQUIRE_ACTIVE_BUNDLE:-false}
+      AI_TEACHER_DB_URL: postgresql://synfeld_teacher:${TEACHER_DB_PASSWORD:-change-me-teacher}@teacher-db:5432/synfeld_teacher
+      AI_TEACHER_RAG_TENANT_ID: ${AI_TEACHER_RAG_TENANT_ID:-public-local}
+      AI_TEACHER_INTERNAL_TOKEN: ${AI_TEACHER_INTERNAL_TOKEN:-}
+      AI_TEACHER_TOOL_TOKEN: ${AI_TEACHER_TOOL_TOKEN:-}
+      PLATFORM_API_URL: http://api:8080
+    ports:
+      - "127.0.0.1:${TEACHER_PORT:-7070}:7070"
+    depends_on:
+      teacher-db:
+        condition: service_healthy
+      litellm:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:7070/health').then(async r=>{const b=await r.json();if(!r.ok||b.provider?.gateway!=='litellm'||b.retrieval?.mode!=='postgres_pgvector')process.exit(1)}).catch(()=>process.exit(1))"]
+      start_period: 30s
+
+  api:
+    profiles: ["full"]
+    command: ["sh", "-c", "node scripts/auth-db-migrate.js && exec node apps/api/server.js"]
+    environment:
+      NODE_ENV: production
+      TEACHER_URL: http://teacher:7070
+      AI_TEACHER_ENABLED: "true"
+      AI_TEACHER_REQUIRE_ACTIVE_BUNDLE: ${AI_TEACHER_REQUIRE_ACTIVE_BUNDLE:-false}
+      AUTH_DATABASE_URL: postgresql://synfeld_auth:${AUTH_DB_PASSWORD:-change-me-auth}@auth-db:5432/synfeld_auth
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
+      AUTH_REGISTRATION_ENABLED: ${AUTH_REGISTRATION_ENABLED:-true}
+      AUTH_GUEST_LOGIN_ENABLED: ${AUTH_GUEST_LOGIN_ENABLED:-true}
+      AI_TEACHER_INTERNAL_TOKEN: ${AI_TEACHER_INTERNAL_TOKEN:-}
+      AI_TEACHER_TOOL_TOKEN: ${AI_TEACHER_TOOL_TOKEN:-}
+      LITELLM_ADMIN_BASE_URL: http://litellm:4000
+      LITELLM_BASE_URL: http://litellm:4000
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-}
+      LITELLM_DATABASE_URL: postgresql://litellm:${LITELLM_DB_PASSWORD:-change-me-litellm}@litellm-db:5432/litellm
+    depends_on:
+      auth-db:
+        condition: service_healthy
+      litellm:
+        condition: service_healthy
+      teacher:
+        condition: service_healthy
+
+  web:
+    profiles: ["full"]
+    environment:
+      AI_TEACHER_ENABLED: "true"
+
+  auth-db:
+    profiles: ["full"]
+    image: postgres:16.11@sha256:056b54f00419b49289227ab12d09df508543883f407fe9935a2cec430ef8aa8d
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: synfeld_auth
+      POSTGRES_USER: synfeld_auth
+      POSTGRES_PASSWORD: ${AUTH_DB_PASSWORD:-change-me-auth}
+    volumes:
+      - auth_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U synfeld_auth -d synfeld_auth"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    networks:
+      - default
+
+  teacher-db:
+    profiles: ["full"]
+    image: pgvector/pgvector:pg16@sha256:00ba258a66dac104fd5171074a0084462a64a1369d8513f3d0a634e2f24d15bc
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: synfeld_teacher
+      POSTGRES_USER: synfeld_teacher
+      POSTGRES_PASSWORD: ${TEACHER_DB_PASSWORD:-change-me-teacher}
+    volumes:
+      - teacher_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U synfeld_teacher -d synfeld_teacher"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    networks:
+      - default
+
+  litellm-db:
+    profiles: ["full"]
+    image: postgres:16.11@sha256:056b54f00419b49289227ab12d09df508543883f407fe9935a2cec430ef8aa8d
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: litellm
+      POSTGRES_USER: litellm
+      POSTGRES_PASSWORD: ${LITELLM_DB_PASSWORD:-change-me-litellm}
+    volumes:
+      - litellm_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm -d litellm"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    networks:
+      - default
+
+  litellm:
+    profiles: ["full"]
+    image: ghcr.io/berriai/litellm:v1.90.0@sha256:7315a3a1573d9ff0ed78068b73260e960486ff62922ee6a78f1a2be0f1e5e249
+    restart: unless-stopped
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-}
+      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:-}
+      LITELLM_DATABASE_URL: postgresql://litellm:${LITELLM_DB_PASSWORD:-change-me-litellm}@litellm-db:5432/litellm
+      DATABASE_URL: postgresql://litellm:${LITELLM_DB_PASSWORD:-change-me-litellm}@litellm-db:5432/litellm
+      STORE_MODEL_IN_DB: "True"
+      PROVIDER_API_BASE: ${PROVIDER_API_BASE:-https://api.openai.com/v1}
+      PROVIDER_API_KEY: ${PROVIDER_API_KEY:-}
+      PROVIDER_MODEL: ${PROVIDER_MODEL:-openai/gpt-4.1-mini}
+    volumes:
+      - ./config/litellm/config.example.yaml:/app/config.yaml:ro
+    depends_on:
+      litellm-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness', timeout=5)"]
+      interval: 10s
+      timeout: 6s
+      retries: 30
+      start_period: 30s
+    networks:
+      - default
+
+volumes:
+  auth_db_data:
+  teacher_db_data:
+  litellm_db_data:

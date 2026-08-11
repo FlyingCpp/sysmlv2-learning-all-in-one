@@ -1,0 +1,245 @@
+{
+  "id": "course-06-lesson-01",
+  "title": "状态机基础与车辆运行模式",
+  "type": "modeling-lesson",
+  "estimatedMinutes": 40,
+  "timePlan": [
+    {
+      "label": "理解四个概念",
+      "minutes": 8,
+      "description": "用汽车和液压系统类比区分 state、event、transition、mode。"
+    },
+    {
+      "label": "学习状态机规则",
+      "minutes": 7,
+      "description": "检查初始状态、互斥状态、安全可达、无死锁和恢复路径。"
+    },
+    {
+      "label": "对照 SysML 语法",
+      "minutes": 8,
+      "description": "把 first/accept/if/then 翻译成源状态、事件、守卫条件和目标状态。"
+    },
+    {
+      "label": "补全模型",
+      "minutes": 12,
+      "description": "添加 SafeState、正常转移、安全转移、恢复转移和状态视图暴露。"
+    },
+    {
+      "label": "校验与复盘",
+      "minutes": 5,
+      "description": "运行官方校验和课程规则，复盘 action 与 state 的组合方式。"
+    }
+  ],
+  "scenario": {
+    "title": "工程场景",
+    "body": "整车控制策略需要定义车辆运行模式：Off、Standby、Driving、Charging 和 SafeState。状态模型不只是列出模式名称，还要说明哪些事件触发切换、哪些条件允许切换，以及严重故障时如何进入安全状态。",
+    "visual": {
+      "type": "interactive-flow",
+      "variant": "06-vehicle-state-machine",
+      "title": "车辆运行状态机",
+      "caption": "从工程事件到状态转移：状态机回答系统停在哪里、为什么切换、切换是否安全。",
+      "nodes": [
+        {
+          "id": "state",
+          "icon": "S",
+          "label": "State / Mode",
+          "detail": "State 是系统可停留的状态；Mode 是工程上对状态的运行语义，例如行驶、充电或安全停机。",
+          "code": "state Driving"
+        },
+        {
+          "id": "event",
+          "icon": "E",
+          "label": "Event",
+          "detail": "Event 是瞬间发生的触发信号，例如上电、挂 D 档、插枪或严重故障。",
+          "code": "accept GearDriveSignal"
+        },
+        {
+          "id": "guard",
+          "icon": "G",
+          "label": "Guard",
+          "detail": "Guard 是允许转移发生的条件，例如 SOC 足够或车速为零。",
+          "code": "if socPercent > 5.0"
+        },
+        {
+          "id": "safe-state",
+          "icon": "F",
+          "label": "SafeState",
+          "detail": "严重故障要能从行驶和充电状态进入 SafeState，并执行紧急停机动作。",
+          "code": "SafeState"
+        }
+      ]
+    }
+  },
+  "learningBlocks": [
+    {
+      "type": "image-gallery",
+      "title": "课程导引图",
+      "content": "本图按当前 lesson 的工程任务和模型主题生成，用于先理解课程场景，再进入 SysML v2 建模练习。",
+      "generatedBy": "scripts/generate-course-lesson-illustrations.js",
+      "images": [
+        {
+          "src": "/api/course-assets/assets/course-visuals/generated-lesson-guides/ev-course-06-lesson-01-state.svg",
+          "title": "C06.L01 状态机基础与车辆运行模式",
+          "caption": "围绕 状态机/State / 转移/Transition / 安全模式/Safety 组织汽车工程语境，把本课对象放进可追踪的 SysML v2 模型。",
+          "alt": "电动汽车 SysML v2 建模课程导引图：状态机基础与车辆运行模式"
+        }
+      ]
+    },
+    {
+      "type": "concept-map",
+      "title": "L01 新概念工程类比",
+      "intro": "状态建模先回答运行模式和切换规则，再写 transition 语法。",
+      "items": [
+        {
+          "engineeringQuestion": "车辆可以稳定停在哪些运行模式？",
+          "concept": "`state`",
+          "analogy": "Ready、Driving、Charging、SafeState 都是 VCU 可识别的运行状态。",
+          "code": "state Driving",
+          "watchOut": "state 是可停留状态，不是瞬时信号。"
+        },
+        {
+          "engineeringQuestion": "什么触发状态切换？",
+          "concept": "`accept` event",
+          "analogy": "挂 D 档、插枪、充电完成、严重故障等事件触发切换。",
+          "code": "accept GearDriveSignal",
+          "watchOut": "event 是触发，不是目标状态。"
+        },
+        {
+          "engineeringQuestion": "触发后是否允许切换？",
+          "concept": "`if` guard",
+          "analogy": "SOC 大于 5% 才允许从 Ready 进入 Driving。",
+          "code": "if socPercent > 5.0",
+          "watchOut": "guard 是切换条件，不是普通程序分支块。"
+        },
+        {
+          "engineeringQuestion": "从哪个状态到哪个状态？",
+          "concept": "`transition`",
+          "analogy": "从 Ready 接收 GearDriveSignal 后进入 Driving。",
+          "code": "transition ready_to_driving",
+          "watchOut": "transition 要同时读源状态、事件、条件和目标状态。"
+        },
+        {
+          "engineeringQuestion": "故障时如何降级到安全状态？",
+          "concept": "`SafeState` + `entry action`",
+          "analogy": "严重故障进入 SafeState 并执行 EmergencyShutdown。",
+          "code": "entry action emergencyShutdown",
+          "watchOut": "SafeState 是课程的汽车安全建模约定，不是 SysML 强制名称。"
+        }
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "状态机基础：`state` 是系统可以停留的状态，`event` 是瞬时触发信号，`transition` 是从一个状态切到另一个状态的规则，`mode` 是工程师对某些状态的运行语义分类。液压系统里“卸荷、增压、保压、报警”也是状态；压力开关动作是 event；压力低于下限后从保压到增压是 transition；正常模式、维护模式、安全模式是 mode。"
+    },
+    {
+      "type": "markdown",
+      "content": "设计规则：一个入门状态机至少要检查五件事：是否有唯一初始状态，状态是否互斥，关键安全状态是否从危险状态可达，非终止状态是否有退出路径，恢复路径是否需要人工确认或故障清除条件。汽车状态机尤其不能漏掉 SafeState。"
+    },
+    {
+      "type": "markdown",
+      "content": "C05 衔接：C05 的 `perform action regenControl : RegenerativeBraking;` 回答“哪个结构元素承担这个行为”，通常写在 `part def` 或具体 part usage 里。C06 的 `do action driveControl : DriveCycle;` 写在 `state Driving` 里，回答“系统停留在 Driving 状态期间执行什么行为”。简单说，`perform action` 偏向把行为分配给执行者，`do action` 偏向说明某个状态激活期间正在做什么。"
+    },
+    {
+      "type": "hint-card",
+      "title": "do、perform、then、accept 这些动词有什么区别？",
+      "label": "点击查看状态/行为语义说明",
+      "content": "本课程附近会遇到几类相近写法，但它们不在同一个语法位置。`entry action`、`do action`、`exit action` 是状态动作，分别表示进入状态、停留状态、离开状态时执行；`perform action` 把行为放进结构或另一个行为上下文，说明谁执行或调用它；`then action` 表示行为步骤的先后；`accept XxxSignal` 接收事件；`send new XxxSignal() to target` 发送事件。后续课程会继续展开 `send`、`accept`、`assign`、`if`、`while` 等行为语法，本课只要求分清状态动作和 perform 绑定。"
+    },
+    {
+      "type": "markdown",
+      "content": "语法读法：官方 SysML v2 文本写法 `transition standby_to_driving first Standby accept GearDriveSignal if socPercent > 5.0 then Driving;` 可读成：从 Standby 出发，接收 GearDriveSignal 事件，如果 socPercent 大于 5，则进入 Driving。这里 `accept` 表示接收事件，`if` 是守卫条件，不是普通程序里的 if 语句块。"
+    },
+    {
+      "type": "markdown",
+      "content": "transition 写法示例：模板已经先写出 `transition off_to_standby first Off accept IgnitionOnSignal then Standby;`。后续 TODO 3-8 照这个骨架改四处：`first` 后写源状态，`accept` 后写触发事件，`if` 后按需要写 Boolean guard，`then` 后写目标状态。没有 guard 的转移可以省略 `if ...`。"
+    },
+    {
+      "type": "hint-card",
+      "title": "guard 是否要先定义",
+      "label": "点击查看状态/行为语义说明",
+      "content": "`if socPercent > 5.0` 里的 guard 是一段内联 Boolean 表达式，不需要另起一个 `guard def`。但表达式里引用的名字必须在当前状态机可见，例如 `socPercent`、`vehicleSpeedKph`、`allFaultsCleared` 已经作为 `VehicleOperatingState` 的 `in` 参数定义在前面。复杂、复用的判据后续可以抽成 `constraint` 或 `calc`，本课先用内联表达式。"
+    },
+    {
+      "type": "hint-card",
+      "title": "Signal 与 Guard",
+      "label": "点击查看状态/行为语义说明",
+      "content": "本课顶部的 `attribute def IgnitionOnSignal;`、`attribute def GearParkSignal;` 是信号/事件载荷类型定义。它们没有内部值属性，是因为本课只需要表达“收到这个事件”，不需要携带额外数据；官方示例也常用这种轻量写法。`accept GearParkSignal` 不是把 GearParkSignal 当 Boolean，而是接收这种信号事件。真正的 Boolean 条件写在 `if` 后面，例如 `vehicleSpeedKph == 0.0` 会得到 Boolean 结果，`allFaultsCleared` 本身已经是 `ScalarValues::Boolean`。"
+    },
+    {
+      "type": "markdown",
+      "content": "工具边界：SysML v2 规范要求 transition 的 guard 是 Boolean-valued expression。当前官方 Pilot validator 对部分类型不匹配表达式比较宽松，例如可能不拦截 `allFaultsCleared == 1.0`；课程仍按建模意图要求 Boolean 输入直接写 `if allFaultsCleared`。`====` 不是 SysML v2 相等运算符，会造成语法错误；相等比较使用 `==`。"
+    },
+    {
+      "type": "markdown",
+      "content": "状态动作位置：TODO 1 要写 `entry action emergencyShutdown : EmergencyShutdown;`，表示刚进入 SafeState 时执行紧急停机。`do action` 表示停留在状态期间执行的行为，和 entry action 不是同一件事。"
+    },
+    {
+      "type": "markdown",
+      "content": "transition usage 名称：`off_to_standby`、`standby_to_driving` 这类名称只是推荐的可读命名，不是 SysML v2 关键字，也不是本课通过条件。课程检查真正关注源状态、目标状态、`accept` 事件和 `if` 守卫；如果你写成 `Off_to_Standby`，只要转移语义正确，也应按同一条转移理解。"
+    },
+    {
+      "type": "hint-card",
+      "title": "为什么默认用 GeneralView，而不是直接状态迁移图？",
+      "label": "点击查看视图和图形呈现边界",
+      "content": "模板保留了两种 view 入口。`vehicleStateView : StandardViewDefinitions::GeneralView` 是默认通用评审视图，用来同时看 ElectricVehicle 和它承载的 `vehicleMode : VehicleOperatingState`；注释中的 `vehicleStateTransitionView : StandardViewDefinitions::StateTransitionView` 更聚焦 state、transition、guard 和 entry/do/exit action。当前先注释掉 StateTransitionView，是为了让本课默认生成稳定的 GeneralView；完成 TODO 后可以取消注释做对比。"
+    },
+    {
+      "type": "markdown",
+      "content": "练习步骤：如果编辑器顶部显示“课程模板”，先读已经写好的 Off -> Standby 示例，再按 TODO 1、3-9 补全 SafeState、正常转移、安全转移、恢复转移和状态视图暴露。如果显示“已恢复草稿”，请检查这些状态和 transition 是否已经在 `VehicleOperatingState` 内，必要时点击“重置为课程模板”。"
+    },
+    {
+      "type": "code",
+      "language": "sysml",
+      "sourceFile": "starter.sysml"
+    }
+  ],
+  "workspace": {
+    "files": [
+      {
+        "path": "main.sysml",
+        "source": "starter.sysml",
+        "editable": true
+      }
+    ],
+    "entryFile": "main.sysml"
+  },
+  "tasks": [
+    {
+      "id": "task-01",
+      "type": "model-challenge",
+      "prompt": "在课程模板的 TODO 位置，或在已恢复草稿中的对应结构位置，把 VehicleOperatingState 从状态清单升级为完整入门状态机：必须有 SafeState、事件触发、守卫条件、安全转移、恢复转移和状态视图。",
+      "hints": [
+        "`first start then Off;` 是初始状态，不是普通状态节点。",
+        "`accept GearDriveSignal` 是事件触发；`if socPercent > 5.0` 是守卫条件。",
+        "照着模板里的 Off -> Standby 示例写后续 transition：`first` 源状态、`accept` 事件、可选 `if` 守卫、`then` 目标状态。",
+        "`if` 后可以直接写内联 guard 表达式，不需要单独定义 guard；但表达式引用的 `socPercent`、`vehicleSpeedKph`、`allFaultsCleared` 必须已在状态机上下文可见。",
+        "`attribute def GearParkSignal;` 定义的是可被 accept 接收的信号类型，不是 Boolean 变量，也不会被 transition 自动推断成 Boolean。",
+        "SafeState 要写 `entry action emergencyShutdown : EmergencyShutdown;`；`do action` 表示状态停留期间执行，不满足“进入安全状态时执行”的要求。",
+        "`perform action` 说明结构或行为上下文承担/调用某个行为；`do action` 说明某个状态激活期间执行某个行为。",
+        "transition usage 名称可以自定义；推荐示例名是 `off_to_standby`、`standby_to_driving`、`driving_to_standby`、`standby_to_charging`、`driving_to_safe`、`charging_to_safe`、`safe_to_off`。",
+        "`allFaultsCleared` 是 Boolean 输入，恢复转移的守卫直接写 `if allFaultsCleared`；不要写成和数值比较。相等比较只用 `==`，不要写 `====`。",
+        "状态名称 SafeState 是课程约定，用于明确功能安全语义；SysML v2 不强制叫这个名字，但汽车课程必须显式建出安全状态。",
+        "`do action driveControl : DriveCycle;` 是 state 和 C05 action 的结合点。",
+        "`vehicleStateView` 当前是通用评审视图；注释中的 `StateTransitionView` 可在完成后取消注释，用来对比状态迁移专用视图。"
+      ]
+    }
+  ],
+  "validation": {
+    "strictSysml": true,
+    "rulesFile": "rules.json"
+  },
+  "completion": {
+    "requiresStrictValidation": true,
+    "requiresAllLessonRules": true
+  },
+  "glossaryTerms": [
+    "state def",
+    "state",
+    "transition",
+    "accept",
+    "guard",
+    "SafeState",
+    "ActionUsage",
+    "ViewUsage"
+  ]
+}

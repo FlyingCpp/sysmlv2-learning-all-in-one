@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "../../.tmp/web-i18n",
+    "rootDir": "src",
+    "module": "CommonJS",
+    "moduleResolution": "Node10",
+    "ignoreDeprecations": "6.0",
+    "declaration": false,
+    "sourceMap": false,
+    "isolatedModules": false
+  },
+  "include": [
+    "src/i18n/locale.ts",
+    "src/i18n/locale-switch.ts",
+    "src/i18n/projection.ts",
+    "src/i18n/format.ts",
+    "src/i18n/error-message.ts"
+  ]
+}

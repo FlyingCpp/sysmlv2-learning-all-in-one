@@ -1,0 +1,98 @@
+{
+  "id": "course-09-lesson-03",
+  "title": "验证成熟度 3：安全多方法与异常闭环",
+  "type": "modeling-lesson",
+  "estimatedMinutes": 55,
+  "timePlan": [
+    { "label": "建立安全需求对", "minutes": 10, "description": "区分绝缘阈值与 SafeState 能力。" },
+    { "label": "配置两种方法", "minutes": 20, "description": "用 inspect 检查绝缘，用 demo 演示安全状态。" },
+    { "label": "处理非 pass 结果", "minutes": 15, "description": "把未观察到 SafeState 记录为 inconclusive。" },
+    { "label": "形成安全评审视图", "minutes": 10, "description": "关联样件身份、两项需求和两项验证。" }
+  ],
+  "scenario": {
+    "title": "工程场景：一项通过不等于安全闭环",
+    "body": "revision 220、样件 7 的高压绝缘观测为 620.0 ohm/V，高于 500.0 ohm/V 阈值；但 SafeState 演示没有获得完整观测。团队必须同时保留 inspection 与 demonstration，并把后者记录为 inconclusive，而不是因为绝缘通过就宣称整车安全验证完成。",
+    "visual": {
+      "type": "interactive-flow",
+      "variant": "09-maturity-safety",
+      "title": "安全多方法闭环",
+      "nodes": [
+        { "id": "inspect", "label": "绝缘检查", "detail": "620 >= 500", "code": "VerificationMethod::inspect" },
+        { "id": "demo", "label": "SafeState 演示", "detail": "观测不完整", "code": "VerificationMethod::demo" },
+        { "id": "lifecycle", "label": "异常闭环", "detail": "pass + inconclusive 均被记录", "code": "VerdictKind" }
+      ]
+    }
+  },
+  "learningBlocks": [
+    {
+      "type": "image-gallery",
+      "title": "课程导引图",
+      "images": [
+        {
+          "src": "/api/course-assets/assets/course-visuals/generated-lesson-guides/ev-course-09-lesson-03-verification.svg",
+          "title": "安全多方法验证",
+          "caption": "检查绝缘并演示 SafeState，保留非 pass 结果。",
+          "alt": "电动汽车安全多方法验证教学图"
+        }
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "工程意图：`IsolationInspection` 的 subject 是具体 HighVoltageSystem，方法为 inspect，使用 620.0 ohm/V 独立观测与 500.0 阈值给出 PassIf verdict。`SafeStateDemonstration` 的 subject 是整车，方法为 demo；当前 `safeStateObserved = false` 表示证据不完整，本课要求记录 VerdictKind::inconclusive。两项证据都保留 `configurationRevision = 220` 和 `specimenNumber = 7`，避免跨配置误用。"
+    },
+    {
+      "type": "hint-card",
+      "title": "false 为什么不是直接 fail？",
+      "label": "证据状态",
+      "content": "本场景把 false 定义为“没有获得完整观测”，不是“确认系统无法进入 SafeState”。因此 inconclusive 比 fail 更准确；若测试明确观察到违反需求，才应记录 fail。"
+    },
+    {
+      "type": "hint-card",
+      "title": "绝缘通过能覆盖 SafeState 吗？",
+      "label": "方法互补",
+      "content": "不能。inspection 证明静态绝缘阈值，demonstration 证明故障处理行为。两种方法验证不同 requirement，必须分别追踪。"
+    },
+    {
+      "type": "markdown",
+      "content": "权威依据：VerificationCases 标准库允许 inspect、analyze、demo、test 四类 VerificationMethod，并定义 inconclusive/error；官方 VerificationMetadataExample 展示 @VerificationMethod 元数据标注。"
+    },
+    {
+      "type": "markdown",
+      "content": "练习步骤：在“课程模板”中按 TODO 1-2 完成 inspection 方法与 verdict，按 TODO 3-4 完成 demonstration 方法与 inconclusive return，按 TODO 5-6 把两项 verification expose 到视图。使用“已恢复草稿”时保留配置与样件身份；需要恢复时点击“重置为课程模板”。"
+    },
+    { "type": "code", "language": "sysml", "sourceFile": "starter.sysml" }
+  ],
+  "workspace": {
+    "files": [
+      { "path": "ev-program-baseline.sysml", "source": "../../../shared/ev-program-baseline.sysml", "editable": false },
+      { "path": "main.sysml", "source": "starter.sysml", "editable": true }
+    ],
+    "entryFile": "main.sysml"
+  },
+  "tasks": [
+    {
+      "id": "task-01",
+      "type": "model-challenge",
+      "prompt": "为同一配置样车补齐绝缘 inspection 与 SafeState demonstration 的方法、verdict 和安全评审覆盖。",
+      "hints": [
+        "IsolationInspection 使用 VerificationMethodKind::inspect。",
+        "绝缘 verdict 比较 measuredIsolationOhmPerVolt 与 requiredIsolationOhmPerVolt。",
+        "SafeStateDemonstration 使用 VerificationMethodKind::demo。",
+        "证据不完整时返回 VerdictKind::inconclusive。"
+      ]
+    }
+  ],
+  "challenges": [
+    {
+      "id": "error-verdict",
+      "title": "测量链故障",
+      "context": "绝缘仪器校准状态缺失，数值不具备判定资格。",
+      "task": "设计一个 error verdict 分支，并说明它与 fail、inconclusive 的触发差异。",
+      "acceptance": "保留原始样件身份、方法元数据和两条独立需求覆盖。",
+      "watchOut": "不要把工具错误解释为产品不满足需求。"
+    }
+  ],
+  "validation": { "strictSysml": true, "rulesFile": "rules.json" },
+  "completion": { "requiresStrictValidation": true, "requiresAllLessonRules": true },
+  "glossaryTerms": ["VerificationMethod", "inspect", "demo", "pass", "fail", "inconclusive", "error"]
+}

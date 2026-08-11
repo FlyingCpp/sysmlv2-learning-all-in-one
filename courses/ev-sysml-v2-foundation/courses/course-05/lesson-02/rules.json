@@ -1,0 +1,142 @@
+{
+  "rules": [
+    {
+      "id": "strict-valid",
+      "type": "strictValidationPassed",
+      "severity": "error",
+      "message": "模型必须通过严格 SysML v2 校验。"
+    },
+    {
+      "id": "charge-input-soc",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "ChargingProcess",
+        "kind": "in",
+        "name": "socCurrent",
+        "typeName": "ScalarValues::Real"
+      },
+      "message": "ChargingProcess 需要 in socCurrent : ScalarValues::Real，表达来自 BMS 的当前 SOC。"
+    },
+    {
+      "id": "charge-input-target",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "ChargingProcess",
+        "kind": "in",
+        "name": "targetSOC",
+        "typeName": "ScalarValues::Real"
+      },
+      "message": "ChargingProcess 需要 in targetSOC : ScalarValues::Real，表达目标 SOC。"
+    },
+    {
+      "id": "charge-output-current",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "ChargingProcess",
+        "kind": "out",
+        "name": "currentSetpointA",
+        "typeName": "ScalarValues::Real"
+      },
+      "message": "ChargingProcess 需要 out currentSetpointA : ScalarValues::Real，表达充电电流指令。"
+    },
+    {
+      "id": "charge-output-complete",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "ChargingProcess",
+        "kind": "out",
+        "name": "chargingComplete",
+        "typeName": "ScalarValues::Boolean"
+      },
+      "message": "ChargingProcess 需要 out chargingComplete : ScalarValues::Boolean，表达充电完成状态。"
+    },
+    {
+      "id": "precharge-then-action",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "ChargingProcess",
+        "kind": "action",
+        "name": "preChargeCheck",
+        "isThen": true
+      },
+      "message": "ChargingProcess 中需要 then action preChargeCheck，表达握手后的预充检查步骤。"
+    },
+    {
+      "id": "regulate-then-action",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "ChargingProcess",
+        "kind": "action",
+        "name": "regulateCurrent",
+        "isThen": true
+      },
+      "message": "ChargingProcess 中需要 then action regulateCurrent，表达电流调节步骤。"
+    },
+    {
+      "id": "monitor-then-action",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "ChargingProcess",
+        "kind": "action",
+        "name": "monitorCharge",
+        "isThen": true
+      },
+      "message": "ChargingProcess 中需要 then action monitorCharge，表达充电监控步骤。"
+    },
+    {
+      "id": "charger-ready-flow",
+      "type": "relationshipExists",
+      "severity": "error",
+      "selector": {
+        "parent": "ChargingProcess",
+        "kind": "flow",
+        "sourceName": "handshakeWithCharger.chargerReady",
+        "targetName": "preChargeCheck.chargerReady"
+      },
+      "message": "ChargingProcess 中需要 flow from handshakeWithCharger.chargerReady to preChargeCheck.chargerReady。"
+    },
+    {
+      "id": "system-ready-flow",
+      "type": "relationshipExists",
+      "severity": "error",
+      "selector": {
+        "parent": "ChargingProcess",
+        "kind": "flow",
+        "sourceName": "preChargeCheck.systemReady",
+        "targetName": "regulateCurrent.systemReady"
+      },
+      "message": "ChargingProcess 中需要 flow from preChargeCheck.systemReady to regulateCurrent.systemReady。"
+    },
+    {
+      "id": "current-command-flow",
+      "type": "relationshipExists",
+      "severity": "error",
+      "selector": {
+        "parent": "ChargingProcess",
+        "kind": "flow",
+        "sourceName": "regulateCurrent.currentCommandA",
+        "targetName": "monitorCharge.currentCommandA"
+      },
+      "message": "ChargingProcess 中需要 flow from regulateCurrent.currentCommandA to monitorCharge.currentCommandA。"
+    },
+    {
+      "id": "charging-view-exposes-process",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "chargingBehaviorView",
+        "kind": "expose",
+        "name": "ChargingProcess",
+        "targetName": "ChargingProcess"
+      },
+      "message": "chargingBehaviorView 中需要 expose ChargingProcess，把充电过程纳入行为视图。"
+    }
+  ]
+}

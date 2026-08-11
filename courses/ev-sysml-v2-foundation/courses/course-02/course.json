@@ -1,0 +1,266 @@
+{
+  "id": "course-02",
+  "order": 2,
+  "title": "Definition / Usage 核心模式",
+  "summary": "用汽车 BOM、零件图册和系统流的工程类比，掌握 SysML v2 中 definition 与 usage 的分离，并把电池包、控制器和电驱总成逐步组织成可复用整车结构。",
+  "thumbnail": {
+    "src": "/api/course-assets/assets/course-thumbnails/course-02.svg",
+    "alt": "Course 02 Definition 与 Usage 模式缩略图"
+  },
+  "objectives": [
+    "理解 Definition 是工程类型或蓝图，Usage 是具体模型上下文中的引用或 BOM 行",
+    "能判断汽车工程对象应使用 part def 还是 item def",
+    "能用 part usage 和多重性表达电池包层级结构，而不把数量误认为类型本身",
+    "能用 item def / item 表达电能、扭矩命令等可交换对象，为后续端口和接口建模打基础",
+    "能解释为什么 def 内部必须通过 usage 引用另一个 def，并能封装可复用电驱子系统"
+  ],
+  "concepts": [
+    "definition",
+    "usage",
+    "def/usage pattern",
+    "part def",
+    "part",
+    "item def",
+    "item",
+    "multiplicity",
+    "typed usage",
+    "BOM mapping"
+  ],
+  "lessons": [
+    "lesson-00/lesson.json",
+    "lesson-01/lesson.json",
+    "lesson-02/lesson.json",
+    "lesson-03/lesson.json"
+  ],
+  "references": [
+    {
+      "type": "standard",
+      "source": "OMG SysML v2.0 Language Specification",
+      "title": "Definition / Usage 标准章节",
+      "section": "Clause 7.6 Definition and Usage; Clause 8.2.2.6 Definition and Usage Textual Notation; Clause 8.4.2 Definition and Usage Semantics",
+      "url": "https://www.omg.org/spec/SysML/2.0/Language/PDF",
+      "note": "本 Course 的核心标准依据：先定义可复用类型，再在具体上下文中创建 usage。"
+    },
+    {
+      "type": "standard",
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "title": "PartDefinition / PartUsage / ItemDefinition / ItemUsage",
+      "section": "SysML metamodel EClass PartDefinition, PartUsage, ItemDefinition, ItemUsage",
+      "url": "https://www.omg.org/spec/SysML/2.0/Language/PDF",
+      "note": "用于对照 part def、part、item def、item 的元模型含义。"
+    },
+    {
+      "type": "example",
+      "source": "Systems-Modeling/SysML-v2-Release",
+      "title": "Official Vehicle Definitions and Usages",
+      "section": "Vehicle Example / VehicleDefinitions.sysml, VehicleUsages.sysml",
+      "url": "https://github.com/Systems-Modeling/SysML-v2-Release/tree/master/sysml/src/examples/Vehicle%20Example",
+      "note": "比较定义文件和使用文件，理解产品族与具体对象的分离。"
+    },
+    {
+      "type": "example",
+      "source": "Systems-Modeling/SysML-v2-Release",
+      "title": "Official Flashlight Example",
+      "section": "Flashlight Example",
+      "url": "https://github.com/Systems-Modeling/SysML-v2-Release/tree/master/sysml/src/examples/Flashlight%20Example",
+      "note": "用小型物理产品案例复习 part def、part 和 item 的定义/使用模式。"
+    }
+  ],
+  "codeGuideExplanations": [
+    {
+      "id": "c02-battery-cell-def",
+      "lineStartsWith": "part def BatteryCell",
+      "explanation": "这行定义电芯类型，相当于零件图册中的电芯通用件。它不是某一个电芯实物，而是后续 BOM 行可以引用的类型。"
+    },
+    {
+      "id": "c02-battery-module-def",
+      "lineStartsWith": "part def BatteryModule",
+      "explanation": "这行定义电池模组类型。模组本身是可复用的子系统蓝图，内部通过 part usage 说明它由哪些下级部件组成。"
+    },
+    {
+      "id": "c02-cells-usage",
+      "lineStartsWith": "part cells",
+      "explanation": "这行是 BOM 行式的 part usage。`part` 是关键字，`cells` 是自定义名称，`[12]` 是数量配置，冒号右侧的 BatteryCell 是被引用的类型。"
+    },
+    {
+      "id": "c02-battery-pack-def",
+      "lineStartsWith": "part def BatteryPack",
+      "explanation": "这行定义电池包类型。它把模组作为内部 usage 引用进来，因此 BatteryPack 是可复用结构蓝图，不是某台车上的那一包电池。"
+    },
+    {
+      "id": "c02-modules-usage",
+      "lineStartsWith": "part modules",
+      "explanation": "这行表示 BatteryPack 中有若干个 BatteryModule 使用。`modules` 是工程名称，不是保留字；真正决定类型的是冒号右侧的 BatteryModule。"
+    },
+    {
+      "id": "c02-packA-usage",
+      "lineStartsWith": "part packA",
+      "explanation": "这行创建一份具体电池包使用。`packA` 是建模者取的实例/配置名称，BatteryPack 是类型；它不是新的 part def。"
+    },
+    {
+      "id": "c02-electrical-energy-def",
+      "lineStartsWith": "item def ElectricalEnergy",
+      "explanation": "这行定义电能这种可交换对象类型。电能不是装在 BOM 上的物理零件，而是后续会通过端口和接口在部件之间流动的对象。"
+    },
+    {
+      "id": "c02-stored-energy-usage",
+      "lineStartsWith": "item storedEnergy",
+      "explanation": "这行创建 ElectricalEnergy 的一份使用。它应放在 BatteryPack 这类承载或交换电能的结构上下文中，而不是作为 package 根部的悬空对象。"
+    },
+    {
+      "id": "c02-torque-command-def",
+      "lineStartsWith": "item def TorqueCommand",
+      "explanation": "这行定义扭矩命令类型。它属于控制系统传递的信息对象，后续接口建模会把它放到端口或 flow 上。"
+    },
+    {
+      "id": "c02-drive-command-usage",
+      "lineStartsWith": "item driveCommand",
+      "explanation": "这行创建一份具体扭矩命令使用。它应放在 Controller 这类产生或处理命令的结构上下文中，后续 Course04 会进一步把它放到端口和接口上。"
+    },
+    {
+      "id": "c02-controller-def",
+      "lineStartsWith": "part def Controller",
+      "explanation": "这行定义控制器这个物理或逻辑部件类型。控制器是系统结构中的承载对象，因此使用 part def，而不是 item def。"
+    },
+    {
+      "id": "c02-vehicle-controller-usage",
+      "lineStartsWith": "part vehicleController",
+      "explanation": "这行创建一份控制器使用，表示当前车辆模型里有一个控制器对象。后续课程会在它的端口上发送 TorqueCommand。"
+    },
+    {
+      "id": "c02-motor-def",
+      "lineStartsWith": "part def Motor",
+      "explanation": "这行定义电机类型。它是可以进入 BOM 和子系统结构的物理部件，因此是 part def。"
+    },
+    {
+      "id": "c02-inverter-def",
+      "lineStartsWith": "part def Inverter",
+      "explanation": "这行定义逆变器类型。它是电驱总成会引用的零件蓝图，不能直接当作总成里的实物出现。"
+    },
+    {
+      "id": "c02-edu-def",
+      "lineStartsWith": "part def ElectricDriveUnit",
+      "explanation": "这行定义电驱总成类型。它内部不能直接写 Inverter 或 Motor 名字，而要用 part inverter : Inverter 这类 usage 引用零件类型。"
+    },
+    {
+      "id": "c02-inverter-usage",
+      "lineStartsWith": "part inverter",
+      "explanation": "这行是电驱总成内部的一条 BOM 行：角色名为 inverter，类型来自 Inverter。它说明这里装入一份逆变器使用。"
+    },
+    {
+      "id": "c02-motor-usage",
+      "lineStartsWith": "part motor",
+      "explanation": "这行是电驱总成内部的一条 BOM 行：角色名为 motor，类型来自 Motor。它说明这里装入一份电机使用。"
+    },
+    {
+      "id": "c02-front-drive-usage",
+      "lineStartsWith": "part frontDriveUnit",
+      "explanation": "这行创建前轴电驱总成使用。它引用 ElectricDriveUnit 类型，可扩展为前驱、后驱或双电机配置。"
+    },
+    {
+      "id": "c02-vehicle-def",
+      "lineStartsWith": "part def Vehicle",
+      "explanation": "这行定义整车类型，把电池包、控制器和电驱总成作为内部 part usage 组合起来，形成 Course 02 的整合模型形状。"
+    },
+    {
+      "id": "c02-my-ev-usage",
+      "lineStartsWith": "part myEV",
+      "explanation": "这行创建一辆具体车辆的使用。它不是再定义一个车型，而是把 Vehicle 类型放入当前模型上下文。"
+    }
+  ],
+  "conceptExplanations": [
+    {
+      "id": "Definition",
+      "term": "Definition",
+      "aliases": [
+        "definition",
+        "def"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass Definition",
+      "standardEnglish": "A Definition is a Classifier of Usages. The actual kinds of Definition that may appear in a model are given by the subclasses of Definition (possibly as extended with user-defined SemanticMetadata).",
+      "chineseTranslation": "Definition 是 Usage 的分类器。模型中实际可出现的 Definition 类型由 Definition 的子类给出。",
+      "explanation": "Definition 是蓝图、通用件、类型或规则模板。它回答“这种东西是什么”，不回答“当前系统里出现了哪一份”。",
+      "engineeringExample": "part def BatteryPack 类似零件图册中的电池包通用件定义。"
+    },
+    {
+      "id": "Usage",
+      "term": "Usage",
+      "aliases": [
+        "usage"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass Usage",
+      "standardEnglish": "A Usage is a usage of a Definition.",
+      "chineseTranslation": "Usage 是对某个 Definition 的一次使用。",
+      "explanation": "Usage 是 BOM 行、系统结构中的角色、接口中的流项或当前车型中的具体对象。它回答“在哪里用、叫什么、用几个、用什么类型”。",
+      "engineeringExample": "part modules[8] : BatteryModule 表示 BatteryPack 中有 8 个模组使用。"
+    },
+    {
+      "id": "PartDefinition",
+      "term": "PartDefinition",
+      "aliases": [
+        "part def"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass PartDefinition",
+      "standardEnglish": "A PartDefinition is an ItemDefinition of a Class of systems or parts of systems. Note that all parts may be considered items for certain purposes, but not all items are parts that can perform actions within a system.",
+      "chineseTranslation": "PartDefinition 是系统或系统部件类别的 ItemDefinition。所有 part 在某些目的下都可被视为 item，但并非所有 item 都是能在系统中执行动作的 part。",
+      "explanation": "当对象是 BOM 上有独立编号、承担结构或功能责任的系统部件时，优先建成 part def。",
+      "engineeringExample": "BatteryPack、Controller、Inverter、Motor 和 ElectricDriveUnit 都适合建模为 part def。"
+    },
+    {
+      "id": "PartUsage",
+      "term": "PartUsage",
+      "aliases": [
+        "part"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass PartUsage",
+      "standardEnglish": "A PartUsage is a usage of a PartDefinition to represent a system or a part of a system. At least one of the itemDefinitions of the PartUsage must be a PartDefinition.",
+      "chineseTranslation": "PartUsage 是 PartDefinition 的一次使用，用来表示一个系统或系统部件；其 itemDefinitions 中至少一个必须是 PartDefinition。",
+      "explanation": "part usage 把零件蓝图放进当前上下文，像 BOM 中的一行“此处使用某件号”。",
+      "engineeringExample": "part inverter : Inverter 表示 ElectricDriveUnit 中有一份逆变器使用。"
+    },
+    {
+      "id": "ItemDefinition",
+      "term": "ItemDefinition",
+      "aliases": [
+        "item def"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass ItemDefinition",
+      "standardEnglish": "An ItemDefinition is an OccurrenceDefinition of the Structure of things that may themselves be systems or parts of systems, but may also be things that are acted on by a system or parts of a system, but which do not necessarily perform actions themselves. This includes items that can be exchanged between parts of a system, such as water or electrical signals.",
+      "chineseTranslation": "ItemDefinition 定义可出现对象的结构，这些对象可以是系统或系统部件，也可以是被系统作用、但不一定自己执行动作的东西；其中包括可在系统部件之间交换的对象，例如水或电信号。",
+      "explanation": "item def 用来定义“流过系统的东西”：能量、物质、命令、信号、报文。它通常不是 BOM 上的结构件。",
+      "engineeringExample": "ElectricalEnergy、TorqueCommand、CoolantFlow 和 CANMessage 都适合建模为 item def。"
+    },
+    {
+      "id": "ItemUsage",
+      "term": "ItemUsage",
+      "aliases": [
+        "item"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass ItemUsage",
+      "standardEnglish": "An ItemUsage is an ItemUsage whose definition is a Structure. Nominally, if the definition is an ItemDefinition, an ItemUsage is a usage of that ItemDefinition within a system.",
+      "chineseTranslation": "ItemUsage 是其定义为 Structure 的 item 使用；通常如果定义是 ItemDefinition，则 ItemUsage 是系统中对该 ItemDefinition 的一次使用。",
+      "explanation": "item usage 把流项类型落到具体模型语境中。Course02 先把它放进承载或处理该流项的 part def，例如 BatteryPack 中的 storedEnergy、Controller 中的 driveCommand；后续 Course04 会把它放到端口、接口和行为上。",
+      "engineeringExample": "Controller 内的 item driveCommand : TorqueCommand 表示控制器上下文中使用的一份扭矩命令。"
+    },
+    {
+      "id": "Multiplicity",
+      "term": "Multiplicity",
+      "aliases": [
+        "multiplicity",
+        "[n]"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel Multiplicity related classifiers",
+      "standardEnglish": "Multiplicity constrains how many values may be bound to a feature.",
+      "chineseTranslation": "多重性约束一个特征可以绑定多少个值。",
+      "explanation": "多重性写在 usage 上，因为数量属于某个上下文中的配置，不是类型本身的全部含义。学习时可以把它理解成 BOM 行上的数量。",
+      "engineeringExample": "part cells[12] : BatteryCell 表示当前 BatteryModule 里有 12 个电芯位置；改成 [2] 仍是合法语法，但不符合本场景给定配置。"
+    }
+  ]
+}

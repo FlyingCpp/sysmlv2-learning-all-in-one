@@ -1,0 +1,263 @@
+{
+  "id": "course-03",
+  "order": 3,
+  "title": "产品结构参数化建模",
+  "summary": "在已有 part def/part 基础上，引入 attribute、参数传递、abstract 和 specialization，表达带工程参数和产品族变体的电动汽车结构。",
+  "thumbnail": {
+    "src": "/api/course-assets/assets/course-thumbnails/course-03.svg",
+    "alt": "Course 03 电池包结构参数化缩略图"
+  },
+  "objectives": [
+    "给 part def 添加 attribute，区分结构组成与工程参数",
+    "用参数表达电池 Cell-Module-Pack 层级中的数量和能量传递",
+    "用 abstract part def 与 specialization 表达单电机/双电机动力总成产品族",
+    "形成从零件参数、总成参数到整车配置的递进模型"
+  ],
+  "concepts": [
+    "attribute",
+    "FeatureValue",
+    "parameter roll-up",
+    "abstract part def",
+    "specialization",
+    "product family"
+  ],
+  "lessons": [
+    "lesson-01/lesson.json",
+    "lesson-02/lesson.json",
+    "lesson-03/lesson.json"
+  ],
+  "references": [
+    {
+      "type": "standard",
+      "source": "OMG SysML v2.0 Language Specification",
+      "title": "Attributes 标准章节",
+      "section": "Clause 7.12 Attributes; Clause 8.2.2.12 Attribute Textual Notation; SysML.ecore AttributeDefinition / AttributeUsage",
+      "url": "https://www.omg.org/spec/SysML/2.0/Language/PDF",
+      "note": "支撑零件工程参数、默认值和参数表建模。"
+    },
+    {
+      "type": "standard",
+      "source": "OMG SysML v2.0 Language Specification",
+      "title": "Classification and Specialization 标准章节",
+      "section": "Clause 7.5 Types and Classification; SysML.ecore Specialization / Subclassification",
+      "url": "https://www.omg.org/spec/SysML/2.0/Language/PDF",
+      "note": "支撑产品族、平台变体和抽象父类型建模。"
+    },
+    {
+      "type": "example",
+      "source": "Systems-Modeling/SysML-v2-Release",
+      "title": "Official Mass Roll-up Example",
+      "section": "Mass Roll-up Example",
+      "url": "https://github.com/Systems-Modeling/SysML-v2-Release/tree/master/sysml/src/examples/Mass%20Roll-up%20Example",
+      "note": "对照官方示例理解零件参数如何服务总成级质量或能量汇总。"
+    },
+    {
+      "type": "example",
+      "source": "Systems-Modeling/SysML-v2-Release",
+      "title": "Official Vehicle Example",
+      "section": "Vehicle Example / VehicleDefinitions, VehicleUsages",
+      "url": "https://github.com/Systems-Modeling/SysML-v2-Release/tree/master/sysml/src/examples/Vehicle%20Example",
+      "note": "对照官方车辆模型理解整车、部件和配置对象。"
+    }
+  ],
+  "codeGuideExplanations": [
+    {
+      "lineStartsWith": "attribute diameterM",
+      "explanation": "这行给 Wheel 定义轮径参数。`attribute` 是标准关键字，`diameterM` 是工程参数名，`ScalarValues::Real` 是标准库实数类型限定名；冒号前后的空格是课程推荐排版，不是课程规则要检查的语义。`diameterM` 中的 M 是本课用命名约定表达单位，后续严格单位建模应引入 SysML v2 Quantities and Units 库中的 ISQ/SI。"
+    },
+    {
+      "lineStartsWith": "attribute massKg",
+      "explanation": "这行定义质量参数。`massKg` 是建模者取的工程名称，不是标准强制名称；同名参数可以出现在不同 part def 中。电芯示例中的 5.0kg 是 220Ah 车用电芯的教学近似质量，用于保持能量和质量量级合理。"
+    },
+    {
+      "lineStartsWith": "attribute dragCoeff",
+      "explanation": "这行定义车身风阻系数。它说明 VehicleBody 不只是一个名字，还带有空气动力学相关参数。"
+    },
+    {
+      "lineStartsWith": "attribute targetRangeKm",
+      "explanation": "这行定义整车目标续航，是整车级工程目标参数，后续可以和需求、分析、验证关联。"
+    },
+    {
+      "lineStartsWith": "attribute nominalVoltageV",
+      "explanation": "这行定义电芯标称电压，是电池参数向上汇总的底层来源之一。"
+    },
+    {
+      "lineStartsWith": "attribute capacityAh",
+      "explanation": "这行定义电芯容量。本课程用 220Ah 作为教学中的大容量车用电芯近似值，与 8 个模组、每模组 12 个电芯共同形成约 78kWh 的电池包主线。"
+    },
+    {
+      "lineStartsWith": "attribute energyWh",
+      "explanation": "这行先在 BatteryCell 内定义单体能量，后续上级结构通过 cells.energyWh 引用这一组电芯 usage 的能量特征。"
+    },
+    {
+      "lineStartsWith": "attribute cellCount",
+      "explanation": "这行定义每个模组的电芯数量。它是配置参数，不是结构组成；结构组成仍由 cells : BatteryCell 表达。"
+    },
+    {
+      "lineStartsWith": "attribute moduleEnergyWh",
+      "explanation": "这行用 sum(cells.energyWh) 显式汇总模组内 cells 这些 BatteryCell usage 的能量。组合关系本身不会自动把电芯参数传递到模组参数。"
+    },
+    {
+      "lineStartsWith": "attribute totalCellCount",
+      "explanation": "这行把 moduleCount 与 cellsPerModule 关联起来，表示从模组层到电池包层的数量关系。它是模型中的表达式关系，是否自动算出数值取决于使用的 SysML 工具是否支持表达式求值。"
+    },
+    {
+      "lineStartsWith": "attribute totalEnergyWh",
+      "explanation": "这行用 sum(modules.moduleEnergyWh) 显式汇总电池包内 modules 这些 BatteryModule usage 的能量。本站校验会确认表达式作为模型合法存在，但不会显示计算结果；真实工程计算需要 SysML 求值引擎或外部分析工具执行。"
+    },
+    {
+      "lineStartsWith": "attribute usableEnergyKWh",
+      "explanation": "这行把 Wh 级总能量转换成 kWh 级可用能量参数。后续需求、分析和验证课程统一使用近似的 usableEnergyKWh = 78.0，避免前后课程出现不同电池包基准。"
+    },
+    {
+      "lineStartsWith": "abstract part def Powertrain",
+      "explanation": "这行定义抽象动力总成父类型，表示平台上有一个动力总成槽位，但它本身不是标准版或性能版的具体配置。"
+    },
+    {
+      "lineStartsWith": "part def SingleMotorPowertrain :> Powertrain",
+      "explanation": "这行定义单电机动力总成，并通过 :> 说明它是 Powertrain 产品族的一种具体变体。"
+    },
+    {
+      "lineStartsWith": "part def DualMotorPowertrain :> Powertrain",
+      "explanation": "这行定义双电机动力总成，和单电机变体共享同一个抽象父类型 Powertrain。"
+    },
+    {
+      "lineStartsWith": "part powertrain : Powertrain",
+      "explanation": "这行在 Vehicle 中放置抽象动力总成槽位。它让整车平台先表达可变位置，再由具体车型选择单电机或双电机变体。"
+    }
+  ],
+  "conceptExplanations": [
+    {
+      "id": "AttributeDefinition",
+      "term": "AttributeDefinition",
+      "aliases": [
+        "attribute def"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass AttributeDefinition",
+      "standardEnglish": "An AttributeDefinition is a Definition and a DataType of information about a quality or characteristic of a system or part of a system that has no independent identity other than its value.",
+      "chineseTranslation": "AttributeDefinition 是关于系统或系统部件的质量、特性信息的定义和数据类型；它除了自身取值之外没有独立身份。",
+      "explanation": "在课程中可理解为“参数类型”或“参数表列定义”。本课直接使用官方库中的 ScalarValues::Real 和 ScalarValues::Integer 作为 attribute 类型。",
+      "engineeringExample": "轮径、质量、风阻系数、目标续航都属于零件或整车的工程参数，不是下级零件。"
+    },
+    {
+      "id": "AttributeUsage",
+      "term": "AttributeUsage",
+      "aliases": [
+        "attribute"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass AttributeUsage",
+      "standardEnglish": "An AttributeUsage is a Usage whose type is a DataType.",
+      "chineseTranslation": "AttributeUsage 是一种类型为 DataType 的 Usage。",
+      "explanation": "本课中的 `attribute diameterM : ScalarValues::Real = 0.65;` 是 AttributeUsage：它把一个数据类型参数放到 Wheel 的定义上下文中。",
+      "engineeringExample": "Wheel.diameterM 表示轮子类型的轮径参数；VehicleBody.dragCoeff 表示车身类型的风阻系数参数。"
+    },
+    {
+      "id": "FeatureValue",
+      "term": "FeatureValue",
+      "aliases": [
+        "default value",
+        "initial value"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass FeatureValue",
+      "standardEnglish": "A FeatureValue is a Membership that identifies a particular member Expression that provides the value of the Feature that owns the FeatureValue.",
+      "chineseTranslation": "FeatureValue 是一种 Membership，用于标识为某个 Feature 提供取值的表达式。",
+      "explanation": "attribute 后面的 `= 0.65` 或 `= moduleCount * cellsPerModule` 就是把工程默认值或参数关系写进模型。",
+      "engineeringExample": "BatteryPack.totalCellCount = moduleCount * cellsPerModule 让模组数量变化能传递到电池包电芯总数。"
+    },
+    {
+      "id": "Expression",
+      "term": "Expression",
+      "aliases": [
+        "expression",
+        "表达式"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass Expression",
+      "standardEnglish": "An Expression is a Step that is typed by a Function.",
+      "chineseTranslation": "Expression 是一种由 Function 类型化的 Step。",
+      "explanation": "Expression 让模型能够表达可求值的关系，例如加减乘除、引用参数或组合多个表达式。标准定义了表达式语义，但具体数值是否在工具中自动执行，取决于工具是否提供求值/分析引擎。",
+      "engineeringExample": "totalCellCount = moduleCount * cellsPerModule 是模型中的表达式关系；本站 validator 检查它合法，不负责输出数值。"
+    },
+    {
+      "id": "CalculationDefinition",
+      "term": "CalculationDefinition",
+      "aliases": [
+        "calc def"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass CalculationDefinition",
+      "standardEnglish": "A CalculationDefinition is an ActionDefinition that also defines a Function producing a result.",
+      "chineseTranslation": "CalculationDefinition 是一种 ActionDefinition，同时定义一个产生结果的 Function。",
+      "explanation": "如果要把电池包能量估算做成可复用计算，后续可以用 calc def 建立专门的计算定义。本课先用 attribute 的 FeatureValue 表达简单关系。",
+      "engineeringExample": "可定义 calc def EstimatePackEnergy，再由分析工具或支持求值的 SysML 工具执行。"
+    },
+    {
+      "id": "CalculationUsage",
+      "term": "CalculationUsage",
+      "aliases": [
+        "calc"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass CalculationUsage",
+      "standardEnglish": "A CalculationUsage is an ActionUsage that is also an Expression, and, so, is typed by a Function.",
+      "chineseTranslation": "CalculationUsage 是一种 ActionUsage，同时也是 Expression，因此由 Function 类型化。",
+      "explanation": "CalculationUsage 是把可复用计算放入具体模型上下文的方式。它说明 SysML v2 有表达计算的标准语义，但仍需要工具执行求值。",
+      "engineeringExample": "在续航分析课程中，可以把电池能量、整车质量和能耗参数送入具体 calc usage。"
+    },
+    {
+      "id": "Specialization",
+      "term": "Specialization",
+      "aliases": [
+        ":>"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass Specialization",
+      "standardEnglish": "Specialization is a Relationship between two Types that requires all instances of the specific type to also be instances of the general Type.",
+      "chineseTranslation": "Specialization 是两个 Type 之间的关系，要求具体类型的所有实例也都是通用类型的实例。",
+      "explanation": "`SingleMotorPowertrain :> Powertrain` 表示单电机动力总成是一种动力总成。它用于表达平台产品族和配置变体。",
+      "engineeringExample": "标准版使用 SingleMotorPowertrain，性能版使用 DualMotorPowertrain，但两者都属于 Powertrain 产品族。"
+    },
+    {
+      "id": "Subclassification",
+      "term": "Subclassification",
+      "aliases": [
+        "classifier specialization"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass Subclassification",
+      "standardEnglish": "Subclassification is Specialization in which both the specific and general Types are Classifier.",
+      "chineseTranslation": "Subclassification 是一种 Specialization，其中具体类型和通用类型都是 Classifier。",
+      "explanation": "part def 之间的 `:>` 可以理解为分类层级：具体产品变体继承抽象父类型的语义位置。",
+      "engineeringExample": "SingleMotorPowertrain 和 DualMotorPowertrain 都是 Powertrain 的下级分类。"
+    },
+    {
+      "id": "PartDefinition",
+      "term": "PartDefinition",
+      "aliases": [
+        "part def"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass PartDefinition",
+      "standardEnglish": "A PartDefinition is an ItemDefinition of a Class of systems or parts of systems.",
+      "chineseTranslation": "PartDefinition 是系统或系统部件类别的 ItemDefinition。",
+      "explanation": "本课继续使用 part def 作为产品结构类型定义，但重点从“嵌套零件”推进到“带参数、usage 特征链汇总和变体的产品定义”。",
+      "engineeringExample": "part def BatteryPack { part modules[8] : BatteryModule; attribute totalEnergyWh : ScalarValues::Real = sum(modules.moduleEnergyWh); }"
+    },
+    {
+      "id": "PartUsage",
+      "term": "PartUsage",
+      "aliases": [
+        "part"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass PartUsage",
+      "standardEnglish": "A PartUsage is a usage of a PartDefinition to represent a system or a part of a system.",
+      "chineseTranslation": "PartUsage 是 PartDefinition 的一次使用，用于表示一个系统或系统部件。",
+      "explanation": "part usage 仍然负责结构组成，例如 Vehicle 中的 battery、powertrain 和 wheels。它与 attribute 分工不同。",
+      "engineeringExample": "part powertrain : Powertrain; 表示整车平台中的动力总成槽位。"
+    }
+  ]
+}

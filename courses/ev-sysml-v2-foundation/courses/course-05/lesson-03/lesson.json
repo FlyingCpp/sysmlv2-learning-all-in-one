@@ -1,0 +1,143 @@
+{
+  "id": "course-05-lesson-03",
+  "title": "用 perform 把行为绑定回结构",
+  "type": "modeling-lesson",
+  "estimatedMinutes": 35,
+  "scenario": {
+    "title": "工程场景",
+    "body": "再生制动评审不只问“有哪些动作”，还会问“谁执行这些动作”。本课把 `RegenerativeBraking` 放回 VehicleController，让学生第一次看到结构与行为的融合：结构定义谁，行为定义做什么，perform action 说明谁执行什么。",
+    "visual": {
+      "type": "interactive-flow",
+      "variant": "05-perform-binding",
+      "title": "结构-行为融合",
+      "caption": "perform action 把行为模型放进结构上下文，形成可追踪的功能责任。",
+      "nodes": [
+        {
+          "id": "behavior-definition",
+          "icon": "A",
+          "label": "行为定义",
+          "detail": "RegenerativeBraking 定义再生制动的功能过程和内部能量流。",
+          "code": "action def RegenerativeBraking"
+        },
+        {
+          "id": "data-flow",
+          "icon": "F",
+          "label": "边界和能量流",
+          "detail": "bind 把外层制动参数接入内部步骤，flow 把再生扭矩传给电功率转换，再传给电池储能步骤。",
+          "code": "bind / flow"
+        },
+        {
+          "id": "perform-binding",
+          "icon": "P",
+          "label": "执行绑定",
+          "detail": "VehicleController 内的 perform action 说明控制器承担再生制动控制责任。",
+          "code": "perform action"
+        },
+        {
+          "id": "mid-review",
+          "icon": "M",
+          "label": "中场回顾",
+          "detail": "C01-C05 已经覆盖包、类型、结构、接口和行为；后续 C06-C09 会继续接入状态、需求、分析和验证。",
+          "code": "view regenBehaviorView"
+        }
+      ]
+    }
+  },
+  "learningBlocks": [
+    {
+      "type": "image-gallery",
+      "title": "课程导引图",
+      "content": "本图按当前 lesson 的工程任务和模型主题生成，用于先理解课程场景，再进入 SysML v2 建模练习。",
+      "generatedBy": "scripts/generate-course-lesson-illustrations.js",
+      "images": [
+        {
+          "src": "/api/course-assets/assets/course-visuals/generated-lesson-guides/ev-course-05-lesson-03-action.svg",
+          "title": "C05.L03 用 perform 把行为绑定回结构",
+          "caption": "围绕 行为流/Action flow / 行为/Behavior / 控制路径/Control 组织汽车工程语境，把本课对象放进可追踪的 SysML v2 模型。",
+          "alt": "电动汽车 SysML v2 建模课程导引图：用 perform 把行为绑定回结构"
+        }
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "工程意图：行为模型不能永远漂在结构外面。`perform action regenControl : RegenerativeBraking;` 回答“VehicleController 执行再生制动控制行为”，这就是结构和行为结合的核心机制。"
+    },
+    {
+      "type": "markdown",
+      "content": "语法读法：`perform action regenControl : RegenerativeBraking;` 中，`perform action` 是标准语法，`regenControl` 是建模者给这次执行绑定取的名称，`RegenerativeBraking` 是被执行的行为类型。`in brakeRequest`、`out recoveredEnergyWh` 里的 `in` / `out` 才是参数方向关键字；名称中的 request、EnergyWh 只是工程语义。"
+    },
+    {
+      "type": "markdown",
+      "content": "读模要点：`RegenerativeBraking` 先定义再生制动过程；顶层输入固定为 `brakeRequest`、`vehicleSpeedKph`、`stateOfCharge`，输出固定为 `recoveredEnergyWh` 和 `frictionBrakePressureBar`。`VehicleController` 再通过 `perform action` 使用它；`regenActionFlowView` 只看行为流，`regenBehaviorView` 用 GeneralView 把 ElectricVehicle、VehicleController 和行为责任放在同一张评审入口里。"
+    },
+    {
+      "type": "hint-card",
+      "title": "bind 的等号是赋值方向吗？",
+      "label": "点击查看参数和关系建模说明",
+      "content": "`RegenerativeBraking` 外层 `in` / `out` 是行为对外接口，`decideBrakeSplit` 等内部 action 的 `in` / `out` 是步骤局部参数。它们不是继承关系，也不会因为名称相近自动对应；入口和出口要用 `bind` 显式说明同一个值，例如 `bind decideBrakeSplit.brake = brakeRequest;`。这里的 `=` 不是赋值方向，左右没有数据流方向；`bind brakeRequest = decideBrakeSplit.brake;` 也表达同一条绑定。步骤之间的计算结果传递才使用 `flow`，例如 `flow from decideBrakeSplit.regenTorqueNm to convertToElectricalPower.torqueNm;`。"
+    },
+    {
+      "type": "markdown",
+      "content": "固定 bind / flow 路径：TODO 2 把 `brakeRequest`、`vehicleSpeedKph`、`stateOfCharge` 绑定到 `decideBrakeSplit.brake`、`decideBrakeSplit.speed`、`decideBrakeSplit.soc`；TODO 3 连接 `decideBrakeSplit.regenTorqueNm` 到 `convertToElectricalPower.torqueNm`；TODO 4 连接 `convertToElectricalPower.electricalPowerKW` 到 `storeEnergyInBattery.electricalPowerKW`；TODO 5 把 `storeEnergyInBattery.storedEnergyWh`、`decideBrakeSplit.frictionPressureBar` 接回外层输出。"
+    },
+    {
+      "type": "markdown",
+      "content": "中场回顾：C01 建模包和顶层对象，C02 区分 definition/usage，C03 建零件树，C04 建端口接口，C05 把功能行为放回结构。下一步 C06 会回答这些行为发生在哪些运行状态下，C07-C09 再把需求、分析和验证接入同一条模型链。"
+    },
+    {
+      "type": "markdown",
+      "content": "练习步骤：如果编辑器顶部显示“课程模板”，在 TODO 1 添加 3 个 `in` 参数和 2 个 `out` 参数；在 TODO 2/5 用 bind 接入输入并接回输出，在 TODO 3/4 添加两个步骤间 flow，在 TODO 6 把 `regenControl` 作为 perform action 放进 `VehicleController`，在 TODO 7 把 `RegenerativeBraking` 暴露到视图。若显示“已恢复草稿”，请检查这些内容是否位于对应结构位置；需要重新练习时点击“重置为课程模板”。"
+    },
+    {
+      "type": "code",
+      "language": "sysml",
+      "sourceFile": "starter.sysml"
+    }
+  ],
+  "workspace": {
+    "files": [
+      {
+        "path": "main.sysml",
+        "source": "starter.sysml",
+        "editable": true
+      }
+    ],
+    "entryFile": "main.sysml"
+  },
+  "tasks": [
+    {
+      "id": "task-01",
+      "type": "model-challenge",
+      "prompt": "在课程模板的 TODO 位置，或在已恢复草稿中的对应结构位置，完成 RegenerativeBraking 的输入输出、能量数据流、VehicleController 的 perform action 绑定和再生制动行为视图。",
+      "hints": [
+        "`perform action` 写在承担行为责任的结构元素内部，工程含义是“这个结构负责执行该行为”；本课应放在 `VehicleController` 内，而不是放在 package 根部。",
+        "不要把 RegenerativeBraking 建成 part；它是行为定义，不是物理零件。",
+        "TODO 1 分成两类：`in brakeRequest`、`in vehicleSpeedKph`、`in stateOfCharge`；`out recoveredEnergyWh`、`out frictionBrakePressureBar`。",
+        "外层 action 参数不会继承给内部 action；TODO 2/5 用 bind 说明外层参数和内部步骤参数是同一个值。",
+        "`bind a = b` 的 `=` 不是赋值方向；课程示例统一把内部步骤参数写在左边，反写也表示同一条绑定。",
+        "输入 `bind` 把再生制动边界输入接入制动力分配步骤：制动请求、车速、SOC 分别绑定到 `decideBrakeSplit.brake = brakeRequest`、`decideBrakeSplit.speed = vehicleSpeedKph`、`decideBrakeSplit.soc = stateOfCharge`。",
+        "两条 `flow` 表达能量回收链：再生扭矩进入电功率换算，电功率再进入电池储能步骤；端点路径分别是 `decideBrakeSplit.regenTorqueNm` 到 `convertToElectricalPower.torqueNm`、`convertToElectricalPower.electricalPowerKW` 到 `storeEnergyInBattery.electricalPowerKW`。",
+        "输出 `bind` 把内部结果接回行为边界：储能步骤的能量结果接回 `recoveredEnergyWh`，制动力分配的液压结果接回 `frictionBrakePressureBar`；对应路径是 `storeEnergyInBattery.storedEnergyWh = recoveredEnergyWh`、`decideBrakeSplit.frictionPressureBar = frictionBrakePressureBar`。",
+        "参数方向靠 `in` / `out` 关键字表达，参数名称只负责说明工程含义。",
+        "视图中 expose 的是已有模型元素，不能在 view 内重新定义行为。"
+      ]
+    }
+  ],
+  "validation": {
+    "strictSysml": true,
+    "rulesFile": "rules.json"
+  },
+  "completion": {
+    "requiresStrictValidation": true,
+    "requiresAllLessonRules": true
+  },
+  "glossaryTerms": [
+    "perform action",
+    "ActionDefinition",
+    "ActionUsage",
+    "flow",
+    "bind",
+    "view",
+    "Expose"
+  ]
+}

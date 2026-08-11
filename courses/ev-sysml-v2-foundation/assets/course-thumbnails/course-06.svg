@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 236" role="img" aria-labelledby="t d">
+  <title id="t">Course 06 State machine and safe state</title>
+  <desc id="d">Vehicle operating states with guarded transitions to safe state.</desc>
+  <rect width="420" height="236" rx="18" fill="#fff7ed"/>
+  <circle cx="108" cy="80" r="40" fill="#fff" stroke="#b9d4ee" stroke-width="3"/><text x="84" y="86" font-family="Segoe UI,Arial" font-size="15" font-weight="800">Ready</text>
+  <circle cx="224" cy="80" r="40" fill="#fff" stroke="#b9d4ee" stroke-width="3"/><text x="197" y="86" font-family="Segoe UI,Arial" font-size="15" font-weight="800">Driving</text>
+  <circle cx="166" cy="164" r="40" fill="#fff" stroke="#b8dfc8" stroke-width="3"/><text x="140" y="170" font-family="Segoe UI,Arial" font-size="15" font-weight="800">Charging</text>
+  <circle cx="312" cy="164" r="42" fill="#fff" stroke="#f0b7ae" stroke-width="4"/><text x="290" y="170" font-family="Segoe UI,Arial" font-size="15" font-weight="800">Safe</text>
+  <path d="M148 80h36M205 114l-22 25M251 105l37 34" stroke="#64748b" stroke-width="4" stroke-linecap="round" marker-end="url(#a)"/>
+  <defs><marker id="a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 8 4 0 8z" fill="#64748b"/></marker></defs>
+  <text x="42" y="34" font-family="Consolas,monospace" font-size="14" fill="#9a5b00">transition if fault</text>
+</svg>

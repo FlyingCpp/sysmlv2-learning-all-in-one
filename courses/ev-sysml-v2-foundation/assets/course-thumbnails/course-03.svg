@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 236" role="img" aria-labelledby="t d">
+  <title id="t">Course 03 Parametric product structure</title>
+  <desc id="d">Battery cell module pack hierarchy with attributes and specialization branch.</desc>
+  <rect width="420" height="236" rx="18" fill="#f7fcf9"/>
+  <rect x="40" y="44" width="95" height="56" rx="10" fill="#fff" stroke="#b8dfc8"/><text x="61" y="77" font-family="Segoe UI,Arial" font-size="17" font-weight="800">Cell</text>
+  <rect x="164" y="44" width="95" height="56" rx="10" fill="#fff" stroke="#b8dfc8"/><text x="180" y="77" font-family="Segoe UI,Arial" font-size="17" font-weight="800">Module</text>
+  <rect x="288" y="44" width="95" height="56" rx="10" fill="#fff" stroke="#b8dfc8"/><text x="314" y="77" font-family="Segoe UI,Arial" font-size="17" font-weight="800">Pack</text>
+  <path d="M135 72h29M259 72h29" stroke="#147a4d" stroke-width="4" stroke-linecap="round"/>
+  <rect x="78" y="134" width="264" height="54" rx="12" fill="#fff" stroke="#b9d4ee"/>
+  <text x="74" y="158" font-family="Consolas,monospace" font-size="12" fill="#0f172a">totalEnergyWh = sum(modules.moduleEnergyWh)</text>
+  <text x="101" y="178" font-family="Consolas,monospace" font-size="14" fill="#1769aa">:> PowertrainVariant</text>
+  <path d="M210 100v34" stroke="#64748b" stroke-width="3" stroke-dasharray="7 6"/>
+</svg>

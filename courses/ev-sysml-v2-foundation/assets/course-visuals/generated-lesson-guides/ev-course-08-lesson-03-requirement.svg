@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" role="img" aria-labelledby="title desc">
+  <title id="title">C08.L03 能耗分析到需求证据闭环</title>
+  <desc id="desc">Electric Vehicle MBSE / 电动汽车工程建模导引 - 需求/Requirement, 满足/Satisfy, 追踪/Trace</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0b1728"/>
+      <stop offset="58%" stop-color="#17406f"/>
+      <stop offset="100%" stop-color="#37d8ff"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <style>
+      .title { fill: #f8fbff; font: 900 52px system-ui, -apple-system, Segoe UI, sans-serif; letter-spacing: 0; }
+      .subtitle { fill: #bfd7ee; font: 760 24px system-ui, -apple-system, Segoe UI, sans-serif; letter-spacing: 0; }
+      .badge rect, .glass { fill: rgba(8, 17, 31, 0.82); stroke: rgba(186, 230, 253, 0.58); stroke-width: 2; }
+      .badge text { fill: #f8fbff; font: 860 20px system-ui, -apple-system, Segoe UI, sans-serif; letter-spacing: 0; }
+      .badge text + text { fill: #bfd7ee; font: 730 17px system-ui, -apple-system, Segoe UI, sans-serif; letter-spacing: 0; }
+      .small { fill: #eaf3ff; font: 800 24px system-ui, -apple-system, Segoe UI, sans-serif; letter-spacing: 0; }
+      .tiny { fill: #f8fbff; font: 800 22px system-ui, -apple-system, Segoe UI, sans-serif; letter-spacing: 0; }
+      .dark { fill: #111827; font: 900 28px system-ui, -apple-system, Segoe UI, sans-serif; letter-spacing: 0; }
+    </style>
+  </defs>
+
+    <rect width="1600" height="1000" rx="44" fill="url(#bg)"/>
+    <circle cx="1320" cy="142" r="82" fill="#f4c95d" opacity="0.92"/>
+    <path d="M0 734 C230 646 456 654 726 712 C986 770 1210 746 1600 628 L1600 1000 L0 1000 Z" fill="#172238"/>
+    <path d="M112 776 C346 710 610 720 872 758 C1110 792 1338 762 1518 700" fill="none" stroke="#f4c95d" stroke-width="7" stroke-dasharray="28 24" opacity="0.88"/>
+    <g transform="translate(426 430)">
+      <path d="M92 150 C146 50 254 18 438 34 L594 160 L766 192 C832 204 882 254 898 322 L58 322 C64 250 78 194 92 150 Z" fill="#eaf8ff" stroke="#9bd7f5" stroke-width="8"/>
+      <path d="M270 66 L424 66 L528 160 L206 160 C222 118 242 86 270 66 Z" fill="#0b1728" opacity="0.94"/>
+      <path d="M590 170 L738 198 C788 208 822 238 840 280 L594 280 Z" fill="#37d8ff" opacity="0.86"/>
+      <circle cx="214" cy="326" r="74" fill="#0b1220" stroke="#94a3b8" stroke-width="14"/>
+      <circle cx="706" cy="326" r="74" fill="#0b1220" stroke="#94a3b8" stroke-width="14"/>
+      <rect x="348" y="214" width="214" height="76" rx="16" fill="#f4c95d" stroke="#101828" stroke-width="7"/>
+      <path d="M390 252 H520 M456 222 V282" stroke="#101828" stroke-width="11" stroke-linecap="round"/>
+    </g>
+    <path d="M310 426 C238 342 192 258 174 146" stroke="#f4c95d" stroke-width="8" fill="none" filter="url(#glow)"/>
+    <path d="M1150 418 C1266 328 1348 246 1402 148" stroke="#8be36f" stroke-width="8" fill="none" filter="url(#glow)"/>
+    <path d="M796 392 V158" stroke="#37d8ff" stroke-width="8" fill="none" filter="url(#glow)"/>
+
+      <rect x="1052" y="441" width="230" height="128" rx="18" fill="rgba(255,255,255,0.92)"/>
+      <path d="M1090 480 H1234 M1090 515 H1202 M1090 549 H1248" stroke="#183153" stroke-width="10" stroke-linecap="round"/>
+      <circle cx="1260" cy="463" r="28" fill="#8be36f"/>
+      <path d="M1248 463 l9 10 l18 -24" stroke="#111827" stroke-width="7" fill="none" stroke-linecap="round"/>
+      <text x="1076" y="609" class="small">require / satisfy</text>
+    <g class="badge"><rect x="88" y="112" width="330" height="104" rx="22"/><text x="122" y="158">需求/Requirement</text><text x="122" y="190">C08.L03 engineering focus</text></g>
+    <g class="badge"><rect x="630" y="96" width="330" height="104" rx="22"/><text x="664" y="142">满足/Satisfy</text><text x="664" y="174">SysML v2 model object</text></g>
+    <g class="badge"><rect x="1182" y="112" width="330" height="104" rx="22"/><text x="1216" y="158">追踪/Trace</text><text x="1216" y="190">reviewable evidence</text></g>
+  <g>
+    <rect x="70" y="776" width="1020" height="156" rx="30" fill="rgba(8,17,31,0.72)" stroke="rgba(186,230,253,0.35)" stroke-width="2"/>
+    <text x="106" y="832" class="subtitle">Electric Vehicle MBSE / 电动汽车工程建模导引</text>
+    <text x="106" y="890" class="title">能耗分析到需求证据闭环</text>
+  </g>
+  <g>
+    <rect x="1284" y="808" width="228" height="74" rx="22" fill="rgba(8,17,31,0.82)" stroke="#8be36f" stroke-width="3"/>
+    <circle cx="1320" cy="845" r="10" fill="#8be36f"/>
+    <text x="1344" y="854" class="small">C08.L03</text>
+  </g>
+</svg>

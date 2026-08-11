@@ -1,0 +1,144 @@
+{
+  "id": "course-04-lesson-03",
+  "title": "把接口契约绑定到整车端口",
+  "type": "modeling-lesson",
+  "estimatedMinutes": 35,
+  "scenario": {
+    "title": "工程场景",
+    "body": "现在整车模型已经有电池包、逆变器、控制器和冷却回路，也有功率、命令、冷却三类接口契约。设计评审要看到具体车型中哪两个端口真的被连接起来：这一步用 `interface ... connect ...` 完成。",
+    "visual": {
+      "type": "interactive-flow",
+      "variant": "04-interface-bindings",
+      "title": "接口契约到具体连接",
+      "caption": "interface def 是模板，interface usage/connect 是当前整车中的具体绑定。",
+      "nodes": [
+        {
+          "id": "contract-template",
+          "icon": "D",
+          "label": "定义契约",
+          "detail": "BatteryToInverter、ControllerToInverter、BatteryCoolingInterface 是可复用接口定义。",
+          "code": "interface def"
+        },
+        {
+          "id": "vehicle-context",
+          "icon": "V",
+          "label": "整车上下文",
+          "detail": "ElectricVehicle 内部拥有 battery、inverter、controller 和 cooling 四个具体部件使用。",
+          "code": "part def ElectricVehicle"
+        },
+        {
+          "id": "specific-binding",
+          "icon": "C",
+          "label": "具体绑定",
+          "detail": "interface usage 把接口契约类型落实到当前整车的两个端口路径；usage 名称由建模者自定义。",
+          "code": "interface powerLink"
+        },
+        {
+          "id": "review-evidence",
+          "icon": "R",
+          "label": "评审证据",
+          "detail": "三条 interface usage 让评审者能分别追踪功率、命令和冷却边界，而不是只看到无语义连线。",
+          "code": "connect"
+        }
+      ]
+    }
+  },
+  "learningBlocks": [
+    {
+      "type": "image-gallery",
+      "title": "课程导引图",
+      "content": "本图按当前 lesson 的工程任务和模型主题生成，用于先理解课程场景，再进入 SysML v2 建模练习。",
+      "generatedBy": "scripts/generate-course-lesson-illustrations.js",
+      "images": [
+        {
+          "src": "/api/course-assets/assets/course-visuals/generated-lesson-guides/ev-course-04-lesson-03-port.svg",
+          "title": "C04.L03 把接口契约绑定到整车端口",
+          "caption": "围绕 端口/Ports / 接口/Interface / 流向/Flow 组织汽车工程语境，把本课对象放进可追踪的 SysML v2 模型。",
+          "alt": "电动汽车 SysML v2 建模课程导引图：把接口契约绑定到整车端口"
+        }
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "工程意图：`interface def` 定义一类接口契约，类似接口控制文档中的标准章节；`interface powerLink : BatteryToInverter connect battery.dcOut to inverter.dcIn;` 是当前 `ElectricVehicle` 中的一次具体使用，其中 `powerLink` 只是示例 usage 名称。前者是模板，后者是具体车型里的端口绑定。"
+    },
+    {
+      "type": "markdown",
+      "content": "标准语义：SysML v2 中 InterfaceDefinition 是 ConnectionDefinition 的特化，InterfaceUsage 是 ConnectionUsage 的特化。本课使用 `interface ... connect ...`，因为两端都是端口并且需要保留接口契约类型；普通 `connection ... connect ...` 也存在，但不作为本课主练习。"
+    },
+    {
+      "type": "markdown",
+      "content": "权威依据：官方 Pilot validation 示例说明，interface definition 的一次 usage 会在包含上下文中连接两个端口；官方 training 示例也使用 `interface : FuelInterface connect ... to ...` 这类可省略 usage 名称的写法。因此本课要求在 `ElectricVehicle` 内补三条 interface usage，并检查接口类型和端口路径；usage 名称不是本课的通过条件。"
+    },
+    {
+      "type": "markdown",
+      "content": "读模要点：`source` 和 `target` 只存在于接口定义内部；`battery.dcOut`、`inverter.dcIn`、`controller.commandOut`、`inverter.commandIn`、`cooling.batterySide`、`battery.thermalIn` 才是整车上下文里的具体端口路径。接口定义说明规则，接口使用把规则应用到真实部件边界上。"
+    },
+    {
+      "type": "hint-card",
+      "title": "interface usage 名称必须固定吗？",
+      "label": "点击查看课程命名和检查要求",
+      "content": "`source` / `target` 是接口定义内部的端点名称，不是必须固定使用的保留字；`powerLink`、`commandLink`、`coolantLink` 这类 interface usage 名称也由建模者自定义。`dcOut`、`dcIn`、`commandOut`、`commandIn` 是具体部件上的端口名称，名称里的 Out/In 是工程命名约定。真正建立具体关系的是 `interface 名称 : 接口类型 connect 端口路径 to 端口路径` 中的 `connect`、接口类型和两端端口路径。"
+    },
+    {
+      "type": "markdown",
+      "content": "扩展概念：真实项目中还会遇到共轭端口 `~Port`，用于表达接口两端方向相反但类型相容。本课先不展开 `~Port`，只要求掌握接口定义与具体端口绑定的主线。"
+    },
+    {
+      "type": "markdown",
+      "content": "练习步骤：如果编辑器顶部显示“课程模板”，在 TODO 1 补一条 `BatteryToInverter` 的 interface usage，在 TODO 2 补一条 `ControllerToInverter` 的 interface usage，在 TODO 3 补一条 `BatteryCoolingInterface` 的 interface usage。usage 名称可以按工程语义自定义，例如 `powerLink`、`commandLink`、`coolantLink`；课程检查关注接口类型和端口路径。如果显示“已恢复草稿”，请检查三条 interface usage 是否已经写在 `ElectricVehicle` 内；已有同名行时应编辑原行或改用不重复的新名称，不要再新增同名 usage。需要重新练习时点击“重置为课程模板”。"
+    },
+    {
+      "type": "hint-card",
+      "title": "排错卡：重名和全角冒号",
+      "label": "点击查看 restored draft 和标点排查",
+      "content": "如果看到 `Duplicate of other owned member name`，先检查同一个 `{}` 父级里是否已经有同名成员，例如 `ElectricVehicle` 内重复出现两个 `powerLink`。这常见于已恢复草稿里原本已经写过一条 interface usage，又按 TODO 再新增了一条同名 usage；可以编辑已有行，也可以改成不重复的自定义名称。另一个常见错误是把 ASCII 冒号 `:` 写成中文全角冒号 `：`，例如 `interface commandLink ：ControllerToInverter ...`；这不是 SysML v2 文本语法中的类型冒号，会让后续 `connect` 结构解析失真，并可能连带出现 `Must have at least two related elements` 这类底层诊断。"
+    },
+    {
+      "type": "code",
+      "language": "sysml",
+      "sourceFile": "starter.sysml"
+    }
+  ],
+  "workspace": {
+    "files": [
+      {
+        "path": "main.sysml",
+        "source": "starter.sysml",
+        "editable": true
+      }
+    ],
+    "entryFile": "main.sysml"
+  },
+  "tasks": [
+    {
+      "id": "task-01",
+      "type": "model-challenge",
+      "prompt": "在课程模板的 TODO 位置，或在已恢复草稿中的对应结构位置，在 ElectricVehicle 内补全三条 interface usage，把功率、命令和冷却接口契约绑定到具体端口。",
+      "hints": [
+        "`interface def BatteryToInverter` 不会自动连接 battery.dcOut 和 inverter.dcIn，需要 interface usage 才能绑定具体端口。",
+        "`connect` 后面的两端应是当前 ElectricVehicle 内部可访问的端口路径。",
+        "`source` / `target` 是接口模板里的端点名；`battery.dcOut` 这类路径才是当前整车中的具体端口。",
+        "三条绑定的接口类型和端口路径分别是 `BatteryToInverter` 连接 `battery.dcOut` 到 `inverter.dcIn`、`ControllerToInverter` 连接 `controller.commandOut` 到 `inverter.commandIn`、`BatteryCoolingInterface` 连接 `cooling.batterySide` 到 `battery.thermalIn`。",
+        "interface usage 名称可以自定义；同一个 `ElectricVehicle` 内只要不和已有成员重名即可。",
+        "类型冒号使用 ASCII `:`，不要使用中文全角冒号 `：`。"
+      ]
+    }
+  ],
+  "validation": {
+    "strictSysml": true,
+    "rulesFile": "rules.json"
+  },
+  "completion": {
+    "requiresStrictValidation": true,
+    "requiresAllLessonRules": true
+  },
+  "glossaryTerms": [
+    "interface def",
+    "interface",
+    "connect",
+    "ConnectionUsage",
+    "InterfaceUsage",
+    "flow"
+  ]
+}

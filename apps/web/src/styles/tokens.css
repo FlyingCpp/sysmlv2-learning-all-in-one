@@ -1,0 +1,182 @@
+:root {
+  color-scheme: light;
+
+  /* Primitive tokens: raw values only. Do not use these directly in page or component CSS. */
+  --gray-50: #f7fafc;
+  --gray-100: #f3f6f9;
+  --gray-150: #f3f4f6;
+  --gray-200: #eef3f7;
+  --gray-300: #dde7ee;
+  --gray-400: #d4dee8;
+  --gray-500: #aebdca;
+  --gray-600: #607086;
+  --gray-700: #334155;
+  --gray-800: #374151;
+  --gray-900: #111827;
+  --ink-800: #172033;
+  --ink-900: #162033;
+  --ink-950: #0b1220;
+  --white: #ffffff;
+  --orange-700: #9a5b00;
+  --red-700: #b42318;
+  --green-700: #16703f;
+  --code-blue-50: #eef6ff;
+  --code-blue-200: #bfdbfe;
+  --code-blue-800: #1d4f91;
+  --blue-600: #2563eb;
+
+  /* Semantic tokens: page and feature CSS should use this layer by default. */
+  --font-sans: "Microsoft YaHei", "PingFang SC", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Cascadia Code", Consolas, "SFMono-Regular", monospace;
+  font-family: var(--font-sans);
+  --app-bg: var(--gray-200);
+  --app-bg-strong: var(--gray-300);
+  --surface: var(--white);
+  --surface-soft: var(--gray-50);
+  --surface-muted: var(--gray-100);
+  --surface-elevated: var(--white);
+  --surface-strong: var(--ink-800);
+  --border: var(--gray-400);
+  --border-strong: var(--gray-500);
+  --text: var(--ink-900);
+  --muted: var(--gray-600);
+  --muted-strong: var(--gray-700);
+  --accent: var(--gray-900);
+  --accent-strong: var(--ink-950);
+  --accent-soft: var(--gray-150);
+  --blue: var(--gray-800);
+  --green: var(--gray-700);
+  --warn: var(--orange-700);
+  --danger: var(--red-700);
+  --success: var(--green-700);
+  --warning: var(--orange-700);
+  --focus-ring: 0 0 0 3px rgb(17 24 39 / 12%);
+  --checkbox-accent: var(--blue-600);
+  --text-display: 28px;
+  --text-title-lg: 24px;
+  --text-title: 22px;
+  --text-section: 18px;
+  --text-card-title: 15px;
+  --text-body: 13px;
+  --text-body-sm: 12px;
+  --text-label: 11px;
+  --text-caption: 11px;
+  --line-tight: 1.18;
+  --line-title: 1.28;
+  --line-body: 1.52;
+  --weight-regular: 400;
+  --weight-medium: 650;
+  --weight-semibold: 750;
+  --weight-bold: 850;
+  --space-1: 4px;
+  --space-2: 7px;
+  --space-3: 10px;
+  --space-4: 13px;
+  --space-5: 16px;
+  --space-6: 20px;
+  --space-8: 26px;
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-lg: 10px;
+  --radius-pill: 999px;
+  --shadow: 0 16px 42px rgb(21 36 55 / 10%);
+  --shadow-soft: 0 12px 30px rgb(15 23 42 / 8%);
+  --shadow-active: 0 16px 34px rgb(15 23 42 / 12%);
+
+  /* Component tokens: shared component families consume semantic tokens here. */
+  --control-height: 30px;
+  --control-height-sm: 28px;
+  --control-height-lg: 36px;
+  --control-radius: 7px;
+  --control-bg: var(--surface-soft);
+  --control-bg-hover: var(--surface-muted);
+  --control-border: var(--border);
+  --control-text: var(--text);
+  --button-primary-bg: var(--accent);
+  --button-primary-text: var(--white);
+  --button-secondary-bg: var(--surface);
+  --button-secondary-text: var(--text);
+  --card-bg: var(--surface);
+  --card-border: var(--border);
+  --table-header-bg: var(--surface-soft);
+  --table-cell-text: var(--text);
+  --code-inline-bg: var(--code-blue-50);
+  --code-inline-border: var(--code-blue-200);
+  --code-inline-text: var(--code-blue-800);
+  --panel-padding: 13px;
+  --page-padding: 16px;
+  --grid-gap: 13px;
+  --guide-sticky-top: 72px;
+  --density-shell-padding: 10px;
+  --density-topbar-padding-block: 8px;
+  --density-topbar-padding-inline: 12px;
+  --density-section-gap: 12px;
+  --density-toolbar-padding-block: 6px;
+  --density-toolbar-padding-inline: 10px;
+  --density-editor-font-size: 12.5px;
+  --density-editor-line-height: 1.42;
+  --density-ai-dock-width: 380px;
+  --phase0-bg: var(--app-bg);
+  --phase0-surface: var(--surface);
+  --phase0-border: var(--border);
+  --phase0-text: var(--text);
+  --phase0-muted: var(--muted);
+  --phase0-accent: var(--accent);
+  --phase0-accent-strong: var(--accent-strong);
+  --phase0-warn: var(--warn);
+  --phase0-radius: var(--radius);
+}
+
+@media (max-width: 720px) {
+  :root {
+    --text-display: 32px;
+    --text-title-lg: 28px;
+    --text-title: 24px;
+    --text-section: 20px;
+    --text-card-title: 17px;
+    --text-body: 14px;
+    --text-body-sm: 13px;
+    --text-label: 12px;
+    --line-body: 1.58;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --control-height: 38px;
+    --control-height-sm: 34px;
+    --control-height-lg: 44px;
+    --panel-padding: 14px;
+    --page-padding: 14px;
+    --grid-gap: 12px;
+    --guide-sticky-top: 92px;
+    --density-editor-font-size: 13px;
+    --density-editor-line-height: 1.5;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scrollbar-gutter: stable;
+}
+
+body {
+  margin: 0;
+  overflow-y: scroll;
+  background: var(--app-bg);
+  color: var(--text);
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}

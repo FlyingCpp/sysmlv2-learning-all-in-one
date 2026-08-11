@@ -1,0 +1,1110 @@
+.openCarNativePage {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  color: var(--text);
+  --open-car-scene-surface: #07111f;
+  --open-car-scene-panel: #0c1728;
+  --open-car-scene-border: #20324c;
+  --open-car-scene-text: #dbeafe;
+  --open-car-scene-muted: #8fa8c7;
+  --open-car-scene-accent: #22d3ee;
+  --open-car-scene-active: #0e7490;
+  --open-car-scene-sensor: #38bdf8;
+  --open-car-scene-compute: #a78bfa;
+  --open-car-scene-actuator: #f59e0b;
+}
+
+.openCarTraceRail,
+.openCarPaperNote,
+.openCarPanel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+
+.openCarTraceRailHeader,
+.openCarPanelHeader,
+.openCarToolbar,
+.openCarPanelAction,
+.openCarModelMeta,
+.openCarSubhead {
+  display: flex;
+  align-items: center;
+}
+
+.openCarPanelHeader h3 {
+  margin: 0;
+  color: #111827;
+  letter-spacing: 0;
+}
+
+.openCarMetric {
+  display: grid;
+  min-width: 126px;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid #dbe6f5;
+  border-radius: 7px;
+  background: #f8fafc;
+}
+
+.openCarMetric span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.openCarMetric strong {
+  color: #0f172a;
+  font-size: 18px;
+  line-height: 1.1;
+}
+
+.openCarPaperNote {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+  padding: 14px 16px;
+  background: #f8fafc;
+}
+
+.openCarPaperNote strong {
+  display: block;
+  margin-bottom: 5px;
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.openCarPaperNote p {
+  margin: 0;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.openCarTraceRail {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px;
+  background: #fff;
+}
+
+.openCarTraceRailHeader {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.42fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.openCarTraceRailHeader strong {
+  display: block;
+  color: #0f172a;
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.openCarTraceRailList {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(220px, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.openCarTraceRailList button {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  min-height: 156px;
+  padding: 11px;
+  border: 1px solid #dbe6f5;
+  border-radius: 7px;
+  background: #f8fafc;
+  color: #334155;
+  text-align: left;
+  cursor: pointer;
+}
+
+.openCarTraceRailList button:hover {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.openCarTraceRailList button.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  box-shadow: inset 3px 0 0 #2563eb;
+}
+
+.openCarTraceRailList button > span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.openCarTraceRailList strong {
+  color: #0f172a;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.openCarTraceRailList em {
+  color: #1d4ed8;
+  font-style: normal;
+  font-size: 13px;
+  font-weight: 850;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.openCarTraceRailList small {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.openCarLayout211 {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.openCarModelStage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 390px);
+  gap: 14px;
+  min-width: 0;
+  align-items: start;
+}
+
+.openCarPanel {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.openCarModelPanel {
+  display: grid;
+  grid-template-rows: auto auto auto auto auto;
+  align-self: start;
+}
+
+.openCarPanelHeader {
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 14px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.openCarPanelHeader h3 {
+  margin-top: 2px;
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.openCarPanelHeader p,
+.openCarTraceRailHeader p {
+  margin: 5px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.openCarPanelAction {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.openCarToolbar {
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.openCarToolbar button,
+.openCarToolbar select,
+.openCarPanelAction button,
+.openCarPanelAction select,
+.openCarTabs button,
+.openCarFileStrip button,
+.openCarReferences button,
+.openCarDiagnostics button {
+  min-height: 34px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  background: #fff;
+  color: #1f2937;
+  font-size: 13px;
+  font-weight: 760;
+}
+
+.openCarToolbar button,
+.openCarPanelAction button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  cursor: pointer;
+}
+
+.openCarToolbar button:hover,
+.openCarPanelAction button:hover,
+.openCarTabs button:hover,
+.openCarFileStrip button:hover,
+.openCarReferences button:hover,
+.openCarDiagnostics button:hover {
+  border-color: #93c5fd;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.openCarToolbar button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.openCarToolbar select,
+.openCarPanelAction select {
+  min-width: 168px;
+  padding: 6px 28px 6px 10px;
+}
+
+.openCarFileStrip {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(110px, 1fr));
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.openCarFileStrip button {
+  display: grid;
+  gap: 3px;
+  min-width: 118px;
+  padding: 9px 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.openCarFileStrip button.active,
+.openCarTabs button.active {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.openCarFileStrip strong {
+  font-size: 13px;
+}
+
+.openCarFileStrip span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.openCarModelMeta {
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: #fbfdff;
+}
+
+.openCarModelMeta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #475569;
+  font-size: 13px;
+}
+
+.openCarDiagnostics {
+  display: grid;
+  gap: 6px;
+  padding: 8px 14px;
+  border-bottom: 1px solid #fed7aa;
+  background: #fff7ed;
+}
+
+.openCarDiagnostics button {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  min-height: 30px;
+  padding: 5px 8px;
+  text-align: left;
+}
+
+.openCarDiagnostics strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.openCarEditorSurface {
+  min-height: 0;
+}
+
+.openCarEditorSurface .phase3CodeMirror,
+.openCarEditorSurface .phase3CodeMirror .cm-editor,
+.openCarEditorSurface .phase3CodeMirror .cm-scroller {
+  height: auto;
+  min-height: 0;
+}
+
+.openCarEditorSurface .phase3CodeMirror .cm-content {
+  min-height: 0;
+}
+
+.openCarTraceInspector {
+  position: sticky;
+  top: var(--guide-sticky-top);
+  display: grid;
+  align-self: start;
+  align-content: start;
+  gap: 12px;
+  padding-bottom: 12px;
+  max-height: calc(100vh - var(--guide-sticky-top) - 16px);
+  overflow: auto;
+  overscroll-behavior: auto;
+}
+
+.openCarTreeBox,
+.openCarReferences {
+  margin: 0 12px;
+  padding: 12px;
+  border: 1px solid #dbe6f5;
+  border-radius: 7px;
+  background: #fbfdff;
+}
+
+.openCarSubhead {
+  gap: 7px;
+  margin-bottom: 9px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.openCarTreeBox .modelOutlineTreeMui {
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  max-width: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.openCarTreeBox .modelOutlineTreeMui .MuiRichTreeView-root,
+.openCarTreeBox .modelOutlineTreeMui .MuiTreeItem-root,
+.openCarTreeBox .modelOutlineTreeMui .MuiTreeItem-content {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.openCarTreeBox .modelOutlineTreeMui .MuiTreeItem-content {
+  align-items: flex-start;
+}
+
+.openCarTreeBox .modelOutlineTreeMui .MuiTreeItem-label {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  line-height: 1.35;
+}
+
+.openCarTreeBox .modelOutlineTreeMui .MuiTreeItem-groupTransition {
+  margin-left: 14px;
+  max-width: calc(100% - 14px);
+}
+
+.openCarResourceTreeToolbar {
+  display: grid;
+  gap: 9px;
+  margin-bottom: 9px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid #dbe6f5;
+}
+
+.openCarResourceTreeStatus,
+.openCarResourceTreeControls,
+.openCarResourceTreeControls label,
+.openCarResourceTreeControls button {
+  display: flex;
+  align-items: center;
+}
+
+.openCarResourceTreeStatus {
+  min-width: 0;
+  gap: 7px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.openCarResourceTreeStatus[data-tone="current"] {
+  color: #15803d;
+}
+
+.openCarResourceTreeStatus[data-tone="warning"] {
+  color: #b45309;
+}
+
+.openCarResourceTreeStatus span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.openCarResourceTreeStatus .isRefreshing {
+  animation: openCarResourceTreeSpin 0.9s linear infinite;
+}
+
+.openCarResourceTreeControls {
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.openCarResourceTreeControls label {
+  gap: 6px;
+  color: #475569;
+  font-size: 11px;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.openCarResourceTreeControls button {
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  background: #fff;
+  color: #334155;
+  cursor: pointer;
+}
+
+.openCarResourceTreeControls button:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.openCarResourceTreeEmpty {
+  margin: 0;
+  padding: 14px 4px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+@keyframes openCarResourceTreeSpin {
+  to { transform: rotate(360deg); }
+}
+
+.openCarReferences {
+  display: grid;
+  gap: 7px;
+}
+
+.openCarReferences p,
+.openCarEmpty p,
+.openCarCompare p,
+.openCarBenchmarkSummary p {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.openCarReferences button {
+  display: block;
+  width: 100%;
+  padding: 7px 8px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.openCarTwoColumns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  min-width: 0;
+  align-items: stretch;
+}
+
+.openCarStagePanel {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  height: var(--open-car-stage-total-height, 620px);
+}
+
+.openCarStagePanelBody {
+  min-height: 0;
+  overflow: auto;
+}
+
+.openCarVehiclePanel {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.openCarVehicleStageBody {
+  overflow: hidden;
+  background: var(--open-car-scene-surface);
+}
+
+.openCarVehicleLoading {
+  display: grid;
+  place-items: center;
+  min-height: 100%;
+  padding: 24px;
+  color: var(--open-car-scene-muted);
+  font-size: 13px;
+}
+
+.openCarVehicleScene {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(210px, 0.38fr);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: var(--open-car-scene-surface);
+}
+
+.openCarVehicleViewport {
+  min-width: 0;
+  min-height: 360px;
+}
+
+.openCarVehicleViewport canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+}
+
+.openCarVehicleViewport canvas:active {
+  cursor: grabbing;
+}
+
+.openCarSceneHud {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 2;
+  display: grid;
+  gap: 8px;
+  width: min(310px, calc(62% - 24px));
+  pointer-events: none;
+}
+
+.openCarSceneMode,
+.openCarSceneSelection,
+.openCarVehicleAssetCredit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid color-mix(in srgb, var(--open-car-scene-border) 82%, transparent);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--open-car-scene-surface) 84%, transparent);
+  color: var(--open-car-scene-text);
+  backdrop-filter: blur(8px);
+}
+
+.openCarVehicleAssetCredit {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 8px;
+  padding: 8px 10px;
+  pointer-events: auto;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.openCarVehicleAssetCredit span,
+.openCarVehicleAssetCredit small {
+  min-width: 0;
+  color: var(--open-car-scene-muted);
+  overflow-wrap: anywhere;
+}
+
+.openCarVehicleAssetCredit a {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  align-self: center;
+  color: var(--open-car-scene-accent);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.openCarVehicleAssetCredit a:hover,
+.openCarVehicleAssetCredit a:focus-visible {
+  text-decoration: underline;
+}
+
+.openCarVehicleAssetCredit[data-asset-state='ready'] span {
+  color: #67e8f9;
+}
+
+.openCarVehicleAssetCredit[data-asset-state='error'] span {
+  color: #fbbf24;
+}
+
+.openCarSceneMode {
+  width: max-content;
+  max-width: 100%;
+  padding: 7px 9px;
+  color: var(--open-car-scene-muted);
+  font-size: 11px;
+}
+
+.openCarSceneSelection {
+  align-items: flex-start;
+  padding: 10px;
+}
+
+.openCarSceneSelection > svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--open-car-scene-accent);
+}
+
+.openCarSceneSelection div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.openCarSceneSelection span,
+.openCarSceneSelection small {
+  color: var(--open-car-scene-muted);
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.openCarSceneSelection strong {
+  color: var(--open-car-scene-text);
+  font-size: 12px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.openCarSceneLegend {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border-left: 1px solid var(--open-car-scene-border);
+  background: var(--open-car-scene-panel);
+  overflow-y: auto;
+  scrollbar-color: var(--open-car-scene-border) transparent;
+}
+
+.openCarSceneLegendTitle {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 7px;
+  align-items: center;
+  color: var(--open-car-scene-muted);
+  font-size: 11px;
+}
+
+.openCarSceneLegendTitle strong {
+  color: var(--open-car-scene-text);
+  font-size: 12px;
+}
+
+.openCarSceneLegendTitle span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 20px;
+  border: 1px solid var(--open-car-scene-border);
+  border-radius: 999px;
+}
+
+.openCarSceneChipList,
+.openCarSceneRouteList {
+  display: grid;
+  gap: 6px;
+}
+
+.openCarSceneChipList button,
+.openCarSceneRouteList button {
+  min-width: 0;
+  border: 1px solid var(--open-car-scene-border);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--open-car-scene-panel) 78%, #fff 3%);
+  color: var(--open-car-scene-muted);
+  text-align: left;
+  cursor: pointer;
+}
+
+.openCarSceneChipList button:hover,
+.openCarSceneRouteList button:hover,
+.openCarSceneChipList button.active,
+.openCarSceneRouteList button.active {
+  border-color: var(--open-car-scene-accent);
+  background: color-mix(in srgb, var(--open-car-scene-active) 35%, var(--open-car-scene-panel));
+  color: var(--open-car-scene-text);
+}
+
+.openCarSceneChipList button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 7px;
+  align-items: center;
+  padding: 6px 8px;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+.openCarSceneChipList i {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--open-car-scene-compute);
+  box-shadow: 0 0 8px currentColor;
+}
+
+.openCarSceneChipList i[data-kind="sensor"] {
+  background: var(--open-car-scene-sensor);
+}
+
+.openCarSceneChipList i[data-kind="actuator"] {
+  background: var(--open-car-scene-actuator);
+}
+
+.openCarSceneRouteList button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+  padding: 7px 8px;
+  font-size: 10px;
+}
+
+.openCarSceneRouteList button[data-cable-kind="radar"] {
+  --open-car-cable-color: #22d3ee;
+}
+
+.openCarSceneRouteList button[data-cable-kind="camera"] {
+  --open-car-cable-color: #ec4899;
+}
+
+.openCarSceneRouteList button[data-cable-kind="perception"] {
+  --open-car-cable-color: #8b5cf6;
+}
+
+.openCarSceneRouteList button[data-cable-kind="brake"] {
+  --open-car-cable-color: #f59e0b;
+}
+
+.openCarSceneRouteList button[data-cable-kind="steering"] {
+  --open-car-cable-color: #22c55e;
+}
+
+.openCarSceneRouteList button[data-cable-kind="network"] {
+  --open-car-cable-color: #60a5fa;
+}
+
+.openCarSceneRouteList button[data-cable-kind] {
+  box-shadow: inset 3px 0 0 var(--open-car-cable-color);
+}
+
+.openCarSceneRouteList button[data-cable-kind] > svg,
+.openCarSceneRouteList button[data-cable-kind] small {
+  color: var(--open-car-cable-color);
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--open-car-cable-color) 72%, transparent));
+}
+
+.openCarSceneRouteList button[data-cable-kind]:hover,
+.openCarSceneRouteList button[data-cable-kind].active {
+  border-color: var(--open-car-cable-color);
+  box-shadow: inset 3px 0 0 var(--open-car-cable-color), 0 0 12px color-mix(in srgb, var(--open-car-cable-color) 20%, transparent);
+}
+
+.openCarSceneRouteList span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.openCarSceneRouteList small {
+  color: var(--open-car-scene-accent);
+  white-space: nowrap;
+}
+
+.openCarTabs {
+  display: flex;
+  gap: 7px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.openCarTabs button {
+  padding: 7px 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.openCarEmpty {
+  display: grid;
+  place-items: center;
+  min-height: 100%;
+  gap: 8px;
+  padding: 24px;
+  color: #475569;
+  text-align: center;
+}
+
+.openCarSemanticGrid,
+.openCarSummaryCards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+  padding: 14px;
+}
+
+.openCarSemanticGrid article,
+.openCarList article,
+.openCarAllocationGrid > div,
+.openCarBenchmarkSummary {
+  border: 1px solid #dbe6f5;
+  border-radius: 7px;
+  background: #f8fafc;
+}
+
+.openCarSemanticGrid article {
+  display: grid;
+  gap: 4px;
+  min-height: 86px;
+  padding: 10px;
+}
+
+.openCarSemanticGrid span,
+.openCarSemanticGrid small,
+.openCarList span,
+.openCarList em {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.openCarSemanticGrid strong,
+.openCarList strong {
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.openCarAllocationGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  padding: 14px;
+}
+
+.openCarAllocationGrid > div {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.openCarAllocationGrid span {
+  color: #475569;
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 12px;
+}
+
+.openCarList {
+  display: grid;
+  gap: 9px;
+  padding: 14px;
+}
+
+.openCarList article {
+  display: grid;
+  gap: 4px;
+  padding: 11px;
+}
+
+.openCarList article.danger {
+  border-color: #fecaca;
+  background: #fff1f2;
+}
+
+.openCarTable {
+  width: calc(100% - 28px);
+  margin: 0 14px 14px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.openCarTable th,
+.openCarTable td {
+  padding: 9px 8px;
+  border-bottom: 1px solid #e2e8f0;
+  color: #334155;
+  text-align: left;
+  vertical-align: top;
+}
+
+.openCarTable th {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.openCarCompare,
+.openCarSafety {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.openCarCompare {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.openCarCompare p {
+  grid-column: 1 / -1;
+  padding: 12px;
+  border: 1px solid #dbe6f5;
+  border-radius: 7px;
+  background: #f8fafc;
+}
+
+.openCarConsole {
+  padding-bottom: 14px;
+}
+
+.openCarBenchmarkGrid {
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  gap: 14px;
+  padding: 14px 0 0;
+}
+
+.openCarBenchmarkSummary {
+  display: grid;
+  gap: 10px;
+  margin-left: 14px;
+  padding: 12px;
+}
+
+.openCarBenchmarkSummary dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.openCarBenchmarkSummary dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.openCarBenchmarkSummary dt {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.openCarBenchmarkSummary dd {
+  margin: 0;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.openCarPass {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 7px;
+  border: 1px solid #bbf7d0;
+  border-radius: 999px;
+  background: #f0fdf4;
+  color: #15803d;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+@media (max-width: 1180px) {
+  .openCarPaperNote,
+  .openCarModelStage,
+  .openCarTwoColumns,
+  .openCarBenchmarkGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .openCarTraceRailList {
+    grid-template-columns: repeat(2, minmax(220px, 1fr));
+  }
+
+  .openCarTraceInspector {
+    position: static;
+    max-height: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .openCarTraceRailHeader,
+  .openCarTraceRailList {
+    grid-template-columns: 1fr;
+  }
+
+  .openCarPanelHeader {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .openCarSemanticGrid,
+  .openCarSummaryCards,
+  .openCarAllocationGrid,
+  .openCarCompare {
+    grid-template-columns: 1fr;
+  }
+
+  .openCarFileStrip {
+    grid-template-columns: repeat(6, minmax(140px, 1fr));
+  }
+
+  .openCarTable {
+    display: block;
+    overflow-x: auto;
+  }
+
+  .openCarStagePanel {
+    --open-car-stage-total-height: 520px;
+  }
+
+  .openCarVehiclePanel {
+    height: auto;
+  }
+
+  .openCarVehicleScene {
+    grid-template-columns: 1fr;
+    grid-template-rows: 390px auto;
+  }
+
+  .openCarSceneLegend {
+    border-top: 1px solid var(--open-car-scene-border);
+    border-left: 0;
+    overflow: visible;
+  }
+
+  .openCarSceneHud {
+    width: calc(100% - 24px);
+  }
+}

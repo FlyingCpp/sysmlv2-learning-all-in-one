@@ -1,0 +1,16 @@
+SynFeld
+Copyright (c) 2026 Josh Chen
+
+This project is licensed under the Eclipse Public License 2.0.
+
+The validator build downloads the official SysML v2 Pilot Implementation from
+Systems-Modeling/SysML-v2-Pilot-Implementation. That software and its included
+SysML v2 models are distributed under the Eclipse Public License 2.0. SysML v2
+specification documents may have separate copyright terms and are not included
+in this repository.
+
+The OpenCar vehicle asset notice is retained next to the asset at
+apps/web/public/model-assets/opencar/NOTICE.md.
+
+SysML is a trademark of the Object Management Group. SynFeld is an independent
+open-source project and is not endorsed by the Object Management Group.

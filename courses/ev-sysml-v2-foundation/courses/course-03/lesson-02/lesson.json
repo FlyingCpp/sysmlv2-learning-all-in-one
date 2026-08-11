@@ -1,0 +1,177 @@
+{
+  "id": "course-03-lesson-02",
+  "title": "从零件参数传递到总成参数",
+  "type": "modeling-lesson",
+  "estimatedMinutes": 30,
+  "scenario": {
+    "title": "工程场景",
+    "body": "电池包工程师不希望在文档里只写“8 个模组、每模组 12 个电芯、每个电芯 3.7V 和 220Ah”的手算结论。SysML v2 可以把这些参数和表达式放入模型，形成从 Cell 到 Module 再到 BatteryPack 的参数关系链。本课重点是通过 part usage 的特征链显式汇总子级参数，并看清结构多重性和工程参数之间的边界，而不是把类型名当成可取值对象。",
+    "visual": {
+      "type": "interactive-flow",
+      "variant": "03",
+      "title": "电池参数从底层传到总成",
+      "caption": "把电芯参数、模组数量和电池包能量关系放入模型，而不是只写在说明文字或 Excel 里。",
+      "nodes": [
+        {
+          "id": "cell-parameter",
+          "icon": "1",
+          "label": "底层参数",
+          "detail": "BatteryCell 定义 nominalVoltageV、capacityAh、energyWh 和 massKg，表示电芯级参数来源。",
+          "code": "BatteryCell"
+        },
+        {
+          "id": "module-parameter",
+          "icon": "2",
+          "label": "模组配置",
+          "detail": "BatteryModule 用 cells[12] 建立电芯 usage，再用 moduleEnergyWh 汇总 cells.energyWh。",
+          "code": "sum(cells.energyWh)"
+        },
+        {
+          "id": "pack-rollup",
+          "icon": "3",
+          "label": "总成推导",
+          "detail": "BatteryPack 用 modules[8] 建立模组 usage，再用 totalEnergyWh 汇总 modules.moduleEnergyWh；是否自动求出数值取决于工具是否支持表达式求值。",
+          "code": "sum(modules.moduleEnergyWh)"
+        },
+        {
+          "id": "change-propagation",
+          "icon": "4",
+          "label": "改一处影响上层",
+          "detail": "当电芯容量或模组数量变化时，模型中的 usage 特征链说明了影响路径；具体数值可由支持求值的 SysML 工具或外部分析脚本计算。",
+          "code": "cells.energyWh"
+        }
+      ]
+    }
+  },
+  "learningBlocks": [
+    {
+      "type": "image-gallery",
+      "title": "课程导引图",
+      "content": "本图按当前 lesson 的工程任务和模型主题生成，用于先理解课程场景，再进入 SysML v2 建模练习。",
+      "generatedBy": "scripts/generate-course-lesson-illustrations.js",
+      "images": [
+        {
+          "src": "/api/course-assets/assets/course-visuals/generated-lesson-guides/ev-course-03-lesson-02-analysis.svg",
+          "title": "C03.L02 从零件参数传递到总成参数",
+          "caption": "围绕 分析/Analysis / 约束/Constraint / 参数链/Parameter 组织汽车工程语境，把本课对象放进可追踪的 SysML v2 模型。",
+          "alt": "电动汽车 SysML v2 建模课程导引图：从零件参数传递到总成参数"
+        }
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "工程意图：产品结构建模的价值不只是层级分解，还包括把参数关系放入模型。电池包总能量不应只写成脱离模型的注释，也不应写成脱离结构的硬编码公式，而应由电芯容量、标称电压、模组里的电芯 usage 和电池包里的模组 usage 显式汇总。这里的重点是建立可追踪的表达式关系，而不是让本站 validator 直接给出计算结果。"
+    },
+    {
+      "type": "markdown",
+      "content": "读模要点：`part cells[12] : BatteryCell;` 表示模组里有 12 个电芯 usage。`cells.energyWh` 不是访问 `BatteryCell` 这个定义本身，而是沿着 `cells` 这一组 usage 取每个电芯的 `energyWh` 特征；`sum(cells.energyWh)` 再把这些值汇总到模组。参数和结构要同时存在：前者服务计算和决策，后者服务产品分解和接口挂接。"
+    },
+    {
+      "type": "hint-card",
+      "title": "为什么还要单独定义数量参数？",
+      "label": "点击展开关键概念说明",
+      "content": "`part modules[8] : BatteryModule;` 里的 `[8]` 是 `modules` 这个 part usage 的多重性，约束电池包结构里有 8 个模组位置；`moduleCount` 是一个普通工程参数，可以被 `totalCellCount = moduleCount * cellsPerModule`、需求、分析或表格直接引用。SysML v2 标准语法允许 multiplicity 使用特征引用，官方 validator 实测也接受 `attribute moduleCount : ScalarValues::Integer = 8; part modules[moduleCount] : BatteryModule;`，这是减少重复数字的更干净写法。本课暂时保留 `modules[8]` 和 `moduleCount = 8` 两处显式写法，是为了让刚学 multiplicity 的学生先读懂结构，再读懂参数链；两处数值必须保持一致。"
+    },
+    {
+      "type": "hint-card",
+      "title": "能不能从 `modules[8]` 反向取出 8",
+      "label": "点击展开关键概念说明",
+      "content": "可以用更进阶的集合函数表达近似意图，例如导入 `CollectionFunctions` 后写 `attribute moduleCount : ScalarValues::Integer = size(modules);`。官方库中 `CollectionFunctions::size` 返回集合大小，官方 validator 对这个写法语义通过，但会给出类型一致性 warning；因此它不适合作为本入门课的标准答案。课程建议的学习顺序是：先用显式 `moduleCount` 理解工程参数，再在后续进阶内容里把 multiplicity 改成 `[moduleCount]` 或使用 `size(...)` 做模型查询。"
+    },
+    {
+      "type": "markdown",
+      "content": "语法读法：`part cells[12] : BatteryCell;` 中 `part` 是关键字，`cells` 是自定义 usage 名称，`[12]` 是多重性，`BatteryCell` 是类型。`attribute nominalVoltageV : ScalarValues::Real = 3.7;` 中 `attribute` 是关键字，`nominalVoltageV` 是工程命名约定，`ScalarValues::Real` 是标准库类型，等号右侧是默认值或表达式。`sum(...)` 来自 `private import NumericalFunctions::*;`，用于汇总集合。"
+    },
+    {
+      "type": "markdown",
+      "content": "表达式书写边界：`moduleCount*cellsPerModule` 和 `moduleCount * cellsPerModule` 在 SysML v2 语法上等价，空格只是课程推荐的可读排版，不应作为课程检查条件。同理，`totalEnergyWh/1000` 和 `totalEnergyWh / 1000.0` 都能通过官方 validator；课程示例写 `1000.0` 是为了让学生一眼看出这是 Real 数值换算，不是要求整数必须写成小数。课程规则会按表达式结构检查，而不是按空格或 `.0` 文本形状检查。"
+    },
+    {
+      "type": "hint-card",
+      "title": "为什么不能用类型名点属性？",
+      "label": "点击查看参数和关系建模说明",
+      "content": "为什么 `BatteryCell.nominalVoltageV` 会报错：`BatteryCell` 是 `part def` 类型定义名称，不是 BatteryPack 里某一个可取值的电芯 usage。点号特征链应从 usage 或 feature 出发，例如官方示例中的 `vehicle.dryMass`、`engine.mass`，本课对应 `cells.energyWh` 和 `modules.moduleEnergyWh`。`BatteryCell::nominalVoltageV` 这类双冒号写法是命名空间限定，常见于重定义或定位定义成员，不等于在 Pack 公式中读取一个全局数值。"
+    },
+    {
+      "type": "markdown",
+      "content": "标准语义边界：`attribute moduleEnergyWh : ScalarValues::Real = sum(cells.energyWh);` 和 `attribute totalEnergyWh : ScalarValues::Real = sum(modules.moduleEnergyWh);` 只是把汇总关系写进模型。当前校验主要确认公式写法、名称引用和挂接位置合法，不会自动替你算出结果。FeatureValue（特征取值）和 Expression（表达式）是标准里的进阶术语，本课先把它们理解为“等号右侧给参数赋值或写公式”。"
+    },
+    {
+      "type": "markdown",
+      "content": "如何得到数值：如果工具实现了 SysML v2 表达式/函数求值，它可以沿 `cells.energyWh` 和 `modules.moduleEnergyWh` 这条链计算出约 `8 * 12 * 3.7 * 220.0 = 78144 Wh`，也就是约 `78.1 kWh`。后续课程为了保持学习模型简洁，统一使用四舍五入后的 `usableEnergyKWh = 78.0` 作为续航、需求和验证链的输入。如果工具只做建模和校验，就需要把模型中的参数关系交给分析工具执行，例如 SysML 工具的计算引擎、Python/Matlab/Excel 脚本，或后续课程中的 `calc def`/分析模型。也就是说，不是必须转换成 Python，但必须有某个求值执行环境。"
+    },
+    {
+      "type": "hint-card",
+      "title": "为什么不建议硬编码总成公式？",
+      "label": "点击查看参数和关系建模说明",
+      "content": "为什么不建议在 Pack 里写 `totalCellCount * 3.7 * 220.0`：这条表达式语法上可以成立，但它把电芯电压和容量重新硬编码在 Pack 层，绕开了 `BatteryCell.energyWh`、`cells.energyWh` 和 `modules.moduleEnergyWh` 这条模型追踪链。这样以后单体容量、模组结构或电芯参数改了，Pack 公式不会自然暴露影响来源。本课规则要求 `totalEnergyWh = sum(modules.moduleEnergyWh)`，不是因为直接乘法语法错误，而是因为本课目标是学习从结构 usage 汇总子级参数。"
+    },
+    {
+      "type": "markdown",
+      "content": "教学参数边界：本课把 `capacityAh = 220.0`、`massKg = 5.0` 当作大容量车用电芯的简化基线。96 个电芯约 480kg，接近后续课程中 520kg 级电池包的工程量级。`usableEnergyKWh = totalEnergyWh / 1000.0` 在这里是教学简化；真实电池包还要考虑 SOC（荷电状态）窗口、寿命、安全余量和热管理限制，不能把名义总能量直接当成全部可用能量。"
+    },
+    {
+      "type": "markdown",
+      "content": "本平台当前边界：本课点击“校验”会确认 `energyWh`、`moduleEnergyWh`、`totalEnergyWh`、`usableEnergyKWh` 这类 attribute 和表达式写法在 SysML v2 中合法，并确认它们挂在正确的 `BatteryCell`、`BatteryModule` 和 `BatteryPack` 上；它不会把计算结果显示为 78144 Wh 或 78.1 kWh。学生应把这部分理解为“把计算依据建模清楚”，而不是“本站完成数值仿真”。"
+    },
+    {
+      "type": "markdown",
+      "content": "练习步骤：如果编辑器顶部显示“课程模板”，就在 TODO 1 补全 BatteryModule 的 attribute 参数 cellCount、moduleEnergyWh，并补 cells 的 part usage；在 TODO 2 补全 BatteryPack 的 attribute 参数 moduleCount、cellsPerModule、totalCellCount、totalEnergyWh、usableEnergyKWh，并补 modules 的 part usage。本课标准练习用 `part modules[8] : BatteryModule;`，但你也可以把结构数量写成 `part modules[moduleCount] : BatteryModule;` 来避免重复数字；前提是保留 `moduleCount` 这个工程参数。TODO 3 创建 vehicleBattery。如果显示“已恢复草稿”，先检查这些 attribute 和 part usage 是否已经位于对应定义内部，必要时点击“重置为课程模板”回到 TODO 起点。运行校验并确认规则检查结构、关键参数和 78kWh 级能量桥接，而不是替你做数值仿真。"
+    },
+    {
+      "type": "code",
+      "language": "sysml",
+      "sourceFile": "starter.sysml"
+    }
+  ],
+  "workspace": {
+    "files": [
+      {
+        "path": "main.sysml",
+        "source": "starter.sysml",
+        "editable": true
+      }
+    ],
+    "entryFile": "main.sysml"
+  },
+  "tasks": [
+    {
+      "id": "task-01",
+      "type": "model-challenge",
+      "prompt": "在课程模板的 TODO 位置，或在已恢复草稿中的对应结构位置，补全 BatteryModule 与 BatteryPack 的 attribute 参数汇总链、对应 part usage，并创建 `vehicleBattery : BatteryPack` 作为当前车型电池包配置对象。",
+      "hints": [
+        "数量配置可以通过 attribute 表达，结构组成仍然要通过 part usage 表达；`[8]` 是结构多重性，`moduleCount` 是可被公式、需求和分析引用的工程参数。组合关系不会自动把电芯参数传到 Pack，汇总关系要显式建模。",
+        "先让 BatteryModule 拥有 `cells`，再从这个 usage 出发写 `cells.energyWh`；先让 BatteryPack 拥有 `modules`，再从这个 usage 出发写 `modules.moduleEnergyWh`。",
+        "`BatteryCell.nominalVoltageV` 是错误方向，因为 `BatteryCell` 是类型定义名；如果看到官方示例里的 `Vehicle::mass`，那是双冒号命名空间限定，不是点号取值。",
+        "本课规则重点检查两件事：`cells` 是否写在 BatteryModule 内并引用 BatteryCell，`modules` 是否写在 BatteryPack 内并引用 BatteryModule。数量可以代表不同工程配置；只要结构关系正确，不会因为数量和示例不同就被当成语法错误。",
+        "官方 validator 支持简单的参数化 multiplicity，例如先定义 `moduleCount = 8`，再写 `modules[moduleCount]`；本课标准答案仍使用 `modules[8]`，重点是让你先看清结构数量和工程参数的对应关系。",
+        "导入 `CollectionFunctions::*` 后可以用 `size(modules)` 表达集合大小查询，但这个写法涉及集合函数和工具 warning，不作为本课必做内容。",
+        "`moduleCount*cellsPerModule`、`moduleCount * cellsPerModule`、`totalEnergyWh/1000` 和 `totalEnergyWh / 1000.0` 都是可以被理解的表达式写法；空格和 `.0` 是可读性风格，不是课程通过条件。",
+        "不要把 Pack 的总能量写成 `totalCellCount * 3.7 * 220.0` 作为本课答案；它语法合法，但跳过了 `sum(modules.moduleEnergyWh)` 这条结构化汇总关系。",
+        "把 `totalEnergyWh` 建成由 `sum(modules.moduleEnergyWh)` 得到的总能量参数，再把 `usableEnergyKWh` 建成由 `totalEnergyWh / 1000.0` 得到的可用能量参数，后续课程会把它近似为 78.0kWh 使用。",
+        "本站 validator 不会输出 `totalEnergyWh` 的数值结果；它检查的是表达式关系是否作为 SysML v2 模型合法存在。"
+      ]
+    }
+  ],
+  "validation": {
+    "strictSysml": true,
+    "rulesFile": "rules.json"
+  },
+  "completion": {
+    "requiresStrictValidation": true,
+    "requiresAllLessonRules": true
+  },
+  "glossaryTerms": [
+    "attribute",
+    "AttributeUsage",
+    "FeatureValue",
+    "FeatureChain",
+    "NumericalFunctions",
+    "sum",
+    "multiplicity",
+    "composition",
+    "Expression",
+    "CalculationDefinition",
+    "CalculationUsage"
+  ]
+}

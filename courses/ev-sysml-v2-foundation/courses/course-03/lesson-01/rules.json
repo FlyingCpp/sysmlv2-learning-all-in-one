@@ -1,0 +1,84 @@
+{
+  "rules": [
+    {
+      "id": "strict-valid",
+      "type": "strictValidationPassed",
+      "severity": "error",
+      "message": "模型必须通过严格 SysML v2 校验。"
+    },
+    {
+      "id": "wheel-diameter",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "Wheel",
+        "kind": "attribute",
+        "name": "diameterM",
+        "typeName": "ScalarValues::Real"
+      },
+      "message": "Wheel 中需要存在 attribute diameterM : ScalarValues::Real，用工程参数表达轮径。"
+    },
+    {
+      "id": "wheel-mass",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "Wheel",
+        "kind": "attribute",
+        "name": "massKg",
+        "typeName": "ScalarValues::Real"
+      },
+      "message": "Wheel 中需要存在 attribute massKg : ScalarValues::Real，用工程参数表达轮胎/轮毂质量。"
+    },
+    {
+      "id": "body-drag",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "VehicleBody",
+        "kind": "attribute",
+        "name": "dragCoeff",
+        "typeName": "ScalarValues::Real"
+      },
+      "message": "VehicleBody 中需要存在 attribute dragCoeff : ScalarValues::Real，用工程参数表达风阻系数。"
+    },
+    {
+      "id": "body-mass",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "VehicleBody",
+        "kind": "attribute",
+        "name": "massKg",
+        "typeName": "ScalarValues::Real"
+      },
+      "message": "VehicleBody 中需要存在 attribute massKg : ScalarValues::Real，用工程参数表达车身质量。"
+    },
+    {
+      "id": "vehicle-target-range",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "ElectricVehicle",
+        "kind": "attribute",
+        "name": "targetRangeKm",
+        "typeName": "ScalarValues::Real",
+        "valueIncludes": "480.0"
+      },
+      "message": "ElectricVehicle 中需要存在 attribute targetRangeKm : ScalarValues::Real = 480.0，用整车级参数表达与后续需求课程一致的目标续航。"
+    },
+    {
+      "id": "vehicle-wheel-multiplicity",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "ElectricVehicle",
+        "kind": "part",
+        "name": "wheels",
+        "typeName": "Wheel",
+        "multiplicity": "4"
+      },
+      "message": "ElectricVehicle 中需要保留 part wheels[4] : Wheel，用多重性表达四个车轮。"
+    }
+  ]
+}

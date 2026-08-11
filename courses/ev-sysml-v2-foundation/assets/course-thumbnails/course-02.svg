@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 236" role="img" aria-labelledby="t d">
+  <title id="t">Course 02 Definition and Usage</title>
+  <desc id="d">Definition catalog connected to concrete usages in an electric vehicle bill of materials.</desc>
+  <rect width="420" height="236" rx="18" fill="#f8fbff"/>
+  <rect x="28" y="34" width="154" height="168" rx="14" fill="#fff" stroke="#b9d4ee"/>
+  <text x="48" y="64" font-family="Segoe UI,Arial" font-size="16" fill="#1769aa" font-weight="800">definition</text>
+  <rect x="50" y="85" width="104" height="26" rx="6" fill="#eef6ff"/><rect x="50" y="122" width="104" height="26" rx="6" fill="#eef6ff"/><rect x="50" y="159" width="104" height="26" rx="6" fill="#eef6ff"/>
+  <text x="61" y="103" font-family="Consolas,monospace" font-size="12" fill="#0f172a">Battery</text>
+  <text x="61" y="140" font-family="Consolas,monospace" font-size="12" fill="#0f172a">Motor</text>
+  <text x="61" y="177" font-family="Consolas,monospace" font-size="12" fill="#0f172a">Wheel</text>
+  <rect x="238" y="34" width="154" height="168" rx="14" fill="#fff" stroke="#b8dfc8"/>
+  <text x="258" y="64" font-family="Segoe UI,Arial" font-size="16" fill="#147a4d" font-weight="800">usage</text>
+  <path d="M182 98h56M182 135h56M182 172h56" stroke="#64748b" stroke-width="3" stroke-dasharray="7 7"/>
+  <circle cx="282" cy="98" r="14" fill="#1769aa"/><circle cx="330" cy="135" r="14" fill="#147a4d"/><circle cx="282" cy="172" r="14" fill="#9a5b00"/>
+  <text x="257" y="218" font-family="Consolas,monospace" font-size="13" fill="#0f172a">part usage</text>
+</svg>

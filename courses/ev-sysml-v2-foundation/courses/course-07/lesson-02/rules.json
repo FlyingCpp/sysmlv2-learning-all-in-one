@@ -1,0 +1,92 @@
+{
+  "rules": [
+    {
+      "id": "strict-valid",
+      "type": "strictValidationPassed",
+      "severity": "error",
+      "message": "模型必须通过严格 SysML v2 校验。"
+    },
+    {
+      "id": "source-range-target",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "vehicleRange",
+        "kind": "attribute",
+        "name": "minRangeKm",
+        "isRedefinition": true,
+        "valueIncludes": "480.0"
+      },
+      "message": "来源需求 vehicleRange 需要 480.0 km 目标。"
+    },
+    {
+      "id": "derived-energy-target",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "usableBatteryEnergy",
+        "kind": "attribute",
+        "name": "minUsableEnergyKWh",
+        "isRedefinition": true,
+        "valueIncludes": "78.0"
+      },
+      "message": "派生电池需求需要 78.0 kWh 目标。"
+    },
+    {
+      "id": "derived-consumption-target",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "energyConsumption",
+        "kind": "attribute",
+        "name": "maxEnergyPer100Km",
+        "isRedefinition": true,
+        "valueIncludes": "16.0"
+      },
+      "message": "派生能耗需求需要 16.0 kWh/100km 目标。"
+    },
+    {
+      "id": "derivation-exists",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": { "kind": "derivation" },
+      "message": "需要添加 #derivation connection。"
+    },
+    {
+      "id": "derivation-original",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parentKind": "derivation",
+        "kind": "end",
+        "specializes": "#original",
+        "targetName": "vehicleRange"
+      },
+      "message": "派生关系需要 vehicleRange 作为 #original。"
+    },
+    {
+      "id": "derivation-energy",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parentKind": "derivation",
+        "kind": "end",
+        "specializes": "#derive",
+        "targetName": "usableBatteryEnergy"
+      },
+      "message": "派生关系需要 usableBatteryEnergy 作为 #derive。"
+    },
+    {
+      "id": "derivation-consumption",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parentKind": "derivation",
+        "kind": "end",
+        "specializes": "#derive",
+        "targetName": "energyConsumption"
+      },
+      "message": "派生关系需要 energyConsumption 作为 #derive。"
+    }
+  ]
+}

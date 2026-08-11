@@ -1,0 +1,791 @@
+{
+  "schemaVersion": "1.0",
+  "reviewStatus": "reviewed",
+  "generatedBy": "sysml-v2-systems-engineering-subagent",
+  "generatedAt": "2026-06-05",
+  "publicationStatus": "reviewed_for_local_rag_test",
+  "cards": [
+    {
+      "cardId": "sysml.part-def-vs-part.candidate",
+      "status": "reviewed",
+      "language": "zh-CN",
+      "domain": "sysml-language",
+      "cardType": "concept",
+      "title": "part def 与 part usage 的区别",
+      "summary": "part def 用于定义可复用部件类型；part usage 在某个上下文中使用或配置该类型。",
+      "body": {
+        "teachingExplanation": "官方 Vehicle 示例中有 `part def Vehicle`、`part def Wheel` 等类型定义，也有 `part narrowRimWheel : Wheel`、`part vehicle_C1 : Vehicle` 等使用。教学时先让学生区分“定义一种类型”和“在当前系统中放入一次使用”。",
+        "keyPoints": [
+          "先定义可复用类型，再在系统结构中创建 usage。",
+          "冒号右侧通常引用已经存在或已导入的类型。",
+          "本卡为候选检索卡，不是课程标准答案。"
+        ],
+        "sysmlSnippet": "part def BatteryPack;\npart battery : BatteryPack;",
+        "commonMistakes": [
+          "把 `part def BatteryPack` 当成车辆里的电池实例。",
+          "usage 冒号右侧引用了未定义类型。"
+        ],
+        "diagnosticHints": [
+          "如果 validator 报 unresolved type，先检查 usage 冒号右侧类型是否已定义或导入。"
+        ]
+      },
+      "scope": {
+        "coursePackIds": [
+          "ev-sysml-v2-foundation-c2"
+        ],
+        "courseIds": [
+          "course-01"
+        ],
+        "lessonIds": [],
+        "concepts": [
+          "part def",
+          "part",
+          "definition",
+          "usage"
+        ],
+        "intents": [
+          "free_answer",
+          "next_step",
+          "explain_selection",
+          "explain_diagnostic"
+        ]
+      },
+      "retrieval": {
+        "keywords": [
+          "part def",
+          "part usage",
+          "BatteryPack",
+          "ElectricVehicle",
+          "definition usage"
+        ],
+        "aliases": [
+          "PartDefinition",
+          "PartUsage",
+          "部件定义",
+          "部件使用"
+        ],
+        "priority": 82
+      },
+      "source": {
+        "authorityLevel": "B",
+        "sourceType": "official_release_example",
+        "sourceTitle": "Systems-Modeling/SysML-v2-Release VehicleDefinitions and VehicleUsages",
+        "sourceUrl": "https://github.com/Systems-Modeling/SysML-v2-Release",
+        "sourceVersion": "SysML-v2-Release master, checked 2026-06-05",
+        "section": "sysml/src/examples/Vehicle Example",
+        "summary": "Vehicle examples show part definitions and typed part usages."
+      },
+      "review": {
+        "reviewedBy": "project-owner-local-rag-test",
+        "reviewedAt": "2026-06-06",
+        "reviewNotes": "Reviewed status enabled by project owner for local real-LLM RAG context testing. Formal course publication still requires full domain review records where applicable."
+      },
+      "reviewStatus": "reviewed",
+      "metadata": {
+        "contentGate": "reviewed-for-local-rag-test"
+      }
+    },
+    {
+      "cardId": "sysml.item-def-item-ref-item.candidate",
+      "status": "reviewed",
+      "language": "zh-CN",
+      "domain": "sysml-language",
+      "cardType": "concept",
+      "title": "item def、item 与 ref item",
+      "summary": "item def 定义可传递或被引用的信息、物料或命令类型；item usage/ref item 在端口、动作或部件上下文中使用该类型。",
+      "body": {
+        "teachingExplanation": "Simple Vehicle Model 示例中出现 `item def PwrCmd`、`item def Fuel`，也出现 `in item pwrCmd : PwrCmd`、`ref item fuel : Fuel`。教学时可先说明：先定义 item 类型，再在端口、动作参数或部件内部使用它。",
+        "keyPoints": [
+          "item 常用于命令、信号、物料、数据等可被传递或引用的对象。",
+          "`ref item` 的精确定义需按 SysML 2.0 Language PDF 复核。"
+        ],
+        "sysmlSnippet": "item def EnergyCommand;\nin item command : EnergyCommand;",
+        "commonMistakes": [
+          "把 item def 写成 part def，导致端口/流语义不清。",
+          "没有定义 item 类型就直接在端口中引用。"
+        ],
+        "diagnosticHints": [
+          "遇到 item 类型 unresolved，先检查 item def 或 import。"
+        ]
+      },
+      "scope": {
+        "coursePackIds": [
+          "ev-sysml-v2-foundation-c2"
+        ],
+        "courseIds": [
+          "course-02"
+        ],
+        "lessonIds": [],
+        "concepts": [
+          "item def",
+          "item",
+          "ref item",
+          "flow item"
+        ],
+        "intents": [
+          "free_answer",
+          "next_step",
+          "explain_selection"
+        ]
+      },
+      "retrieval": {
+        "keywords": [
+          "item def",
+          "item",
+          "ref item",
+          "PwrCmd",
+          "Fuel",
+          "command"
+        ],
+        "aliases": [
+          "ItemDefinition",
+          "ItemUsage",
+          "引用项"
+        ],
+        "priority": 78
+      },
+      "source": {
+        "authorityLevel": "B",
+        "sourceType": "official_release_example",
+        "sourceTitle": "OMG/SysML v2 Simple Vehicle Model example",
+        "sourceUrl": "https://www.omg.org/spec/SysML",
+        "sourceVersion": "SysML 2.0 formal, September 2025, checked 2026-06-05",
+        "section": "Informative machine readable documents / Simple Vehicle Model",
+        "summary": "The official specification page links a SysML textual notation file for the example Simple Vehicle Model."
+      },
+      "review": {
+        "reviewedBy": "project-owner-local-rag-test",
+        "reviewedAt": "2026-06-06",
+        "reviewNotes": "Reviewed status enabled by project owner for local real-LLM RAG context testing. Formal course publication still requires full domain review records where applicable."
+      },
+      "reviewStatus": "reviewed",
+      "metadata": {
+        "contentGate": "reviewed-for-local-rag-test"
+      }
+    },
+    {
+      "cardId": "sysml.port-def-ref-item.candidate",
+      "status": "reviewed",
+      "language": "zh-CN",
+      "domain": "sysml-language",
+      "cardType": "concept",
+      "title": "port def 与端口内 item/方向",
+      "summary": "port def 定义端口类型；端口内部可声明 in/out item 或其他特征来表达交互边界。",
+      "body": {
+        "teachingExplanation": "Vehicle/SimpleVehicleModel 示例展示了带有方向特征的 port def。候选教学口径是：端口定义先描述交互边界的类型，再在 part 中放置具体端口 usage。",
+        "keyPoints": [
+          "port def 描述端口类型，不等于某个部件上的端口实例。",
+          "方向词 in/out 与 item 或其他特征组合常用于描述输入输出。",
+          "共轭端口等细节需要继续按规范复核。"
+        ],
+        "sysmlSnippet": "port def CommandPort { in item command : DriverCommand; }\nport commandIn : CommandPort;",
+        "commonMistakes": [
+          "端口 usage 引用了未定义 port def。",
+          "在端口边界中混入未解析的 item 类型。"
+        ],
+        "diagnosticHints": [
+          "端口诊断应优先看官方 validator 原文，再解释课程建议。"
+        ]
+      },
+      "scope": {
+        "coursePackIds": [
+          "ev-sysml-v2-foundation-c2"
+        ],
+        "courseIds": [
+          "course-02"
+        ],
+        "lessonIds": [],
+        "concepts": [
+          "port def",
+          "port",
+          "in item",
+          "out item",
+          "interface boundary"
+        ],
+        "intents": [
+          "free_answer",
+          "next_step",
+          "explain_diagnostic"
+        ]
+      },
+      "retrieval": {
+        "keywords": [
+          "port def",
+          "in item",
+          "out item",
+          "DriveIF",
+          "FuelPort",
+          "CommandPort"
+        ],
+        "aliases": [
+          "PortDefinition",
+          "PortUsage",
+          "端口定义",
+          "端口使用"
+        ],
+        "priority": 76
+      },
+      "source": {
+        "authorityLevel": "B",
+        "sourceType": "official_release_example",
+        "sourceTitle": "Systems-Modeling/SysML-v2-Release Vehicle definitions",
+        "sourceUrl": "https://github.com/Systems-Modeling/SysML-v2-Release",
+        "sourceVersion": "SysML-v2-Release master, checked 2026-06-05",
+        "section": "Vehicle Example / port definitions",
+        "summary": "Official release examples show port definitions with directed features and typed ports."
+      },
+      "review": {
+        "reviewedBy": "project-owner-local-rag-test",
+        "reviewedAt": "2026-06-06",
+        "reviewNotes": "Reviewed status enabled by project owner for local real-LLM RAG context testing. Formal course publication still requires full domain review records where applicable."
+      },
+      "reviewStatus": "reviewed",
+      "metadata": {
+        "contentGate": "reviewed-for-local-rag-test"
+      }
+    },
+    {
+      "cardId": "sysml.interface-end-flow.candidate",
+      "status": "reviewed",
+      "language": "zh-CN",
+      "domain": "sysml-language",
+      "cardType": "concept",
+      "title": "interface、end 与 flow",
+      "summary": "interface def 可声明连接端 end，并用 flow 表达从一个端到另一个端的传递关系。",
+      "body": {
+        "teachingExplanation": "Vehicle 示例中的 interface def 包含两个 end 和一条从一个端特征到另一个端特征的 flow。候选教学重点是先确认端点，再表达 flow 方向。",
+        "keyPoints": [
+          "interface/end/flow 适合解释连接两侧的交互关系。",
+          "flow 的源和目标应能解析到已定义的端口或端点特征。",
+          "缺少 `to` 或端点不可解析时，应优先解释官方 validator 诊断。"
+        ],
+        "sysmlSnippet": "interface def PowerLink {\n  end source : SourcePort;\n  end sink : SinkPort;\n  flow source.power to sink.power;\n}",
+        "commonMistakes": [
+          "只写 flow，不声明或连接可解析端点。",
+          "把 flow 方向写反但没有说明工程含义。"
+        ],
+        "diagnosticHints": [
+          "flow 相关语法或语义失败应先用 validator 原文定位。"
+        ]
+      },
+      "scope": {
+        "coursePackIds": [
+          "ev-sysml-v2-foundation-c2"
+        ],
+        "courseIds": [
+          "course-02",
+          "course-03"
+        ],
+        "lessonIds": [],
+        "concepts": [
+          "interface def",
+          "end",
+          "flow",
+          "connect"
+        ],
+        "intents": [
+          "free_answer",
+          "next_step",
+          "explain_selection",
+          "explain_diagnostic"
+        ]
+      },
+      "retrieval": {
+        "keywords": [
+          "interface def",
+          "end",
+          "flow",
+          "connect",
+          "Mounting",
+          "FuelInterface"
+        ],
+        "aliases": [
+          "InterfaceDefinition",
+          "FlowConnection",
+          "接口",
+          "流"
+        ],
+        "priority": 80
+      },
+      "source": {
+        "authorityLevel": "B",
+        "sourceType": "official_release_example",
+        "sourceTitle": "Systems-Modeling/SysML-v2-Release VehicleDefinitions.sysml",
+        "sourceUrl": "https://github.com/Systems-Modeling/SysML-v2-Release",
+        "sourceVersion": "SysML-v2-Release master, checked 2026-06-05",
+        "section": "Vehicle Example / interface definitions",
+        "summary": "The vehicle examples include interface definitions with ends and flows."
+      },
+      "review": {
+        "reviewedBy": "project-owner-local-rag-test",
+        "reviewedAt": "2026-06-06",
+        "reviewNotes": "Reviewed status enabled by project owner for local real-LLM RAG context testing. Formal course publication still requires full domain review records where applicable."
+      },
+      "reviewStatus": "reviewed",
+      "metadata": {
+        "contentGate": "reviewed-for-local-rag-test"
+      }
+    },
+    {
+      "cardId": "sysml.requirement-satisfy.candidate",
+      "status": "reviewed",
+      "language": "zh-CN",
+      "domain": "sysml-language",
+      "cardType": "concept",
+      "title": "requirement 与 satisfy",
+      "summary": "requirement 用于表达需求；satisfy 关系把已有设计元素与需求关联起来。",
+      "body": {
+        "teachingExplanation": "官方 Requirements 和 Simple Vehicle Model 示例展示了 requirement usage、require 和 satisfy 关系。候选教学口径是：先有需求和设计对象，再建立 satisfy 关系。",
+        "keyPoints": [
+          "不要把 satisfy 当作自动创建需求或部件的语句。",
+          "satisfy 两侧名称必须能被解析。",
+          "课程中应区分官方语法/语义失败与课程规则未满足。"
+        ],
+        "sysmlSnippet": "requirement batteryMassLimit;\npart battery : BatteryPack;\nsatisfy batteryMassLimit by battery;",
+        "commonMistakes": [
+          "只定义 requirement def，没有创建要连接的 requirement usage。",
+          "satisfy 引用了不存在的 part 或 requirement。"
+        ],
+        "diagnosticHints": [
+          "关系引用不存在时，检查大小写、作用域和 import。"
+        ]
+      },
+      "scope": {
+        "coursePackIds": [
+          "ev-sysml-v2-foundation-c2"
+        ],
+        "courseIds": [
+          "course-04",
+          "course-05"
+        ],
+        "lessonIds": [],
+        "concepts": [
+          "requirement",
+          "requirement def",
+          "satisfy",
+          "traceability"
+        ],
+        "intents": [
+          "free_answer",
+          "next_step",
+          "explain_diagnostic"
+        ]
+      },
+      "retrieval": {
+        "keywords": [
+          "requirement",
+          "satisfy",
+          "require",
+          "traceability",
+          "RequirementCheck"
+        ],
+        "aliases": [
+          "需求",
+          "满足关系",
+          "SatisfyRequirementUsage"
+        ],
+        "priority": 74
+      },
+      "source": {
+        "authorityLevel": "B",
+        "sourceType": "official_release_example",
+        "sourceTitle": "Systems-Modeling/SysML-v2-Release requirements examples",
+        "sourceUrl": "https://github.com/Systems-Modeling/SysML-v2-Release",
+        "sourceVersion": "SysML-v2-Release master, checked 2026-06-05",
+        "section": "Requirements Examples and Vehicle Example",
+        "summary": "Official release examples include requirement usages and satisfy relationships in vehicle context."
+      },
+      "review": {
+        "reviewedBy": "project-owner-local-rag-test",
+        "reviewedAt": "2026-06-06",
+        "reviewNotes": "Reviewed status enabled by project owner for local real-LLM RAG context testing. Formal course publication still requires full domain review records where applicable."
+      },
+      "reviewStatus": "reviewed",
+      "metadata": {
+        "contentGate": "reviewed-for-local-rag-test"
+      }
+    },
+    {
+      "cardId": "sysml.view-expose-general-view.candidate",
+      "status": "reviewed",
+      "language": "zh-CN",
+      "domain": "sysml-language",
+      "cardType": "concept",
+      "title": "view、expose 与 GeneralView",
+      "summary": "view 用于组织呈现模型元素；expose 选择要进入 view 的已有模型元素。",
+      "body": {
+        "teachingExplanation": "Systems Library 的 StandardViewDefinitions 描述 GeneralView 可呈现 exposed model elements 的成员。候选教学口径是：view 不替代模型定义，通常选择已有元素进行呈现。",
+        "keyPoints": [
+          "先建模，再用 view/expose 组织查看范围。",
+          "expose 应指向已有模型元素；名称不可解析时按 validator 诊断处理。",
+          "不同工具渲染 view 的支持程度可能不同。"
+        ],
+        "sysmlSnippet": "view systemReview : StandardViewDefinitions::GeneralView {\n  expose vehicle;\n}",
+        "commonMistakes": [
+          "在 view 里 expose 未定义对象。",
+          "把 view 当成创建 part/requirement 的主要位置。"
+        ],
+        "diagnosticHints": [
+          "expose unresolved element 时检查对象是否已定义、作用域是否可见。"
+        ]
+      },
+      "scope": {
+        "coursePackIds": [
+          "ev-sysml-v2-foundation-c2"
+        ],
+        "courseIds": [
+          "course-06"
+        ],
+        "lessonIds": [],
+        "concepts": [
+          "view",
+          "expose",
+          "GeneralView",
+          "rendering"
+        ],
+        "intents": [
+          "free_answer",
+          "next_step",
+          "explain_selection",
+          "explain_diagnostic"
+        ]
+      },
+      "retrieval": {
+        "keywords": [
+          "view",
+          "expose",
+          "GeneralView",
+          "StandardViewDefinitions",
+          "rendering"
+        ],
+        "aliases": [
+          "视图",
+          "暴露元素",
+          "ViewUsage"
+        ],
+        "priority": 70
+      },
+      "source": {
+        "authorityLevel": "B",
+        "sourceType": "official_model_library",
+        "sourceTitle": "Systems Library StandardViewDefinitions",
+        "sourceUrl": "https://github.com/Systems-Modeling/SysML-v2-Release",
+        "sourceVersion": "SysML-v2-Release master, checked 2026-06-05",
+        "section": "sysml.library/Systems Library/StandardViewDefinitions.sysml",
+        "summary": "The Systems Library includes standard view definitions such as GeneralView."
+      },
+      "review": {
+        "reviewedBy": "project-owner-local-rag-test",
+        "reviewedAt": "2026-06-06",
+        "reviewNotes": "Reviewed status enabled by project owner for local real-LLM RAG context testing. Formal course publication still requires full domain review records where applicable."
+      },
+      "reviewStatus": "reviewed",
+      "metadata": {
+        "contentGate": "reviewed-for-local-rag-test"
+      }
+    },
+    {
+      "cardId": "sysml.definition-vs-usage-general.candidate",
+      "status": "reviewed",
+      "language": "zh-CN",
+      "domain": "sysml-language",
+      "cardType": "concept",
+      "title": "definition 与 usage 的通用建模节奏",
+      "summary": "SysML v2 示例中反复出现“先定义类型，再创建 usage 或配置 usage”的建模节奏。",
+      "body": {
+        "teachingExplanation": "官方 Vehicle 示例同时展示 part、item、port、interface、requirement 的 definition 与 usage。候选教学策略是让学生先问：我是在定义一种可复用类型，还是在当前系统中放置一次具体使用？",
+        "keyPoints": [
+          "definition 常回答“这类东西是什么”。",
+          "usage 常回答“这个系统里用了哪个东西”。",
+          "冒号、specializes、subsets、redefines 等关系需要按具体上下文解释。"
+        ],
+        "sysmlSnippet": "part def Motor;\npart driveMotor : Motor;",
+        "commonMistakes": [
+          "只写定义不写系统结构 usage，导致课程结构规则不通过。",
+          "在 usage 位置临时发明未定义类型名。"
+        ],
+        "diagnosticHints": [
+          "若课程规则提示缺少结构元素，但官方 validator 已失败，应先修官方错误。"
+        ]
+      },
+      "scope": {
+        "coursePackIds": [
+          "ev-sysml-v2-foundation-c2"
+        ],
+        "courseIds": [
+          "course-01",
+          "course-02"
+        ],
+        "lessonIds": [],
+        "concepts": [
+          "definition",
+          "usage",
+          "part def",
+          "item def",
+          "port def"
+        ],
+        "intents": [
+          "free_answer",
+          "next_step"
+        ]
+      },
+      "retrieval": {
+        "keywords": [
+          "definition",
+          "usage",
+          "def vs usage",
+          "part def",
+          "item def",
+          "port def"
+        ],
+        "aliases": [
+          "定义与使用",
+          "类型与实例"
+        ],
+        "priority": 84
+      },
+      "source": {
+        "authorityLevel": "B",
+        "sourceType": "official_release_example",
+        "sourceTitle": "Systems-Modeling/SysML-v2-Release model examples and model library",
+        "sourceUrl": "https://github.com/Systems-Modeling/SysML-v2-Release",
+        "sourceVersion": "SysML-v2-Release master, checked 2026-06-05",
+        "section": "README Release Content and Vehicle Example",
+        "summary": "The release repository contains SysML v2 example models and normative textual model libraries."
+      },
+      "review": {
+        "reviewedBy": "project-owner-local-rag-test",
+        "reviewedAt": "2026-06-06",
+        "reviewNotes": "Reviewed status enabled by project owner for local real-LLM RAG context testing. Formal course publication still requires full domain review records where applicable."
+      },
+      "reviewStatus": "reviewed",
+      "metadata": {
+        "contentGate": "reviewed-for-local-rag-test"
+      }
+    },
+    {
+      "cardId": "sysml.diagnostic-official-validator-priority.candidate",
+      "status": "reviewed",
+      "language": "zh-CN",
+      "domain": "sysml-diagnostics",
+      "cardType": "policy",
+      "title": "官方 validator 诊断优先级",
+      "summary": "当官方 SysML v2 语法/语义校验失败时，AI 教师应先解释官方诊断，再讨论课程规则。",
+      "body": {
+        "teachingExplanation": "这是平台教学策略候选卡：官方 validator 失败说明模型尚未通过基础语法/语义门禁，课程规则诊断可能受到前置错误影响。回答时应明确区分 official validator、course rule 和平台推断。",
+        "keyPoints": [
+          "A 级 evidence 来自当前 validator 结果。",
+          "C 级 evidence 来自课程规则。",
+          "不要把课程规则失败包装成 OMG 语义错误。"
+        ],
+        "sysmlSnippet": "",
+        "commonMistakes": [
+          "先解释课程规则，忽略官方语法错误。",
+          "把本地结构检查当成正式 SysML 语义。"
+        ],
+        "diagnosticHints": [
+          "回答中使用“先修官方 validator 错误，再重跑课程规则”的顺序。"
+        ]
+      },
+      "scope": {
+        "coursePackIds": [
+          "ev-sysml-v2-foundation-c2"
+        ],
+        "courseIds": [],
+        "lessonIds": [],
+        "concepts": [
+          "official validator",
+          "course rule",
+          "diagnostic priority"
+        ],
+        "intents": [
+          "explain_diagnostic",
+          "next_step"
+        ]
+      },
+      "retrieval": {
+        "keywords": [
+          "validator",
+          "official diagnostic",
+          "course-rule",
+          "priority",
+          "evidence chain"
+        ],
+        "aliases": [
+          "官方诊断优先",
+          "课程规则次级"
+        ],
+        "priority": 90
+      },
+      "source": {
+        "authorityLevel": "D",
+        "sourceType": "platform_policy_context",
+        "sourceTitle": "Project AGENTS.md and AI teacher diagnostic policy",
+        "sourceUrl": "local://AGENTS.md",
+        "sourceVersion": "project-local, checked 2026-06-05",
+        "section": "Testing Rules / SysML semantic evidence rules",
+        "summary": "Project policy requires official syntax validation as a gate before course-rule interpretation and requires evidence-backed SysML guidance."
+      },
+      "review": {
+        "reviewedBy": "project-owner-local-rag-test",
+        "reviewedAt": "2026-06-06",
+        "reviewNotes": "Reviewed status enabled by project owner for local real-LLM RAG context testing. Formal course publication still requires full domain review records where applicable."
+      },
+      "reviewStatus": "reviewed",
+      "metadata": {
+        "contentGate": "reviewed-for-local-rag-test"
+      }
+    },
+    {
+      "cardId": "sysml.diagnostic-unresolved-type.candidate",
+      "status": "reviewed",
+      "language": "zh-CN",
+      "domain": "sysml-diagnostics",
+      "cardType": "diagnostic",
+      "title": "unresolved type 诊断",
+      "summary": "当冒号右侧类型无法解析时，应先检查类型是否已定义、已导入且大小写完全一致。",
+      "body": {
+        "teachingExplanation": "项目 hint pack 已把官方 Linking 类诊断中的 `Couldn't resolve reference to Type` 映射为学生可读解释。候选教学口径：冒号右侧必须引用当前可见的类型；若没有，就先定义、导入或修正拼写。",
+        "keyPoints": [
+          "保留 validator 原始 message。",
+          "不要直接猜测学生想要的类型。",
+          "可建议搜索当前文件中的 `part def`、`item def`、`port def`。"
+        ],
+        "sysmlSnippet": "part def BatteryPack;\npart battery : BatteryPack;",
+        "commonMistakes": [
+          "`BatteryPack2` 与 `BatteryPack` 大小写或字符不同。",
+          "只写 usage，忘记定义类型。"
+        ],
+        "diagnosticHints": [
+          "先看冒号右侧名字，再检查定义和 import。"
+        ]
+      },
+      "scope": {
+        "coursePackIds": [
+          "ev-sysml-v2-foundation-c2"
+        ],
+        "courseIds": [
+          "course-01",
+          "course-02"
+        ],
+        "lessonIds": [],
+        "concepts": [
+          "unresolved type",
+          "type reference",
+          "validator diagnostic"
+        ],
+        "intents": [
+          "explain_diagnostic",
+          "next_step"
+        ]
+      },
+      "retrieval": {
+        "keywords": [
+          "Couldn't resolve reference to Type",
+          "unresolved type",
+          "BatteryPack2",
+          "Linking",
+          "冒号右侧"
+        ],
+        "aliases": [
+          "未定义类型",
+          "类型无法解析"
+        ],
+        "priority": 88
+      },
+      "source": {
+        "authorityLevel": "D",
+        "sourceType": "platform_validator_context",
+        "sourceTitle": "Project SysML v2 official diagnostic hints zh-CN",
+        "sourceUrl": "local://apps/api/diagnostics/sysml-v2-official-hints.zh-CN.json",
+        "sourceVersion": "2026-05-30",
+        "section": "semantic.unresolved-type",
+        "summary": "Project hint pack maps official validator Linking diagnostics for unresolved Type references into student-facing troubleshooting steps."
+      },
+      "review": {
+        "reviewedBy": "project-owner-local-rag-test",
+        "reviewedAt": "2026-06-06",
+        "reviewNotes": "Reviewed status enabled by project owner for local real-LLM RAG context testing. Formal course publication still requires full domain review records where applicable."
+      },
+      "reviewStatus": "reviewed",
+      "metadata": {
+        "contentGate": "reviewed-for-local-rag-test"
+      }
+    },
+    {
+      "cardId": "sysml.diagnostic-fullwidth-punctuation.candidate",
+      "status": "reviewed",
+      "language": "zh-CN",
+      "domain": "sysml-diagnostics",
+      "cardType": "diagnostic",
+      "title": "中文全角标点诊断",
+      "summary": "SysML v2 textual notation 使用 ASCII 标点；中文全角冒号等字符会导致解析失败或连带误判。",
+      "body": {
+        "teachingExplanation": "项目 hint pack 对中文全角冒号 `：` 做了专门诊断，把它解释为类型分隔符应使用 ASCII `:`。候选教学口径：先修全角标点，再重新运行 validator，避免后续错误都是连带错误。",
+        "keyPoints": [
+          "优先替换 `：` 为 `:`，再检查 `；`、`，`、全角括号。",
+          "修正标点后重新校验，不要继续解释连带错误。",
+          "这是项目诊断辅助，不是完整 SysML 语法规范摘录。"
+        ],
+        "sysmlSnippet": "out systemReady : Boolean;",
+        "commonMistakes": [
+          "`part battery ： BatteryPack;` 使用全角冒号。",
+          "全角分号导致上一句未终止。"
+        ],
+        "diagnosticHints": [
+          "标点修复后让 official validator 重新给出更准确诊断。"
+        ]
+      },
+      "scope": {
+        "coursePackIds": [
+          "ev-sysml-v2-foundation-c2"
+        ],
+        "courseIds": [],
+        "lessonIds": [],
+        "concepts": [
+          "textual syntax",
+          "punctuation",
+          "full-width colon",
+          "ASCII colon"
+        ],
+        "intents": [
+          "explain_diagnostic",
+          "next_step"
+        ]
+      },
+      "retrieval": {
+        "keywords": [
+          "全角冒号",
+          "full-width colon",
+          "ASCII colon",
+          "punctuation",
+          "：",
+          ":"
+        ],
+        "aliases": [
+          "中文标点",
+          "全角标点"
+        ],
+        "priority": 86
+      },
+      "source": {
+        "authorityLevel": "D",
+        "sourceType": "platform_validator_context",
+        "sourceTitle": "Project SysML v2 official diagnostic hints zh-CN",
+        "sourceUrl": "local://apps/api/diagnostics/sysml-v2-official-hints.zh-CN.json",
+        "sourceVersion": "2026-05-30",
+        "section": "syntax.fullwidth-colon",
+        "summary": "Project hint pack detects full-width colon near official syntax diagnostics and explains replacing it with ASCII colon before revalidation."
+      },
+      "review": {
+        "reviewedBy": "project-owner-local-rag-test",
+        "reviewedAt": "2026-06-06",
+        "reviewNotes": "Reviewed status enabled by project owner for local real-LLM RAG context testing. Formal course publication still requires full domain review records where applicable."
+      },
+      "reviewStatus": "reviewed",
+      "metadata": {
+        "contentGate": "reviewed-for-local-rag-test"
+      }
+    }
+  ]
+}

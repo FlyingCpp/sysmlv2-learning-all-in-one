@@ -1,0 +1,149 @@
+{
+  "id": "course-04-lesson-02",
+  "title": "区分功率、命令与冷却流",
+  "type": "modeling-lesson",
+  "estimatedMinutes": 35,
+  "scenario": {
+    "title": "工程场景",
+    "body": "电驱系统不是只有一根功率线。电池向逆变器传递连续高压功率，控制器向逆变器发送离散扭矩命令，冷却回路向电池包交换热流体。三类接口都能用 item/port/interface 建模，但流项的工程属性完全不同。",
+    "visual": {
+      "type": "interactive-flow",
+      "variant": "04-flow-families",
+      "title": "三类工程流项",
+      "caption": "同样是跨部件交换，能量、信息和热流体需要不同 item 属性来支撑评审。",
+      "nodes": [
+        {
+          "id": "energy-flow",
+          "icon": "E",
+          "label": "能量流",
+          "detail": "ElectricalPower 是连续物理量，接口评审关注电压、电流和最大功率能力。",
+          "code": "item def ElectricalPower"
+        },
+        {
+          "id": "command-flow",
+          "icon": "C",
+          "label": "控制信息流",
+          "detail": "TorqueCommand 是离散命令，接口评审关注请求扭矩、时间戳和优先级。",
+          "code": "item def TorqueCommand"
+        },
+        {
+          "id": "thermal-flow",
+          "icon": "T",
+          "label": "热流体流",
+          "detail": "CoolantFlow 是物质/热交换，接口评审关注流量、温度和压力。",
+          "code": "item def CoolantFlow"
+        },
+        {
+          "id": "port-contract",
+          "icon": "P",
+          "label": "端口分型",
+          "detail": "PowerPort、CommandPort、ThermalPort 分别引用不同 item，避免把控制命令误接到功率端口。",
+          "code": "port def CommandPort"
+        }
+      ]
+    }
+  },
+  "learningBlocks": [
+    {
+      "type": "image-gallery",
+      "title": "课程导引图",
+      "content": "本图按当前 lesson 的工程任务和模型主题生成，用于先理解课程场景，再进入 SysML v2 建模练习。",
+      "generatedBy": "scripts/generate-course-lesson-illustrations.js",
+      "images": [
+        {
+          "src": "/api/course-assets/assets/course-visuals/generated-lesson-guides/ev-course-04-lesson-02-item.svg",
+          "title": "C04.L02 区分功率、命令与冷却流",
+          "caption": "围绕 流项/Item flow / 交换对象/Exchange / 接口载荷/Payload 组织汽车工程语境，把本课对象放进可追踪的 SysML v2 模型。",
+          "alt": "电动汽车 SysML v2 建模课程导引图：区分功率、命令与冷却流"
+        }
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "工程意图：Lesson01 已经建立高压功率接口的语法链条。本 lesson 重点不是重复写接口，而是让学生理解三类 flow 的工程含义不同：功率是连续物理能量，命令是离散信息，冷却液是物质/热交换。"
+    },
+    {
+      "type": "markdown",
+      "content": "建模方法：先用 `item def` 定义交换对象，再在 item def 内用 `attribute` 表达评审需要的工程属性。属性不代表 SysML 自动完成仿真计算；它们用于把接口对象的工程语义显式写入模型，后续可被分析工具、验证活动或接口控制文档使用。"
+    },
+    {
+      "type": "markdown",
+      "content": "本课字段不是自由命名练习。SysML v2 语法关注 `attribute 名称 : 类型` 这类结构是否合法；`voltageV`、`currentA` 这些名称是课程为了接口评审和后续 Lesson03 绑定示例固定下来的工程字段。规则会检查固定名称和类型，所以在校验前必须先按任务给出的名称建模。"
+    },
+    {
+      "type": "hint-card",
+      "title": "本课必须建哪些 attribute 字段？",
+      "label": "点击查看课程命名和检查要求",
+      "content": "`ElectricalPower` 需要 `voltageV : ScalarValues::Real`、`currentA : ScalarValues::Real`、`maxPowerKW : ScalarValues::Real`，建议默认值分别为 `400.0`、`250.0`、`100.0`；`TorqueCommand` 需要 `requestedTorqueNm : ScalarValues::Real`、`timestampMs : ScalarValues::Integer`、`priority : ScalarValues::Integer`，建议默认值分别为 `180.0`、`0`、`1`；`CoolantFlow` 需要 `flowRateLpm : ScalarValues::Real`、`temperatureC : ScalarValues::Real`、`pressureKPa : ScalarValues::Real`，建议默认值分别为 `12.0`、`35.0`、`180.0`。"
+    },
+    {
+      "type": "markdown",
+      "content": "读模要点：`ElectricalPower` 的属性关注电气能力，`TorqueCommand` 的属性关注控制语义，`CoolantFlow` 的属性关注热管理边界条件。真实热管理还要看 inletTempC/outletTempC（入口/出口温度）、heatRejectionKW（散热能力）和 coolantType（冷却液类型）；本课先保留流量、温度、压力这几个基础属性，避免把泵、散热器、冷却器和热泵系统一次性混进接口入门。三个 port def 都使用 `ref item`，但引用的 item 类型不同。"
+    },
+    {
+      "type": "markdown",
+      "content": "证据边界：OMG SysML v2 标准把 `item def` 用于可交换对象类型，官方 Vehicle Example 也用 `item def` 配合 `attribute` 表达被交换或被处理对象的工程量。本课的属性名称不是标准关键字，而是课程接口模型的命名约定；后续 Lesson03 会继续使用这些字段来定义功率、命令和冷却接口契约。"
+    },
+    {
+      "type": "markdown",
+      "content": "命名约定：`PowerPort`、`CommandPort`、`ThermalPort` 是本课程按工程职责取的端口类型名，后缀 Port 便于阅读，但不是标准强制后缀。`ref item command : TorqueCommand;` 中，`ref item` 是标准语法，`command` 是端口内的流项名称，`TorqueCommand` 是冒号右侧引用的 item 类型。"
+    },
+    {
+      "type": "hint-card",
+      "title": "dcIn/dcOut 的 In/Out 是方向语法吗？",
+      "label": "点击展开关键概念说明",
+      "content": "`dcOut`、`dcIn`、`commandOut`、`commandIn` 里的 Out/In 是工程命名约定，用来提示接口评审者理解电功率或命令方向；SysML v2 不会因为名称里有 In 或 Out 自动赋予方向。真正约束交换对象的是端口类型和 `ref item`，真正表达流向的是后续 interface/flow。"
+    },
+    {
+      "type": "markdown",
+      "content": "练习步骤：如果编辑器顶部显示“课程模板”，在 TODO 1 为 `ElectricalPower` 添加 `voltageV`、`currentA`、`maxPowerKW`，在 TODO 2 为 `TorqueCommand` 添加 `requestedTorqueNm`、`timestampMs`、`priority`，在 TODO 3 为 `CoolantFlow` 添加 `flowRateLpm`、`temperatureC`、`pressureKPa`，在 TODO 4/5 分别补全 `CommandPort` 和 `ThermalPort` 的 `ref item`。如果显示“已恢复草稿”，请检查这些 attribute 和 ref item 是否位于对应结构位置；需要重新练习时点击“重置为课程模板”。"
+    },
+    {
+      "type": "code",
+      "language": "sysml",
+      "sourceFile": "starter.sysml"
+    }
+  ],
+  "workspace": {
+    "files": [
+      {
+        "path": "main.sysml",
+        "source": "starter.sysml",
+        "editable": true
+      }
+    ],
+    "entryFile": "main.sysml"
+  },
+  "tasks": [
+    {
+      "id": "task-01",
+      "type": "model-challenge",
+      "prompt": "在课程模板的 TODO 位置，或在已恢复草稿中的对应结构位置，为三类交换对象补充指定名称的工程属性，并让 CommandPort 与 ThermalPort 分别引用正确流项。",
+      "hints": [
+        "TODO 1 的必填名称是 `voltageV`、`currentA`、`maxPowerKW`，类型均为 `ScalarValues::Real`。",
+        "TODO 2 的必填名称是 `requestedTorqueNm`、`timestampMs`、`priority`；扭矩用 `ScalarValues::Real`，时间戳和优先级用 `ScalarValues::Integer`。",
+        "TODO 3 的必填名称是 `flowRateLpm`、`temperatureC`、`pressureKPa`，类型均为 `ScalarValues::Real`。",
+        "电压、电流、功率、温度、压力等连续量使用 `ScalarValues::Real`。",
+        "时间戳和优先级是离散控制信息，本课使用 `ScalarValues::Integer`。",
+        "`PowerPort` 这类名称是工程命名约定；真正约束端口内容的是 `port def` 里的 `ref item` 类型。",
+        "不要让 CommandPort 引用 ElectricalPower，也不要让 ThermalPort 引用 TorqueCommand。"
+      ]
+    }
+  ],
+  "validation": {
+    "strictSysml": true,
+    "rulesFile": "rules.json"
+  },
+  "completion": {
+    "requiresStrictValidation": true,
+    "requiresAllLessonRules": true
+  },
+  "glossaryTerms": [
+    "item def",
+    "attribute",
+    "ref",
+    "port def",
+    "PortDefinition",
+    "ReferenceUsage"
+  ]
+}

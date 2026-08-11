@@ -1,0 +1,75 @@
+{
+  "schemaVersion": "1.0",
+  "reviewStatus": "reviewed",
+  "cards": [
+    {
+      "id": "seed-sysml-diagnostic-priority",
+      "title": "Diagnostic priority policy",
+      "summary": "Official validator diagnostics must be addressed before course-rule diagnostics.",
+      "content": "When official SysML v2 syntax or semantic validation fails, course-rule diagnostics are secondary. The teacher should explain official diagnostics first, then ask the learner to re-run validation before interpreting course-rule gaps.",
+      "keywords": [
+        "validator",
+        "diagnostic",
+        "course-rule",
+        "priority",
+        "syntax",
+        "semantic"
+      ],
+      "concepts": [
+        "official validator",
+        "course rule"
+      ],
+      "tags": [
+        "diagnostics",
+        "policy"
+      ],
+      "sourceType": "platform_policy_seed",
+      "sourceTitle": "AI teacher Phase 4 seed card",
+      "authorityLevel": "D",
+      "reviewStatus": "reviewed",
+      "metadata": {
+        "phase": "4",
+        "contentGate": "reviewed-for-local-rag-test"
+      },
+      "review": {
+        "reviewedBy": "project-owner-local-rag-test",
+        "reviewedAt": "2026-06-06",
+        "reviewNotes": "Reviewed status enabled by project owner for local real-LLM RAG context testing. Formal course publication still requires full domain review records where applicable."
+      }
+    },
+    {
+      "id": "seed-host-context-selection",
+      "title": "Host context selection",
+      "summary": "Selection and cursor context help explain the student's current code focus.",
+      "content": "The host context can include editor selection text, cursor coordinates, active file path, workspace files, diagnostics, and model element summaries. The teacher should use this context without mutating the student's draft.",
+      "keywords": [
+        "selection",
+        "cursor",
+        "host context",
+        "editor",
+        "files",
+        "diagnostics"
+      ],
+      "concepts": [
+        "HostContextEnvelope"
+      ],
+      "tags": [
+        "contract",
+        "context"
+      ],
+      "sourceType": "platform_contract_seed",
+      "sourceTitle": "AI teacher host context contract",
+      "authorityLevel": "D",
+      "reviewStatus": "reviewed",
+      "metadata": {
+        "phase": "4",
+        "contentGate": "reviewed-for-local-rag-test"
+      },
+      "review": {
+        "reviewedBy": "project-owner-local-rag-test",
+        "reviewedAt": "2026-06-06",
+        "reviewNotes": "Reviewed status enabled by project owner for local real-LLM RAG context testing. Formal course publication still requires full domain review records where applicable."
+      }
+    }
+  ]
+}

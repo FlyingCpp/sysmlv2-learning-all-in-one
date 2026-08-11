@@ -1,0 +1,137 @@
+{
+  "rules": [
+    {
+      "id": "strict-valid",
+      "type": "strictValidationPassed",
+      "severity": "error",
+      "message": "模型必须通过严格 SysML v2 校验。"
+    },
+    {
+      "id": "battery-state",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "stateDef",
+        "name": "BatteryState"
+      },
+      "message": "需要存在 state def BatteryState。"
+    },
+    {
+      "id": "charging-cv-transition",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "Charging",
+        "kind": "transition",
+        "sourceName": "ConstantCurrent",
+        "targetName": "ConstantVoltage",
+        "triggerName": "ChargeTaperSignal",
+        "guardIncludes": "socPercent"
+      },
+      "message": "Charging 内需要 ConstantCurrent -> ConstantVoltage 转移，事件为 ChargeTaperSignal 且包含 socPercent 守卫条件。"
+    },
+    {
+      "id": "discharging-to-charging",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "Active",
+        "kind": "transition",
+        "sourceName": "Discharging",
+        "targetName": "Charging.ConstantCurrent",
+        "triggerName": "ChargerConnectedSignal"
+      },
+      "message": "Active 内需要 Discharging -> Charging.ConstantCurrent 转移，事件为 ChargerConnectedSignal。"
+    },
+    {
+      "id": "safe-state",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "BatteryState",
+        "kind": "state",
+        "name": "SafeState"
+      },
+      "message": "BatteryState 需要 SafeState。"
+    },
+    {
+      "id": "safe-entry",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "SafeState",
+        "kind": "action",
+        "name": "openContactors",
+        "typeName": "OpenContactors",
+        "isEntry": true
+      },
+      "message": "SafeState 需要 entry action openContactors : OpenContactors。"
+    },
+    {
+      "id": "safe-do",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "SafeState",
+        "kind": "action",
+        "name": "sendFaultReport",
+        "typeName": "SendFaultReport",
+        "isDo": true
+      },
+      "message": "SafeState 需要 do action sendFaultReport : SendFaultReport。"
+    },
+    {
+      "id": "safe-exit",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "SafeState",
+        "kind": "action",
+        "name": "reenableBattery",
+        "typeName": "ReenableBattery",
+        "isExit": true
+      },
+      "message": "SafeState 需要 exit action reenableBattery : ReenableBattery。"
+    },
+    {
+      "id": "low-soc-safe",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "BatteryState",
+        "kind": "transition",
+        "sourceName": "Active.Discharging",
+        "targetName": "SafeState",
+        "triggerName": "CellVoltageLowSignal",
+        "guardIncludes": "minSocPercent"
+      },
+      "message": "需要 Active.Discharging -> SafeState 的低电量安全转移，并引用 minSocPercent。"
+    },
+    {
+      "id": "safe-recovery",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "BatteryState",
+        "kind": "transition",
+        "sourceName": "SafeState",
+        "targetName": "Idle",
+        "triggerName": "FaultClearedSignal",
+        "guardIncludes": "isolationOK"
+      },
+      "message": "需要 SafeState -> Idle 的恢复转移，并包含 isolationOK 守卫条件。"
+    },
+    {
+      "id": "battery-mode",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "BatteryPack",
+        "kind": "state",
+        "name": "batteryMode",
+        "typeName": "BatteryState"
+      },
+      "message": "BatteryPack 内需要 state batteryMode : BatteryState。"
+    }
+  ]
+}

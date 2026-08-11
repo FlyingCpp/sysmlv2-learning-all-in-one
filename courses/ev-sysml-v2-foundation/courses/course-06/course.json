@@ -1,0 +1,232 @@
+{
+  "id": "course-06",
+  "order": 6,
+  "title": "状态机、运行模式与安全状态",
+  "summary": "在 C05 行为模型之后，学习用 state def/state、transition、accept 事件、if 守卫条件、entry/do/exit action 和 view 表达电动汽车运行模式、故障切换和安全状态。",
+  "thumbnail": {
+    "src": "/api/course-assets/assets/course-thumbnails/course-06.svg",
+    "alt": "Course 06 状态机运行模式和安全状态缩略图"
+  },
+  "objectives": [
+    "解释 state、event、transition、mode 的区别，并能用非软件工程背景理解状态机设计",
+    "掌握状态机的基本设计规则：初始状态、互斥状态、安全可达、无死锁和明确恢复路径",
+    "用官方 SysML v2 文本语法 first/accept/if/then 表达状态转移、触发事件和守卫条件",
+    "把 C05 的 action 放入 state 的 entry/do/exit 中，说明状态和行为如何组合使用",
+    "理解模型文件、package、import 和 view 的关系，知道 view 不是代码文件"
+  ],
+  "concepts": [
+    "state def",
+    "state",
+    "event",
+    "transition",
+    "accept",
+    "guard",
+    "entry/do/exit action",
+    "SafeState",
+    "import",
+    "view"
+  ],
+  "lessons": [
+    "lesson-01/lesson.json",
+    "lesson-02/lesson.json",
+    "lesson-03/lesson.json"
+  ],
+  "references": [
+    {
+      "type": "standard",
+      "source": "OMG SysML v2.0 Language Specification",
+      "title": "States 与 Transitions 标准章节",
+      "section": "Clause 7.18 States; Clause 8.2.2.18 States Textual Notation; Clause 8.4.14 States Semantics; Clause 9.2.11 States",
+      "url": "https://www.omg.org/spec/SysML/2.0/Language/PDF",
+      "note": "支撑 state def/state、transition、accept 事件、guard 和状态动作的标准语义。"
+    },
+    {
+      "type": "example",
+      "source": "Systems-Modeling/SysML-v2-Release",
+      "title": "Official State Definition Training Examples",
+      "section": "sysml/src/training/23. State Definitions",
+      "url": "https://github.com/Systems-Modeling/SysML-v2-Release/tree/master/sysml/src/training/23.%20State%20Definitions",
+      "note": "官方示例展示 `first start then off` 与 `transition ... first ... accept ... then ...` 的文本语法。"
+    },
+    {
+      "type": "example",
+      "source": "Systems-Modeling/SysML-v2-Release",
+      "title": "Official States and Transitions Training Examples",
+      "section": "sysml/src/training/24. States; 25. Transitions",
+      "url": "https://github.com/Systems-Modeling/SysML-v2-Release/tree/master/sysml/src/training",
+      "note": "可对照 entry/do/exit action、accept 事件、if 守卫条件和状态内行为组合。"
+    },
+    {
+      "type": "example",
+      "source": "Systems-Modeling/SysML-v2-Release",
+      "title": "Official Simple State Test",
+      "section": "sysml/src/examples/Simple Tests/StateTest.sysml",
+      "url": "https://github.com/Systems-Modeling/SysML-v2-Release/blob/master/sysml/src/examples/Simple%20Tests/StateTest.sysml",
+      "note": "包含嵌套 state、transition、entry/do/exit 和 parallel state 的官方语法样例。"
+    }
+  ],
+  "codeGuideExplanations": [
+    {
+      "id": "c06-signal-def",
+      "lineIncludes": [
+        "attribute def",
+        "Signal"
+      ],
+      "explanation": "这行把状态机事件建成一种信号类型。事件是瞬间发生的触发信号，例如上电、挂 D 档、故障检测或手动复位。"
+    },
+    {
+      "id": "c06-state-def",
+      "lineStartsWith": "state def",
+      "explanation": "这行定义一类可复用状态机。state def 不是某个瞬间状态，而是规定系统可能有哪些状态和转移规则的类型。"
+    },
+    {
+      "id": "c06-state-usage",
+      "lineStartsWith": "state ",
+      "explanation": "这行定义一个状态或状态使用。写在 state def 内部时是状态节点；写在 part 内部时表示该部件呈现这类状态机。"
+    },
+    {
+      "id": "c06-initial",
+      "lineStartsWith": "first start then",
+      "explanation": "这行定义初始状态：状态机启动时先从隐含的 start 进入哪个状态。入门时可理解为“上电后的默认安全位置”。"
+    },
+    {
+      "id": "c06-transition",
+      "lineStartsWith": "transition ",
+      "explanation": "这行定义状态转移。官方文本语法可读作：transition 名称 first 源状态 accept 事件 if 条件 then 目标状态。"
+    },
+    {
+      "id": "c06-entry-action",
+      "lineStartsWith": "entry action",
+      "explanation": "这行定义进入某个状态时执行的动作。它是 state 和 C05 action 结合的直接方式。"
+    },
+    {
+      "id": "c06-do-action",
+      "lineStartsWith": "do action",
+      "explanation": "这行定义在状态停留期间持续或反复执行的行为，常用于行驶控制、限扭控制或故障上报。"
+    },
+    {
+      "id": "c06-exit-action",
+      "lineStartsWith": "exit action",
+      "explanation": "这行定义离开状态时执行的动作，例如退出安全状态前重新使能系统或要求复位确认。"
+    },
+    {
+      "id": "c06-import",
+      "lineStartsWith": "private import",
+      "explanation": "这行导入另一个 package 的模型元素。真实项目常把结构、行为、状态拆到不同文件或 package，再通过 import 组合。"
+    },
+    {
+      "id": "c06-view",
+      "lineStartsWith": "view ",
+      "explanation": "这行创建一个具体视图。view 是对模型内容的投影，不等于代码文件；一个文件可以有多个 view，一个 view 也可以 expose 多个 package 中的元素。"
+    }
+  ],
+  "conceptExplanations": [
+    {
+      "id": "StateDefinition",
+      "term": "StateDefinition",
+      "aliases": [
+        "state def"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass StateDefinition",
+      "standardEnglish": "A StateDefinition is the Definition of the Behavior of a system or part of a system in a certain state condition.",
+      "chineseTranslation": "StateDefinition 是系统或系统部件在某种状态条件下的行为定义。",
+      "explanation": "state def 定义一套可复用状态机。它不仅列出状态节点，还应定义初始状态、转移、事件、守卫条件和安全状态。",
+      "engineeringExample": "state def VehicleOperatingState 定义 Off、Standby、Driving、Charging、SafeState 以及它们之间的转移规则。"
+    },
+    {
+      "id": "StateUsage",
+      "term": "StateUsage",
+      "aliases": [
+        "state"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass StateUsage",
+      "standardEnglish": "A StateUsage is an ActionUsage that is nominally the Usage of a StateDefinition.",
+      "chineseTranslation": "StateUsage 是 StateDefinition 的一次使用，同时也是一种 ActionUsage。",
+      "explanation": "在 state def 内，state 表示状态节点；在 part 内，state 表示该结构对象呈现某类状态机。",
+      "engineeringExample": "part ev : ElectricVehicle { state vehicleMode : VehicleOperatingState; } 表示这辆车有一套车辆运行状态机。"
+    },
+    {
+      "id": "TransitionUsage",
+      "term": "TransitionUsage",
+      "aliases": [
+        "transition"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass TransitionUsage",
+      "standardEnglish": "A TransitionUsage is an ActionUsage representing a triggered transition between ActionUsages or StateUsages. When triggered by a triggerAction, when its guardExpression is true, the TransitionUsage asserts that its source is exited, then its effectAction (if any) is performed, and then its target is entered.",
+      "chineseTranslation": "TransitionUsage 是一种 ActionUsage，表示被触发的 ActionUsage 或 StateUsage 之间的转移；当 triggerAction（触发事件）发生且 guardExpression（判断条件）为真时，源状态被退出，effectAction（转移后动作，如果有）被执行，目标状态被进入。",
+      "explanation": "transition 是状态机的核心。状态节点说明系统能停在哪里，transition 说明它为什么切换、什么时候切换、满足什么判断条件才允许切换。学生练习时先看触发事件、判断条件和目标状态。",
+      "engineeringExample": "transition standby_to_driving first Standby accept GearDriveSignal if socPercent > 5.0 then Driving; 表示收到挂 D 档事件且 SOC 足够时才允许进入 Driving。"
+    },
+    {
+      "id": "AcceptActionUsage",
+      "term": "AcceptActionUsage",
+      "aliases": [
+        "accept"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass AcceptActionUsage",
+      "standardEnglish": "An AcceptActionUsage is an ActionUsage that specifies the acceptance of an incomingTransfer from the Occurrence given by the result of its receiverArgument Expression.",
+      "chineseTranslation": "AcceptActionUsage 是一种 ActionUsage，用于指定接收某个传入传输。",
+      "explanation": "课程中把 accept 理解为“状态机接收一个事件信号”。事件不是持续状态，而是触发转移的瞬时信号。",
+      "engineeringExample": "accept CriticalFaultSignal 表示控制器接收到严重故障事件，可能触发 SafeState。"
+    },
+    {
+      "id": "GuardCondition",
+      "term": "Guard Condition",
+      "aliases": [
+        "if",
+        "guard"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / Transitions textual notation",
+      "section": "Transition guard expression",
+      "standardEnglish": "TransitionUsage uses a guardExpression to constrain when a triggered transition may occur.",
+      "chineseTranslation": "TransitionUsage 使用守卫表达式约束被触发的转移何时可以发生。",
+      "explanation": "事件表示“想切换”，守卫条件表示“是否允许切换”。二者同时存在时，只有事件发生且 if 条件为真才进入目标状态。",
+      "engineeringExample": "accept GearDriveSignal if socPercent > 5.0 then Driving 防止低电量车辆进入行驶状态。"
+    },
+    {
+      "id": "SafeState",
+      "term": "SafeState",
+      "aliases": [
+        "safe state",
+        "安全状态"
+      ],
+      "source": "Automotive functional safety modeling practice",
+      "section": "Safety state pattern",
+      "standardEnglish": "A safety state is an engineered operating state intended to reduce risk after a hazardous or fault event.",
+      "chineseTranslation": "安全状态是在危险或故障事件之后用于降低风险的工程运行状态。",
+      "explanation": "SysML v2 不强制状态名必须叫 SafeState，但汽车状态机应明确建模故障后的可达安全状态和恢复条件。",
+      "engineeringExample": "电池 SafeState 的 entry action 可打开接触器并上报故障，恢复需要 FaultClearedSignal 和 isolationOK。"
+    },
+    {
+      "id": "Import",
+      "term": "Import",
+      "aliases": [
+        "private import",
+        "public import"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass Import",
+      "standardEnglish": "An Import is a Relationship between an importOwningNamespace and either a Membership or a Namespace.",
+      "chineseTranslation": "Import 是导入拥有命名空间与某个 Membership 或 Namespace 之间的关系。",
+      "explanation": "import 解决工程项目中的跨 package 引用。文件负责存储模型，package/import 负责模型命名空间和引用关系。",
+      "engineeringExample": "private import EV_C06_Behavior::*; 让状态 package 能引用 FullTorqueDelivery 等行为定义。"
+    },
+    {
+      "id": "ViewUsage",
+      "term": "ViewUsage",
+      "aliases": [
+        "view"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass ViewUsage",
+      "standardEnglish": "A ViewUsage is a usage of a ViewDefinition to specify the generation of a view of the members of a collection of exposedNamespaces.",
+      "chineseTranslation": "ViewUsage 是 ViewDefinition 的一次使用，用于规定如何从一组被 exposed 的命名空间成员生成 view。",
+      "explanation": "view 不是 .sysml 文件。文件是存储方式，view 是观察同一模型的不同投影，例如结构视图、行为视图、状态视图。",
+      "engineeringExample": "view propulsionStateView : StandardViewDefinitions::GeneralView { expose ElectricDriveUnit; expose PropulsionState; } 把电驱结构和状态机放进同一张状态评审视图。"
+    }
+  ]
+}

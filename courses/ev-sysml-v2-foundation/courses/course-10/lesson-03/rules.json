@@ -1,0 +1,382 @@
+{
+  "rules": [
+    {
+      "id": "strict-valid",
+      "type": "strictValidationPassed",
+      "severity": "error",
+      "message": "模型必须通过严格 SysML v2 校验。"
+    },
+    {
+      "id": "final-range-type",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "requirement",
+        "name": "finalRange",
+        "typeName": "FinalRangeRequirement"
+      },
+      "message": "finalRange 必须使用本课的 FinalRangeRequirement，避免与导入基线中的同名需求模式混淆。"
+    },
+    {
+      "id": "final-range-def-subject",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "FinalRangeRequirement",
+        "childKind": "subject",
+        "name": "vehicle",
+        "typeName": "FinalVehicle"
+      },
+      "message": "FinalRangeRequirement 必须声明 subject vehicle : FinalVehicle。"
+    },
+    {
+      "id": "final-range-usage-subject",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "finalRange",
+        "childKind": "subject",
+        "name": "vehicle",
+        "typeName": "FinalVehicle"
+      },
+      "message": "finalRange usage 必须保持 subject vehicle : FinalVehicle，和设计、分析、验证对象一致。"
+    },
+    {
+      "id": "final-vehicle-inverter",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "FinalVehicle",
+        "childKind": "part",
+        "name": "inverter",
+        "typeName": "Inverter"
+      },
+      "message": "FinalVehicle 必须保留 part inverter : Inverter，不能把最终续航证据退化成电池直连电机。"
+    },
+    {
+      "id": "final-battery-to-inverter-interface",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "FinalVehicle",
+        "childKind": "interface",
+        "typeName": "PropulsionPowerInterface",
+        "sourceName": "battery.dcOut",
+        "targetName": "inverter.dcIn"
+      },
+      "message": "FinalVehicle 必须保留一条 PropulsionPowerInterface 接口证据：battery.dcOut -> inverter.dcIn；usage 名称可自定义。"
+    },
+    {
+      "id": "final-inverter-to-motor-interface",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "FinalVehicle",
+        "childKind": "interface",
+        "typeName": "PropulsionPowerInterface",
+        "sourceName": "inverter.acOut",
+        "targetName": "motor.powerIn"
+      },
+      "message": "FinalVehicle 必须保留一条 PropulsionPowerInterface 接口证据：inverter.acOut -> motor.powerIn；usage 名称可自定义。"
+    },
+    {
+      "id": "final-range-target",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "finalRange",
+        "childKind": "attribute",
+        "name": "targetRangeKm",
+        "isRedefinition": true,
+        "valueIncludes": "480.0"
+      },
+      "message": "finalRange 必须用 attribute :>> targetRangeKm = 480.0; 明确最终续航目标。"
+    },
+    {
+      "id": "range-balance-expression",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "RangeBalance",
+        "childKind": "constraint expression",
+        "expressionIncludes": "estimatedRangeKm >= targetRangeKm"
+      },
+      "message": "RangeBalance 必须包含 estimatedRangeKm >= targetRangeKm 判据。"
+    },
+    {
+      "id": "estimate-range-return",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "EstimateRange",
+        "childKind": "return",
+        "name": "rangeKm",
+        "typeName": "ScalarValues::Real",
+        "valueIncludes": "batteryEnergyKWh * 100.0 / energyPer100Km"
+      },
+      "message": "EstimateRange 必须 return rangeKm，并用电池能量和百公里能耗计算。"
+    },
+    {
+      "id": "analysis-subject",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "RangeAnalysis",
+        "childKind": "subject",
+        "name": "vehicle",
+        "typeName": "FinalVehicle"
+      },
+      "message": "RangeAnalysis 必须声明 subject vehicle : FinalVehicle。"
+    },
+    {
+      "id": "analysis-calc-usage",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "RangeAnalysis",
+        "childKind": "calc",
+        "name": "estimateRange",
+        "typeName": "EstimateRange"
+      },
+      "message": "RangeAnalysis 必须使用 calc estimateRange : EstimateRange。"
+    },
+    {
+      "id": "calc-battery-binding",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "estimateRange",
+        "childKind": "in",
+        "name": "batteryEnergyKWh",
+        "valueIncludes": "vehicle.battery.usableEnergyKWh"
+      },
+      "message": "estimateRange 必须把 batteryEnergyKWh 绑定到 vehicle.battery.usableEnergyKWh。"
+    },
+    {
+      "id": "calc-energy-binding",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "estimateRange",
+        "childKind": "in",
+        "name": "energyPer100Km",
+        "valueIncludes": "vehicle.energyPer100Km"
+      },
+      "message": "estimateRange 必须把 energyPer100Km 绑定到 vehicle.energyPer100Km。"
+    },
+    {
+      "id": "calc-usage-return",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "estimateRange",
+        "childKind": "return",
+        "name": "rangeKm"
+      },
+      "message": "estimateRange usage 必须 return rangeKm。"
+    },
+    {
+      "id": "analysis-return",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "RangeAnalysis",
+        "childKind": "return",
+        "name": "estimatedRangeKm",
+        "typeName": "ScalarValues::Real",
+        "valueIncludes": "estimateRange.rangeKm"
+      },
+      "message": "RangeAnalysis 必须 return estimatedRangeKm = estimateRange.rangeKm。"
+    },
+    {
+      "id": "analysis-range-check",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "RangeAnalysis",
+        "childKind": "assert constraint",
+        "name": "rangeCheck",
+        "typeName": "RangeBalance"
+      },
+      "message": "RangeAnalysis 必须 assert constraint rangeCheck : RangeBalance。"
+    },
+    {
+      "id": "range-check-estimated-binding",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "rangeCheck",
+        "childKind": "in",
+        "name": "estimatedRangeKm",
+        "valueIncludes": "estimateRange.rangeKm"
+      },
+      "message": "rangeCheck 必须把 estimatedRangeKm 绑定到 estimateRange.rangeKm。"
+    },
+    {
+      "id": "range-check-target-binding",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "rangeCheck",
+        "childKind": "in",
+        "name": "targetRangeKm",
+        "valueIncludes": "targetRangeKm"
+      },
+      "message": "rangeCheck 必须把 targetRangeKm 绑定到分析输入 targetRangeKm。"
+    },
+    {
+      "id": "road-test-subject",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "RangeRoadTest",
+        "childKind": "subject",
+        "name": "testVehicle",
+        "typeName": "FinalVehicle"
+      },
+      "message": "RangeRoadTest 必须声明 subject testVehicle : FinalVehicle。"
+    },
+    {
+      "id": "road-test-verify-final-range",
+      "type": "relationshipExists",
+      "severity": "error",
+      "selector": {
+        "kind": "verify",
+        "sourceName": "finalRange"
+      },
+      "message": "RangeRoadTest 的 objective 必须 verify finalRange。"
+    },
+    {
+      "id": "road-test-return",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "RangeRoadTest",
+        "childKind": "return",
+        "name": "verdict",
+        "typeName": "VerdictKind",
+        "valueIncludes": "PassIf(measuredRangeKm >= requiredRangeKm)"
+      },
+      "message": "RangeRoadTest 必须 return verdict : VerdictKind = PassIf(measuredRangeKm >= requiredRangeKm)。"
+    },
+    {
+      "id": "analysis-usage-subject",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "finalRangeAnalysis",
+        "childKind": "subject",
+        "name": "vehicle",
+        "targetName": "finalVehicle"
+      },
+      "message": "finalRangeAnalysis 必须绑定 subject vehicle = finalVehicle。"
+    },
+    {
+      "id": "analysis-usage-target",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "finalRangeAnalysis",
+        "childKind": "in",
+        "name": "targetRangeKm",
+        "valueIncludes": "finalRange.targetRangeKm"
+      },
+      "message": "finalRangeAnalysis 必须把 targetRangeKm 绑定到 finalRange.targetRangeKm。"
+    },
+    {
+      "id": "verification-usage-subject",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "finalRangeVerification",
+        "childKind": "subject",
+        "name": "testVehicle",
+        "targetName": "finalVehicle"
+      },
+      "message": "finalRangeVerification 必须绑定 subject testVehicle = finalVehicle。"
+    },
+    {
+      "id": "verification-required-binding",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "finalRangeVerification",
+        "childKind": "attribute",
+        "name": "requiredRangeKm",
+        "isRedefinition": true,
+        "valueIncludes": "finalRange.targetRangeKm"
+      },
+      "message": "finalRangeVerification 必须把 requiredRangeKm 绑定到 finalRange.targetRangeKm。"
+    },
+    {
+      "id": "verification-predicted-binding",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "finalRangeVerification",
+        "childKind": "attribute",
+        "name": "predictedRangeKm",
+        "isRedefinition": true,
+        "valueIncludes": "finalRangeAnalysis.estimatedRangeKm"
+      },
+      "message": "finalRangeVerification 必须把 predictedRangeKm 绑定到 finalRangeAnalysis.estimatedRangeKm，作为验证计划参考。"
+    },
+    {
+      "id": "verification-measured-binding",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "finalRangeVerification",
+        "childKind": "attribute",
+        "name": "measuredRangeKm",
+        "isRedefinition": true,
+        "valueIncludes": "finalVehicle.roadTestRangeKm"
+      },
+      "message": "finalRangeVerification 必须把 measuredRangeKm 绑定到 finalVehicle.roadTestRangeKm，表示最终道路测试证据。"
+    },
+    {
+      "id": "final-satisfy",
+      "type": "relationshipExists",
+      "severity": "error",
+      "selector": {
+        "kind": "satisfy",
+        "sourceName": "finalRange",
+        "targetName": "finalVehicle"
+      },
+      "message": "需要建立 satisfy 关系：finalRange -> finalVehicle。"
+    },
+    {
+      "id": "view-exposes-analysis",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "finalEvidenceView",
+        "childKind": "expose",
+        "targetName": "finalRangeAnalysis"
+      },
+      "message": "finalEvidenceView 必须 expose finalRangeAnalysis。"
+    },
+    {
+      "id": "view-exposes-interface-baseline",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "finalEvidenceView",
+        "childKind": "expose",
+        "targetName": "PropulsionPowerInterface"
+      },
+      "message": "finalEvidenceView 必须 expose PropulsionPowerInterface，让最终证据视图显式包含结构接口基线。"
+    },
+    {
+      "id": "view-exposes-verification",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "finalEvidenceView",
+        "childKind": "expose",
+        "targetName": "finalRangeVerification"
+      },
+      "message": "finalEvidenceView 必须 expose finalRangeVerification。"
+    }
+  ]
+}

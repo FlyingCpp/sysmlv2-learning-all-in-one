@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "official-validator-artifact-manifest/v1",
+  "source": "official-sysml-v2-pilot-2026-04",
+  "releaseTag": "2026-04",
+  "kernelVersion": "0.59.0",
+  "upstream": {
+    "releaseUrl": "https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/releases/tag/2026-04",
+    "archiveFile": "jupyter-sysml-kernel-0.59.0.zip",
+    "archiveHash": "sha256:1ef7e89abebbc008c5c2707f8b2f34630b3ab971de7b38f6d0240da6f461a828"
+  },
+  "components": {
+    "jarHash": "sha256:7d6f1f2d555ddde2538a2b4f726709ba261567aa6c7eb172ad7db762d01efbaf",
+    "libraryHash": "sha256:fc760c65d06ecbf74386f20ef5b6ad50240d4142c30ae4629eba92d8c5b86b20",
+    "wrapperHash": "sha256:cb8d6fb38f2ea59142d0d1cde21fc539c01c7d50f83166d4e76027503677f405"
+  },
+  "artifactHash": "sha256:ae47c8a54bcb4d8752fbbc2d7d7bdbf87fa7de13c7a0f996bd068bd8089b7b8f",
+  "digestAlgorithms": {
+    "file": "sha256-bytes/v1",
+    "directory": "sha256-json-path-manifest/v1",
+    "aggregate": "sha256-json-ordered-fields/v1"
+  }
+}

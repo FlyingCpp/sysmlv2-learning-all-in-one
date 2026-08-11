@@ -1,0 +1,183 @@
+{
+  "id": "course-01-lesson-01",
+  "title": "补全第一个汽车模型包",
+  "type": "modeling-lesson",
+  "estimatedMinutes": 25,
+  "scenario": {
+    "title": "工程场景",
+    "body": "整车架构小组要启动一个电动汽车 MBSE 模型。第一步不是追求完整，而是把 `BatteryPack`、`ElectricVehicle` 和 `evPrototype` 放进同一个可校验 `package`，形成后续课程共同复用的模型边界。",
+    "visual": {
+      "type": "interactive-flow",
+      "variant": "01",
+      "title": "从模型边界到样车入口",
+      "caption": "本课把最小汽车结构补全为可复用类型和一个样车使用。",
+      "nodes": [
+        {
+          "id": "boundary",
+          "icon": "1",
+          "label": "模型边界",
+          "detail": "package EV_C01_L01 是本课交付边界。所有结构元素都放在这里，后续课程才能继承并扩展。",
+          "code": "package"
+        },
+        {
+          "id": "defined-types",
+          "icon": "2",
+          "label": "已有类型",
+          "detail": "BatteryPack 已经给出，代表电池包这个可复用工程类型。它是后续补全 ElectricVehicle 的基础。",
+          "code": "part def"
+        },
+        {
+          "id": "ev-type",
+          "icon": "3",
+          "label": "补全整车类型",
+          "detail": "ElectricVehicle 应作为 part def 出现，并在内部声明 battery : BatteryPack，表示电动汽车包含一份电池包使用。",
+          "code": "ElectricVehicle"
+        },
+        {
+          "id": "prototype",
+          "icon": "4",
+          "label": "样车使用",
+          "detail": "evPrototype : ElectricVehicle 不是新类型，而是把整车类型放入具体模型上下文，后续需求和分析会追踪到它。",
+          "code": "evPrototype"
+        }
+      ]
+    }
+  },
+  "learningBlocks": [
+    {
+      "type": "image-gallery",
+      "title": "课程导引图",
+      "content": "本图按当前 lesson 的工程任务和模型主题生成，用于先理解课程场景，再进入 SysML v2 建模练习。",
+      "generatedBy": "scripts/generate-course-lesson-illustrations.js",
+      "images": [
+        {
+          "src": "/api/course-assets/assets/course-visuals/generated-lesson-guides/ev-course-01-lesson-01-package.svg",
+          "title": "C01.L01 补全第一个汽车模型包",
+          "caption": "围绕 命名空间/Namespace / 包/Package / 导入/Import 组织汽车工程语境，把本课对象放进可追踪的 SysML v2 模型。",
+          "alt": "电动汽车 SysML v2 建模课程导引图：补全第一个汽车模型包"
+        }
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "视图定位：本课构建的是模型包和最小结构基线，工程上通常进入系统架构/结构定义视图。SysML v2 中 `view` 会在后续课程用于选择和呈现这些元素；此时先把可被视图暴露的模型内容写正确。"
+    },
+    {
+      "type": "markdown",
+      "content": "工程意图：本 lesson 把你从读代码推进到写第一段 SysML v2。你要在已有 `package` 中补全一个整车类型和一个样车使用，形成后续 L02、L03 会继续复用的结构基线。"
+    },
+    {
+      "type": "markdown",
+      "content": "读模要点：`part def BatteryPack;` 只是电池包类型定义；`part battery : BatteryPack;` 才表示 ElectricVehicle 中真的有一份电池包使用；`part evPrototype : ElectricVehicle;` 表示可被需求、分析和验证引用的样车对象。这里不再放一个孤立的 Vehicle 类型，避免把本课目标带偏。"
+    },
+    {
+      "type": "hint-card",
+      "title": "为什么这里先练 part，而不是 item？",
+      "label": "点击查看 item 的后续用途",
+      "content": "本课目标是建立最小车辆结构，所以只让你补 `part def ElectricVehicle`、`part battery : BatteryPack` 和 `part evPrototype : ElectricVehicle`。如果你在全景课看到过 `item def ElectricalPower` 或 `item def TorqueCommand`，可以先把它们理解成后续会跨端口交换的对象：电能、命令、信号、冷却液这类“流过系统的东西”。Course 2 会正式练习如何在 `part def` 与 `item def` 之间做选择；Course 4 会把 item 放进 port 和 interface 中。"
+    },
+    {
+      "type": "markdown",
+      "content": "练习步骤：如果编辑器顶部显示“课程模板”，就在 TODO 对应位置补全 `part def ElectricVehicle` 的块体、块体内的 `part battery : BatteryPack;`，以及 package 层的 `part evPrototype : ElectricVehicle;`；最后把 `ElectricVehicle` 和 `evPrototype` expose 到 `firstPackageBrowserView`，让代码通过后能生成包含本课核心对象的图形视图。如果显示“已恢复草稿”，先检查这些对应结构行是否已经存在且拼写正确，必要时点击“重置为课程模板”回到 TODO 起点。运行校验并根据诊断修正。"
+    },
+    {
+      "type": "code",
+      "language": "sysml",
+      "sourceFile": "starter.sysml"
+    }
+  ],
+  "workspace": {
+    "files": [
+      {
+        "path": "main.sysml",
+        "source": "starter.sysml",
+        "editable": true
+      }
+    ],
+    "entryFile": "main.sysml"
+  },
+  "tasks": [
+    {
+      "id": "task-01",
+      "type": "model-challenge",
+      "prompt": "在课程模板的 TODO 位置，或在已恢复草稿中的对应结构位置，补全 `ElectricVehicle`、`battery : BatteryPack` 和 `evPrototype : ElectricVehicle`，让模型从两个孤立类型变成一个可继续扩展的电动汽车结构基线。",
+      "hints": [
+        "先写 `part def ElectricVehicle { ... }`，再在花括号内部写 `part battery : BatteryPack;`。",
+        "`evPrototype` 应该在 ElectricVehicle 类型定义之外创建，因为它是这个类型的一次使用。",
+        "如果校验提示未定义类型，检查名称拼写是否与 `BatteryPack` 和 `ElectricVehicle` 完全一致。"
+      ]
+    }
+  ],
+  "codeGuideExplanations": [
+    {
+      "lineIncludes": [
+        "part def BatteryPack"
+      ],
+      "explanation": "这行定义 BatteryPack（电池包类型）。它是后续 ElectricVehicle 会使用的部件类型，不代表某台样车上的具体电池包。"
+    },
+    {
+      "lineIncludes": [
+        "part def ElectricVehicle"
+      ],
+      "explanation": "这行定义 ElectricVehicle（电动汽车类型）。学生要在这个类型里补入 battery（电池包使用），让整车结构不再只是一个空名字。"
+    },
+    {
+      "lineIncludes": [
+        "part battery",
+        "BatteryPack"
+      ],
+      "explanation": "这行创建 battery（电池包使用）。冒号右侧 BatteryPack（电池包类型）说明这份内部部件采用哪个类型。"
+    },
+    {
+      "lineIncludes": [
+        "part evPrototype",
+        "ElectricVehicle"
+      ],
+      "explanation": "这行创建 evPrototype（样车使用）。它表示一台用于后续需求追踪和分析讨论的电动车模型对象，不是新的车型类型。"
+    },
+    {
+      "lineIncludes": [
+        "view def FirstPackageBrowserView"
+      ],
+      "explanation": "这行定义 FirstPackageBrowserView（第一个模型包浏览视图类型）。它规定本课用浏览视图查看模型包内容。"
+    },
+    {
+      "lineIncludes": [
+        "view firstPackageBrowserView"
+      ],
+      "explanation": "这行创建 firstPackageBrowserView（具体浏览视图）。后续 expose（暴露/展示）语句决定图里出现哪些已有模型对象。"
+    },
+    {
+      "lineIncludes": [
+        "expose BatteryPack"
+      ],
+      "explanation": "这行把 BatteryPack（电池包类型）放入视图。expose 只是选择要展示的对象，不会新建电池包。"
+    },
+    {
+      "lineIncludes": [
+        "expose ElectricVehicle"
+      ],
+      "explanation": "这行把 ElectricVehicle（电动汽车类型）放入视图，方便检查整车类型和 battery 使用是否连起来。"
+    },
+    {
+      "lineIncludes": [
+        "expose evPrototype"
+      ],
+      "explanation": "这行把 evPrototype（样车使用）放入视图，方便看到具体样车对象如何引用 ElectricVehicle 类型。"
+    }
+  ],
+  "validation": {
+    "strictSysml": true,
+    "rulesFile": "rules.json"
+  },
+  "completion": {
+    "requiresStrictValidation": true,
+    "requiresAllLessonRules": true
+  },
+  "glossaryTerms": [
+    "package",
+    "part def",
+    "part",
+    "model boundary"
+  ]
+}

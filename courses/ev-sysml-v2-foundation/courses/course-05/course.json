@@ -1,0 +1,228 @@
+{
+  "id": "course-05",
+  "order": 5,
+  "title": "行为建模与功能视图",
+  "summary": "从结构模型切换到行为模型，学习用 action def/action、in/out、flow、perform 和 view 表达电动汽车功能过程，并把行为绑定回 C03-C04 已建立的结构与接口。",
+  "thumbnail": {
+    "src": "/api/course-assets/assets/course-thumbnails/course-05.svg",
+    "alt": "Course 05 行为建模和功能视图缩略图"
+  },
+  "objectives": [
+    "区分结构模型和行为模型：结构回答系统是什么，行为回答系统做什么",
+    "解释 SysML v2 中 view/viewpoint 的工程意义，并知道行为模型通常由功能/行为视图承载",
+    "用 action 的 in/out 参数、bind 和 flow 表达行为边界与内部数据流",
+    "用 perform action 把行为绑定到结构元素，说明谁执行什么行为"
+  ],
+  "concepts": [
+    "view",
+    "expose",
+    "action def",
+    "action",
+    "in/out",
+    "bind",
+    "flow",
+    "then action",
+    "perform action"
+  ],
+  "lessons": [
+    "lesson-01/lesson.json",
+    "lesson-02/lesson.json",
+    "lesson-03/lesson.json"
+  ],
+  "references": [
+    {
+      "type": "standard",
+      "source": "OMG SysML v2.0 Language Specification",
+      "title": "Actions 与 Views 标准章节",
+      "section": "Clause 7.17 Actions; Clause 7.25 Views; Clause 8.2.2.17 Actions Textual Notation; Clause 8.2.2.25 Views Textual Notation",
+      "url": "https://www.omg.org/spec/SysML/2.0/Language/PDF",
+      "note": "支撑功能行为分解、动作参数、数据流、行为执行和视图选择。"
+    },
+    {
+      "type": "example",
+      "source": "Systems-Modeling/SysML-v2-Release",
+      "title": "Official Action Training Examples",
+      "section": "training/14 Action Definitions; 15 Actions; 16 Conditional Succession; 17 Control",
+      "url": "https://github.com/Systems-Modeling/SysML-v2-Release/tree/master/sysml/src/training",
+      "note": "可对照 action、flow、then action 和行为参数的官方教学示例。"
+    },
+    {
+      "type": "example",
+      "source": "Systems-Modeling/SysML-v2-Release",
+      "title": "Official View Test Example",
+      "section": "Simple Tests / ViewTest.sysml",
+      "url": "https://github.com/Systems-Modeling/SysML-v2-Release/blob/master/sysml/src/examples/Simple%20Tests/ViewTest.sysml",
+      "note": "可对照 view def、view、expose、render 的官方语法。"
+    }
+  ],
+  "codeGuideExplanations": [
+    {
+      "id": "course05-view-def",
+      "lineStartsWith": "view def",
+      "explanation": "这行定义一种视图类型。这里的 BehaviorView 不是图形样式，而是说明后续行为视图会选择哪些模型元素形成工程交付物。"
+    },
+    {
+      "id": "course05-view-usage",
+      "lineStartsWith": "view ",
+      "explanation": "这行创建一个具体视图使用。它像一份工程视图清单，把结构、行为和场景元素选出来给某类评审者阅读。"
+    },
+    {
+      "id": "course05-expose",
+      "lineStartsWith": "expose ",
+      "explanation": "这行把某个模型元素纳入当前 view。expose 解决“这张视图展示哪些模型内容”的问题，不会复制或重定义元素。"
+    },
+    {
+      "id": "course05-in",
+      "lineStartsWith": "in ",
+      "explanation": "这行定义行为输入参数。行首 `in` 是 SysML v2 参数方向关键字，参数名称由建模者自定义，通常对应驾驶员命令、传感器信号、SOC 或速度。"
+    },
+    {
+      "id": "course05-out",
+      "lineStartsWith": "out ",
+      "explanation": "这行定义行为输出参数。行首 `out` 是 SysML v2 参数方向关键字，不要和 dcOut 这类端口名称后缀混淆；输出通常对应电机扭矩、制动压力或电流指令。"
+    },
+    {
+      "id": "course05-bind",
+      "lineStartsWith": "bind ",
+      "explanation": "这行把外层行为参数和内部步骤参数绑定为同一个值。外层 action 的 in/out 不会被内部 action 自动继承；需要用 bind 接入入口参数或接回出口参数。"
+    },
+    {
+      "id": "course05-then-action",
+      "lineStartsWith": "then action",
+      "explanation": "这行定义有先后关系的动作步骤。then action 用于表达行为发生顺序，为后续学习 state/transition 做铺垫。"
+    },
+    {
+      "id": "course05-perform",
+      "lineStartsWith": "perform action",
+      "explanation": "这行把行为放到结构元素中，回答“谁执行这个行为”。它是结构模型和行为模型融合的关键语法。"
+    }
+  ],
+  "conceptExplanations": [
+    {
+      "id": "ViewDefinition",
+      "term": "ViewDefinition",
+      "aliases": [
+        "view def"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass ViewDefinition",
+      "standardEnglish": "A ViewDefinition is a PartDefinition that specifies how a view artifact is constructed to satisfy a viewpoint. It specifies a viewConditions to define the model content to be presented and a viewRendering to define how the model content is presented.",
+      "chineseTranslation": "ViewDefinition 是一种 PartDefinition，用于规定如何构造一个满足 viewpoint 的 view artifact；它通过 viewCondition 规定展示哪些模型内容，通过 viewRendering 规定如何展示这些内容。",
+      "explanation": "对初学者来说，view def 可以先理解为“视图模板”。它不是模型本体内容，而是从完整模型中选择并组织内容的方式。",
+      "engineeringExample": "view def BehaviorView; 可作为功能行为评审视图的模板。"
+    },
+    {
+      "id": "ViewUsage",
+      "term": "ViewUsage",
+      "aliases": [
+        "view"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass ViewUsage",
+      "standardEnglish": "A ViewUsage is a usage of a ViewDefinition to specify the generation of a view of the members of a collection of exposedNamespaces.",
+      "chineseTranslation": "ViewUsage 是 ViewDefinition 的一次使用，用于规定如何从一组被 exposed 的命名空间成员生成一个 view。",
+      "explanation": "view usage 是具体的工程交付视图。例如把 ElectricVehicle、DriveCycle 和 urbanDrive 放入同一个行为视图，让评审者看到结构和行为的关系。",
+      "engineeringExample": "view driveBehaviorView : BehaviorView { expose ElectricVehicle; expose DriveCycle; }"
+    },
+    {
+      "id": "Expose",
+      "term": "Expose",
+      "aliases": [
+        "expose"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass Expose",
+      "standardEnglish": "An Expose is an Import of Memberships into a ViewUsage that provide the Elements to be included in a view. Visibility is always ignored for an Expose (i.e., isImportAll = true).",
+      "chineseTranslation": "Expose 是把 Membership 导入 ViewUsage 的关系，用于提供应包含在 view 中的元素；Expose 会忽略可见性。",
+      "explanation": "expose 解决“这张视图到底展示哪些模型元素”的问题。它不会复制结构或行为，只是把已有元素纳入视图。",
+      "engineeringExample": "expose ChargingProcess; 表示充电行为进入当前功能行为视图。"
+    },
+    {
+      "id": "ActionDefinition",
+      "term": "ActionDefinition",
+      "aliases": [
+        "action def"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass ActionDefinition",
+      "standardEnglish": "An ActionDefinition is a Definition that is also a Behavior that defines an Action performed by a system or part of a system.",
+      "chineseTranslation": "ActionDefinition 是一种 Definition，也是一种 Behavior，用于定义由系统或系统部件执行的 Action。",
+      "explanation": "action def 定义可复用的功能过程。它应包含输入、输出、子动作和必要的数据流，而不只是动作名称列表。",
+      "engineeringExample": "action def ChargingProcess 定义充电过程的功能模板。"
+    },
+    {
+      "id": "ActionUsage",
+      "term": "ActionUsage",
+      "aliases": [
+        "action"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass ActionUsage",
+      "standardEnglish": "An ActionUsage is a Usage that is also a Step, and, so, is typed by a Behavior. Nominally, if the type is an ActionDefinition, an ActionUsage is a Usage of that ActionDefinition within a system.",
+      "chineseTranslation": "ActionUsage 是一种 Usage，同时也是 Step，因此由 Behavior 来类型化；当类型是 ActionDefinition 时，它就是该 ActionDefinition 在系统中的一次使用。",
+      "explanation": "action usage 可以是行为内部的步骤，也可以是系统上下文里的一次具体行为使用。",
+      "engineeringExample": "action urbanDrive : DriveCycle 表示一次城市驾驶行为场景。"
+    },
+    {
+      "id": "BindingConnector",
+      "term": "BindingConnector",
+      "aliases": [
+        "bind"
+      ],
+      "source": "Systems-Modeling/SysML-v2-Release official training examples",
+      "section": "training/14 Action Definitions / Action Definition Example",
+      "standardEnglish": "The official action definition example binds an internal action parameter to the enclosing action parameter, such as `bind focus.scene = scene`, and binds an internal output back to the enclosing action output, such as `bind shoot.picture = picture`.",
+      "chineseTranslation": "官方 action 示例用 bind 把内部 action 参数和外层 action 参数绑定，例如 `bind focus.scene = scene`；也用 bind 把内部输出接回外层输出，例如 `bind shoot.picture = picture`。",
+      "explanation": "在行为分解里，bind 负责说明两个参数代表同一个值；flow 负责说明一个步骤的输出传到另一个步骤的输入。外层 in/out 与内部 in/out 不是继承关系，也不会因为名称相似自动连起来。`bind a = b` 中的 `=` 表示绑定等价关系，不是把右边赋值给左边，因此左右互换仍表达同一组参数绑定。",
+      "engineeringExample": "bind readPedalSignals.accelCmd = driverAccelCmd; 表示踏板解析步骤的输入和驾驶循环的外层加速输入是同一个值。"
+    },
+    {
+      "id": "Behavior",
+      "term": "Behavior",
+      "aliases": [],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass Behavior",
+      "standardEnglish": "A Behavior coordinates occurrences of other Behaviors, as well as changes in objects. Behaviors can be decomposed into Steps and be characterized by parameters.",
+      "chineseTranslation": "Behavior 协调其他 Behavior 的发生以及对象的变化；Behavior 可以分解为 Steps，并可由参数表征。",
+      "explanation": "行为模型回答系统随时间做什么。Action 偏过程，State 偏模式；Course05 先学 Action，Course06 再学 State。",
+      "engineeringExample": "车辆加速、充电和再生制动都是行为模型关注的功能过程。"
+    },
+    {
+      "id": "Step",
+      "term": "Step",
+      "aliases": [],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass Step",
+      "standardEnglish": "A Step is a Feature that is typed by one or more Behaviors. Steps may be used by one Behavior to coordinate the performance of other Behaviors, supporting a steady refinement of behavioral descriptions. Steps can be ordered in time and can be connected using Flows to specify things flowing between their parameters.",
+      "chineseTranslation": "Step 是由一个或多个 Behavior 类型化的 Feature；Step 可用于一个 Behavior 协调其他 Behavior 的执行，支持行为描述的逐步细化。Step 可以按时间排序，并可用 Flow 连接以说明参数之间流动的对象。",
+      "explanation": "Step 是 action 分解后得到的行为步骤。它连接了“动作树”“时序”和“数据流”三件事。",
+      "engineeringExample": "ChargingProcess 中 handshakeWithCharger、preChargeCheck、regulateCurrent 都是步骤。"
+    },
+    {
+      "id": "PerformActionUsage",
+      "term": "PerformActionUsage",
+      "aliases": [
+        "perform action"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass PerformActionUsage",
+      "standardEnglish": "A PerformActionUsage is an ActionUsage that represents the performance of an ActionUsage. Unless it is the PerformActionUsage itself, the ActionUsage to be performed is related to the PerformActionUsage by a ReferenceSubsetting relationship. A PerformActionUsage is also an EventOccurrenceUsage, with its performedAction as the eventOccurrence.",
+      "chineseTranslation": "PerformActionUsage 是一种 ActionUsage，用于表示某个 ActionUsage 的执行；除非它本身就是要执行的 ActionUsage，否则被执行的 ActionUsage 通过 ReferenceSubsetting 关系与它关联。",
+      "explanation": "perform action 是结构和行为的结合点。它把“做什么”放进“谁来做”的结构上下文。",
+      "engineeringExample": "part def VehicleController { perform action regenControl : RegenerativeBraking; } 表示控制器执行再生制动控制行为。"
+    },
+    {
+      "id": "Succession",
+      "term": "Succession",
+      "aliases": [
+        "then"
+      ],
+      "source": "OMG SysML v2.0 Language Specification / SysML.ecore",
+      "section": "SysML metamodel EClass Succession",
+      "standardEnglish": "A Succession is a binary Connector that requires its relatedFeatures to happen separately in time.",
+      "chineseTranslation": "Succession 是一种二元 Connector，要求其相关特征在时间上分别发生。",
+      "explanation": "`then action` 是初学者最容易理解的时序表达：先握手，再检查，再调节电流。Course06 的状态 transition 会继续扩展这种时间关系。",
+      "engineeringExample": "then action preChargeCheck 表示预充检查发生在充电握手之后。"
+    }
+  ]
+}

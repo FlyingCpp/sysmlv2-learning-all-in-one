@@ -1,0 +1,109 @@
+{
+  "rules": [
+    {
+      "id": "strict-valid",
+      "type": "strictValidationPassed",
+      "severity": "error",
+      "message": "模型必须通过严格 SysML v2 校验。"
+    },
+    {
+      "id": "keep-battery-pack",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "part",
+        "name": "packA",
+        "typeName": "BatteryPack"
+      },
+      "message": "本课应保留 L01 的 part packA : BatteryPack，作为流项建模的物理上下文。"
+    },
+    {
+      "id": "electrical-energy-def",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "itemDef",
+        "name": "ElectricalEnergy"
+      },
+      "message": "需要定义 item def ElectricalEnergy。电能是系统中交换的对象，不是物理零件。"
+    },
+    {
+      "id": "stored-energy-usage",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "BatteryPack",
+        "kind": "item",
+        "name": "storedEnergy",
+        "typeName": "ElectricalEnergy"
+      },
+      "message": "需要在 BatteryPack 内创建 item storedEnergy : ElectricalEnergy，表示电池包承载的一份电能对象。"
+    },
+    {
+      "id": "torque-command-def",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "itemDef",
+        "name": "TorqueCommand"
+      },
+      "message": "需要定义 item def TorqueCommand。扭矩命令是控制链路中交换的信息对象。"
+    },
+    {
+      "id": "drive-command-usage",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "Controller",
+        "kind": "item",
+        "name": "driveCommand",
+        "typeName": "TorqueCommand"
+      },
+      "message": "需要在 Controller 内创建 item driveCommand : TorqueCommand，表示控制器产生或处理的一份扭矩命令。"
+    },
+    {
+      "id": "controller-usage",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "part",
+        "name": "vehicleController",
+        "typeName": "Controller"
+      },
+      "message": "需要创建 part vehicleController : Controller，作为后续发送 TorqueCommand 的结构承载体。"
+    },
+    {
+      "id": "view-exposes-electrical-energy",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "itemUsageReviewView",
+        "kind": "expose",
+        "targetName": "ElectricalEnergy"
+      },
+      "message": "itemUsageReviewView 需要 expose ElectricalEnergy，让图形视图包含电能 item def。"
+    },
+    {
+      "id": "view-exposes-torque-command",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "itemUsageReviewView",
+        "kind": "expose",
+        "targetName": "TorqueCommand"
+      },
+      "message": "itemUsageReviewView 需要 expose TorqueCommand，让图形视图包含扭矩命令 item def。"
+    },
+    {
+      "id": "view-exposes-vehicle-controller",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "itemUsageReviewView",
+        "kind": "expose",
+        "targetName": "vehicleController"
+      },
+      "message": "itemUsageReviewView 需要 expose vehicleController，让图形视图包含控制器结构使用。"
+    }
+  ]
+}

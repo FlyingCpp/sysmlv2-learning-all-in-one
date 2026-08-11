@@ -1,0 +1,153 @@
+{
+  "id": "course-03-lesson-03",
+  "title": "用产品族变体完成整车结构",
+  "type": "modeling-lesson",
+  "estimatedMinutes": 35,
+  "scenario": {
+    "title": "工程场景",
+    "body": "同一个电动车平台要支持标准版和性能版。两者共享 78kWh 级电池包、车身和 480km 目标续航参数，但动力总成可能是单电机或双电机。产品结构模型需要表达“平台上的抽象位置”和“具体配置变体”，这就是 `abstract part def` 与 `:>` specialization 的用途。",
+    "visual": {
+      "type": "interactive-flow",
+      "variant": "03",
+      "title": "从抽象平台到具体车型",
+      "caption": "用抽象动力总成定义平台位置，用 specialization 表达单电机和双电机两个产品族变体。",
+      "nodes": [
+        {
+          "id": "abstract-type",
+          "icon": "1",
+          "label": "抽象类型",
+          "detail": "abstract part def Powertrain 表示平台上有动力总成这个位置，但它本身不是可交付的具体配置。",
+          "code": "abstract part def"
+        },
+        {
+          "id": "specialized-variants",
+          "icon": "2",
+          "label": "具体变体",
+          "detail": "SingleMotorPowertrain 和 DualMotorPowertrain 都 :> Powertrain，表示它们都是动力总成产品族成员。",
+          "code": ":>"
+        },
+        {
+          "id": "vehicle-slot",
+          "icon": "3",
+          "label": "整车平台位置",
+          "detail": "Vehicle 中的 powertrain : Powertrain 让整车结构先绑定抽象位置，而不是一开始锁死某个配置。",
+          "code": "powertrain : Powertrain"
+        },
+        {
+          "id": "concrete-configs",
+          "icon": "4",
+          "label": "具体配置",
+          "detail": "standardEV 与 performanceEV 代表两个车型配置；它们要在自己的块内用 part :>> powertrain 把 Vehicle 继承来的动力总成槽位绑定到对应变体配置。",
+          "code": "part :>> powertrain"
+        }
+      ]
+    }
+  },
+  "learningBlocks": [
+    {
+      "type": "image-gallery",
+      "title": "课程导引图",
+      "content": "本图按当前 lesson 的工程任务和模型主题生成，用于先理解课程场景，再进入 SysML v2 建模练习。",
+      "generatedBy": "scripts/generate-course-lesson-illustrations.js",
+      "images": [
+        {
+          "src": "/api/course-assets/assets/course-visuals/generated-lesson-guides/ev-course-03-lesson-03-structure.svg",
+          "title": "C03.L03 用产品族变体完成整车结构",
+          "caption": "围绕 结构/Structure / BOM层级/BOM / 组成/Composition 组织汽车工程语境，把本课对象放进可追踪的 SysML v2 模型。",
+          "alt": "电动汽车 SysML v2 建模课程导引图：用产品族变体完成整车结构"
+        }
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "工程意图：汽车平台化设计不能只建一辆车。平台模型要表达“这里需要一个动力总成”，同时允许标准版、长续航版、性能版选择不同具体变体。本 lesson 在 L02 的参数化电池包基础上，沿用 `sum(cells.energyWh)` 与 `sum(modules.moduleEnergyWh)` 的 usage 特征链汇总方式，并把整车目标续航统一为后续需求课程使用的 480km。"
+    },
+    {
+      "type": "markdown",
+      "content": "新概念：`abstract part def Powertrain;` 定义抽象父类型，表示一类产品位置或平台槽位；`part def SingleMotorPowertrain :> Powertrain` 表示具体类型继承/特化这个父类型。读作：SingleMotorPowertrain 是一种 Powertrain。"
+    },
+    {
+      "type": "markdown",
+      "content": "读模要点：`part powertrain : Powertrain;` 说明 Vehicle 需要一个动力总成槽位；具体整车 usage 必须用 `part :>> powertrain = ...` 选择标准版或性能版动力总成。不要只把 `standardPowertrain`、`performancePowertrain`、`standardEV`、`performanceEV` 并列摆放。"
+    },
+    {
+      "type": "hint-card",
+      "title": "整车 usage 如何选择动力总成变体？",
+      "label": "点击查看 powertrain 槽位绑定",
+      "content": "`standardPowertrain : SingleMotorPowertrain` 和 `performancePowertrain : DualMotorPowertrain` 是两个具体配置对象。它们还不是某辆车的动力总成，必须在 `standardEV : Vehicle { ... }` 和 `performanceEV : Vehicle { ... }` 内部用 `part :>> powertrain = standardPowertrain;` / `part :>> powertrain = performancePowertrain;` 绑定到 Vehicle 继承来的 `powertrain` 槽位。双电机动力总成本课固定使用 `frontMotor` 和 `rearMotor` 两个 part usage 名称，便于和课程规则、视图条目及后续产品族说明保持一致。`usableEnergyKWh = totalEnergyWh / 1000.0` 是 C03 到 C07/C08/C09 的参数桥梁：本课保留 L02 中由 `modules.moduleEnergyWh` 汇总而来的来源，后续课程使用近似值 78.0kWh。"
+    },
+    {
+      "type": "markdown",
+      "content": "语法读法：`abstract part def Powertrain;` 中 `abstract part def` 是标准语法组合，Powertrain 是自定义类型名；`part def SingleMotorPowertrain :> Powertrain` 中 `:>` 是 specialization 语法。前序的 `part cells[12] : BatteryCell;` 和本课的 `part powertrain : Powertrain;` 都遵循“关键字 + 自定义名称 + 冒号右侧类型”的 usage 读法。`part :>> powertrain = standardPowertrain;` 中 `:>>` 是 redefinition 简写，意思是在当前 `standardEV` 这个 Vehicle usage 内重定义继承来的 `powertrain` 特征，并把它绑定到已经创建的 `standardPowertrain` 配置。电池包里的 `sum(cells.nominalVoltageV)`、`sum(cells.energyWh)`、`sum(modules.moduleEnergyWh)` 继续使用 L02 的 usage 特征链，不把 `BatteryCell.nominalVoltageV` 这类错误表达式带入产品族模型。`attribute` 行如果出现，例如 `attribute maxTorqueNm : ScalarValues::Real = 350.0;`，其中参数名也是工程命名约定。"
+    },
+    {
+      "type": "hint-card",
+      "title": "`:`、`:>`、`:>>` 有什么区别？",
+      "label": "点击查看三种冒号写法",
+      "content": "这三个符号都出现在“名称和模型语义的关系”里，但用途不同。普通 `:` 是 type annotation，用来说明一个 usage 或 attribute 的类型，例如 `part powertrain : Powertrain;` 表示 powertrain 这个 part usage 的类型是 Powertrain。`:>` 是 specialization，用来说明一个定义或特征比另一个更具体，例如 `part def SingleMotorPowertrain :> Powertrain` 表示单电机动力总成是 Powertrain 的一种具体类型。`:>>` 是 redefinition 的简写，只能用于已经从类型、模板或继承关系带来的特征；例如 `part :>> powertrain = standardPowertrain;` 不是新建第二个 powertrain，而是在 `standardEV : Vehicle` 中重定义继承来的 `powertrain` 槽位，并把它绑定到标准版动力总成配置。",
+      "examples": [
+        "`part powertrain : Powertrain;`：普通类型标注，创建一个名为 powertrain 的槽位。",
+        "`part def SingleMotorPowertrain :> Powertrain`：类型特化，说明单电机动力总成属于 Powertrain 产品族。",
+        "`part :>> powertrain = standardPowertrain;`：重定义已有槽位，说明当前 Vehicle usage 选择 standardPowertrain。",
+        "判断顺序：要新建一个 usage，用 `名称 : 类型`；要定义更具体的类型，用 `:>`；要覆盖继承来的槽位或参数，用 `:>>`。"
+      ]
+    },
+    {
+      "type": "markdown",
+      "content": "配置绑定顺序：先定义抽象槽位 `Vehicle.powertrain : Powertrain`，再定义两个具体类型 `SingleMotorPowertrain :> Powertrain` 和 `DualMotorPowertrain :> Powertrain`，然后创建两个配置对象 `standardPowertrain`、`performancePowertrain`。最后在具体整车 usage 内写绑定：`part standardEV : Vehicle { part :>> powertrain = standardPowertrain; }` 和 `part performanceEV : Vehicle { part :>> powertrain = performancePowertrain; }`。如果只写 `part standardEV : Vehicle;`，它只是“一辆 Vehicle”，还没有说明这辆车选择了哪个动力总成变体。"
+    },
+    {
+      "type": "markdown",
+      "content": "建模粒度的刹车原则：分解到哪一级，取决于谁要用模型做什么决策。整车架构评审可以让 Motor 保持黑盒；电机选型评审需要 maxTorqueNm 和 maxPowerKw；电池安全评审需要看到 Cell/Module/Pack 层级。当前粒度足以支撑决策就停止分解，不足再展开。"
+    },
+    {
+      "type": "markdown",
+      "content": "练习步骤：如果编辑器顶部显示“课程模板”，按 TODO 1-5 补全 Powertrain 抽象类型、两个动力总成变体、Vehicle 的 powertrain 槽位、两个动力总成配置对象，以及标准版/性能版整车 usage 内的 `part :>> powertrain` 绑定。TODO 3 中双电机变体需要两个 `Motor` part usage，名称固定为 `frontMotor` 和 `rearMotor`。如果显示“已恢复草稿”，先检查这些 definition、specialization、usage 和 redefinition 绑定是否已经存在且拼写正确，必要时点击“重置为课程模板”回到 TODO 起点。运行校验，确认模型元素树中 SingleMotorPowertrain 和 DualMotorPowertrain 都标记为 Powertrain 的特化类型，并且 standardEV/performanceEV 各自绑定了对应的 powertrain 配置。"
+    },
+    {
+      "type": "code",
+      "language": "sysml",
+      "sourceFile": "starter.sysml"
+    }
+  ],
+  "workspace": {
+    "files": [
+      {
+        "path": "main.sysml",
+        "source": "starter.sysml",
+        "editable": true
+      }
+    ],
+    "entryFile": "main.sysml"
+  },
+  "tasks": [
+    {
+      "id": "task-01",
+      "type": "model-challenge",
+      "prompt": "在课程模板的 TODO 位置，或在已恢复草稿中的对应结构位置，使用 `abstract part def`、`:>` 和 `part :>> powertrain = ...` 建立动力总成产品族，并完成标准版与性能版两个整车配置。",
+      "hints": [
+        "`Powertrain` 应该是 abstract，因为它表示平台槽位，不是具体可交付总成。",
+        "`SingleMotorPowertrain :> Powertrain` 和 `DualMotorPowertrain :> Powertrain` 都应是 part def。",
+        "`DualMotorPowertrain` 里的两个电机 usage 名称固定为 `frontMotor` 和 `rearMotor`，类型都指向 `Motor`。",
+        "`standardPowertrain` 和 `performancePowertrain` 是两个动力总成配置对象；它们还需要通过 `part :>> powertrain = ...` 放进对应的 Vehicle usage。",
+        "`standardEV : Vehicle` 内应绑定 `standardPowertrain`；`performanceEV : Vehicle` 内应绑定 `performancePowertrain`。只创建两个 Vehicle 空 usage 不能说明变体选择。"
+      ]
+    }
+  ],
+  "validation": {
+    "strictSysml": true,
+    "rulesFile": "rules.json"
+  },
+  "completion": {
+    "requiresStrictValidation": true,
+    "requiresAllLessonRules": true
+  },
+  "glossaryTerms": [
+    "abstract",
+    "specialization",
+    "Specialization",
+    "Subclassification",
+    "part def",
+    "part"
+  ]
+}

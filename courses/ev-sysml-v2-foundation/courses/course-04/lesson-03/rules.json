@@ -1,0 +1,97 @@
+{
+  "rules": [
+    {
+      "id": "strict-valid",
+      "type": "strictValidationPassed",
+      "severity": "error",
+      "message": "模型必须通过严格 SysML v2 校验。"
+    },
+    {
+      "id": "vehicle-battery",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "ElectricVehicle",
+        "kind": "part",
+        "name": "battery",
+        "typeName": "BatteryPack"
+      },
+      "message": "ElectricVehicle 中需要存在 part battery : BatteryPack，作为高压和热接口的具体端口来源。"
+    },
+    {
+      "id": "vehicle-inverter",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "ElectricVehicle",
+        "kind": "part",
+        "name": "inverter",
+        "typeName": "Inverter"
+      },
+      "message": "ElectricVehicle 中需要存在 part inverter : Inverter，作为功率和命令接口的目标部件。"
+    },
+    {
+      "id": "vehicle-controller",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "ElectricVehicle",
+        "kind": "part",
+        "name": "controller",
+        "typeName": "VehicleController"
+      },
+      "message": "ElectricVehicle 中需要存在 part controller : VehicleController，作为扭矩命令来源。"
+    },
+    {
+      "id": "vehicle-cooling-loop",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "ElectricVehicle",
+        "kind": "part",
+        "name": "cooling",
+        "typeName": "CoolingLoop"
+      },
+      "message": "ElectricVehicle 中需要存在 part cooling : CoolingLoop，作为冷却接口来源。"
+    },
+    {
+      "id": "power-link",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "ElectricVehicle",
+        "kind": "interface",
+        "typeName": "BatteryToInverter",
+        "sourceName": "battery.dcOut",
+        "targetName": "inverter.dcIn"
+      },
+      "message": "ElectricVehicle 中需要存在一条 BatteryToInverter interface usage，连接 battery.dcOut 到 inverter.dcIn；usage 名称可自定义。"
+    },
+    {
+      "id": "torque-command-link",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "ElectricVehicle",
+        "kind": "interface",
+        "typeName": "ControllerToInverter",
+        "sourceName": "controller.commandOut",
+        "targetName": "inverter.commandIn"
+      },
+      "message": "ElectricVehicle 中需要存在一条 ControllerToInverter interface usage，连接 controller.commandOut 到 inverter.commandIn；usage 名称可自定义。"
+    },
+    {
+      "id": "battery-cooling-link",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "ElectricVehicle",
+        "kind": "interface",
+        "typeName": "BatteryCoolingInterface",
+        "sourceName": "cooling.batterySide",
+        "targetName": "battery.thermalIn"
+      },
+      "message": "ElectricVehicle 中需要存在一条 BatteryCoolingInterface interface usage，连接 cooling.batterySide 到 battery.thermalIn；usage 名称可自定义。"
+    }
+  ]
+}

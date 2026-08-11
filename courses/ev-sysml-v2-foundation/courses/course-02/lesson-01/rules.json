@@ -1,0 +1,76 @@
+{
+  "rules": [
+    {
+      "id": "strict-valid",
+      "type": "strictValidationPassed",
+      "severity": "error",
+      "message": "模型必须通过严格 SysML v2 校验。"
+    },
+    {
+      "id": "battery-module-def",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "partDef",
+        "name": "BatteryModule"
+      },
+      "message": "需要存在 part def BatteryModule。它是电池模组的可复用类型。"
+    },
+    {
+      "id": "battery-module-cells",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "BatteryModule",
+        "kind": "part",
+        "name": "cells",
+        "typeName": "BatteryCell"
+      },
+      "message": "BatteryModule 中需要有 part cells : BatteryCell。数量可以按场景调整，但这条 usage 必须引用 BatteryCell。"
+    },
+    {
+      "id": "battery-pack-def",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "partDef",
+        "name": "BatteryPack"
+      },
+      "message": "需要存在 part def BatteryPack。它是电池包的可复用类型。"
+    },
+    {
+      "id": "battery-pack-modules",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "BatteryPack",
+        "kind": "part",
+        "name": "modules",
+        "typeName": "BatteryModule"
+      },
+      "message": "BatteryPack 中需要有 part modules : BatteryModule。数量是当前配置，不应把模组类型重新定义一遍。"
+    },
+    {
+      "id": "packA-usage",
+      "type": "elementExists",
+      "severity": "error",
+      "selector": {
+        "kind": "part",
+        "name": "packA",
+        "typeName": "BatteryPack"
+      },
+      "message": "需要创建 part packA : BatteryPack，表示电池包类型的一次具体使用。"
+    },
+    {
+      "id": "view-exposes-packA",
+      "type": "childElementExists",
+      "severity": "error",
+      "selector": {
+        "parent": "batteryBomBrowserView",
+        "kind": "expose",
+        "targetName": "packA"
+      },
+      "message": "batteryBomBrowserView 需要 expose packA，让 BOM 视图同时看到电池包类型和具体使用。"
+    }
+  ]
+}
