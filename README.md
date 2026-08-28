@@ -10,7 +10,7 @@ SynFeld 是一个面向 SysML v2 初学者、系统工程师和 MBSE 实践者�
 
 ### 在线体验
 
-**[打开 SynFeld 在线体验](https://47.94.8.70/)**
+**[打开 SynFeld 在线体验](https://www.sysforgeai.com/)**
 
 - 完整体验需要使用一个有效且由你本人合法使用的邮箱完成基础注册。
 - 注册流程仅包含邮箱和密码，没有复杂的身份验证步骤。
@@ -157,7 +157,7 @@ The current public release is **v0.1.0**. It includes one sample course pack, on
 
 ### Hosted experience
 
-**[Open the hosted SynFeld experience](https://47.94.8.70/)**
+**[Open the hosted SynFeld experience](https://www.sysforgeai.com/)**
 
 - The complete experience requires registration with a valid email address that you are legally authorized to use.
 - Registration uses email and password without a complex verification flow.
