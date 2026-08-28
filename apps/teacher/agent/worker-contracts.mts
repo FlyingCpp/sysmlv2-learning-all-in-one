@@ -58,6 +58,7 @@ export interface RepairContextAdmission {
   readonly messageCountAfterSdkPrune: number;
   readonly messageCountAfterPrune: number;
   readonly latestCandidateOccurrences: number;
+  readonly visibleOutputReserveTokens: number;
   readonly projectedTokens: number;
   readonly remainingTokens: number;
   readonly knowledgeQueriesThisRound: number;

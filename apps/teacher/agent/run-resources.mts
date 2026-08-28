@@ -194,8 +194,13 @@ export class RunKnowledgeSession {
   readonly #maxNewReviewedKnowledgeQueries: number;
   #admittedNewReviewedKnowledgeQueries = 0;
 
-  constructor(maxNewReviewedKnowledgeQueries = 2) {
-    this.#maxNewReviewedKnowledgeQueries = Math.max(0, Math.min(2, Math.floor(maxNewReviewedKnowledgeQueries)));
+  constructor(maxNewReviewedKnowledgeQueries = 4) {
+    this.#maxNewReviewedKnowledgeQueries = Math.max(0, Math.floor(maxNewReviewedKnowledgeQueries));
+  }
+
+  isNewReviewedKnowledgeQueryAllowed(): boolean {
+    return this.#noNewEvidence.size === 0
+      && this.#admittedNewReviewedKnowledgeQueries < this.#maxNewReviewedKnowledgeQueries;
   }
 
   admitNewReviewedKnowledgeQuery(input: unknown): void {
@@ -555,6 +560,7 @@ export interface RunResources {
   readonly admit: (action: RunBusinessAction) => Readonly<RunPhaseAdmission>;
   readonly assertAdmitted: (action: RunBusinessAction) => void;
   readonly isAllowed: (action: RunBusinessAction) => boolean;
+  readonly isNewReviewedKnowledgeQueryAllowed: () => boolean;
   readonly assertNewReviewedKnowledgeQueryAllowed: (input: unknown) => void;
   readonly tasks: TaskWorkingStateStore;
   readonly obligations: AnswerObligationStore;
@@ -623,6 +629,16 @@ export function createRunResources(input: {
     admit: (action) => budget.admit(action),
     assertAdmitted: (action) => budget.assertAdmitted(action),
     isAllowed: (action) => budget.isAllowed(action),
+    isNewReviewedKnowledgeQueryAllowed: () => {
+      const view = budget.view();
+      return budget.isAllowed("knowledge_search")
+        && view.remainingOperations.knowledge_backend > 0
+        && view.modelTotalTokens < Math.max(
+          0,
+          input.policy.contextWindowTokens - REVIEWED_KNOWLEDGE_CONTEXT_RESERVE_TOKENS,
+        )
+        && knowledge.isNewReviewedKnowledgeQueryAllowed();
+    },
     assertNewReviewedKnowledgeQueryAllowed: (toolInput) => {
       budget.assertAdmitted("knowledge_search");
       const view = budget.view();
@@ -673,7 +689,7 @@ export function createRunResources(input: {
 }
 
 export function createRunResourcePolicy(policy: AgentPolicy): RunResourcePolicy {
-  const maxUniqueCandidateValidationsPerWorker = policy.maxUniqueCandidateValidationsPerWorker;
+  const maxUniqueCandidateValidationsPerWorker = 1 + policy.repairMaxRounds;
   const maxExecutionsPerTool = Object.freeze({
     inspect_lesson_context: 1,
     inspect_current_model: 1,

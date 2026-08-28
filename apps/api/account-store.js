@@ -16,7 +16,8 @@ const {
   validatePolicyValues: validateAgentResourcePolicyValues,
   checksumPolicyValues: checksumAgentResourcePolicyValues,
   createPolicySnapshot: createAgentResourcePolicySnapshot,
-  diffPolicyValues: diffAgentResourcePolicyValues
+  diffPolicyValues: diffAgentResourcePolicyValues,
+  migratePolicyValues: migrateAgentResourcePolicyValues
 } = require('../../packages/agent-resource-policy');
 const {
   SYSON_TOOL_ID,
@@ -2861,38 +2862,6 @@ function buildAiTeacherTierPolicies(overrides = {}) {
   return Object.fromEntries(Object.entries(base).map(([tier, policy]) => [tier, normalizeAiTeacherPolicy(policy)]));
 }
 
-const AGENT_RESOURCE_POLICY_SCHEMA_ADDITIVE_KEYS = Object.freeze([
-  'api.outerTimeoutMs',
-  'run.terminalReserveMs',
-  'candidate.maxAttemptMs',
-  'repair.phaseReserveMs',
-  'repair.maxOutputTokens',
-  'semanticReview.enabled',
-  'semanticReview.shadowOnly',
-  'semanticReview.assessmentMaxCalls',
-  'semanticReview.assessmentTimeoutMs',
-  'semanticReview.mainDecisionTimeoutMs',
-  'semanticReview.verificationMaxCalls',
-  'semanticReview.verificationTimeoutMs',
-  'semanticReview.maxOutputTokens',
-  'semanticReview.maxIssues',
-  'semanticReview.minimumCompleteChainMs',
-  'semanticReview.domainSearchReserveMs',
-  'engineeringRevision.maxCycles',
-  'engineeringRevision.maxDurationMs',
-  'engineeringRevision.validationRepairReserveMs',
-  'engineeringImprovement.runMaxDurationMs',
-  'engineeringImprovement.apiOuterTimeoutMs',
-  'engineeringImprovement.lineageMaxDurationMs',
-  'engineeringImprovement.orchestrationReserveMs',
-  'engineeringImprovement.minimumCompleteChainMs',
-  'model.fastRoute',
-  'model.mainRoute',
-  'model.candidateRoute',
-  'model.repairRoute',
-  'model.semanticReviewRoute',
-  'model.finalizerRoute'
-]);
 const AGENT_RESOURCE_POLICY_SCHEMA_MIGRATION_ACTOR = 'system-policy-schema-migration';
 
 function migrateMemoryAgentResourcePolicyVersions(rows = [], options = {}) {
@@ -2970,18 +2939,19 @@ function createAgentResourcePolicySchemaMigrationRow(sourceRow, options = {}) {
   const source = cloneAgentResourcePolicyVersion(sourceRow);
   const currentValidation = validateAgentResourcePolicyValues(source.values);
   if (currentValidation.ok) return null;
-
-  const catalogKeys = Object.keys(AGENT_RESOURCE_POLICY_BOOTSTRAP_VALUES);
-  const sourceKeys = Object.keys(source.values || {});
-  const unknownKeys = sourceKeys.filter((key) => !catalogKeys.includes(key));
-  const missingKeys = catalogKeys.filter((key) => !Object.prototype.hasOwnProperty.call(source.values, key));
-  const unsupportedMissingKeys = missingKeys.filter((key) => !AGENT_RESOURCE_POLICY_SCHEMA_ADDITIVE_KEYS.includes(key));
-  if (unknownKeys.length || unsupportedMissingKeys.length || !missingKeys.length) {
+  let migrationResult;
+  try {
+    migrationResult = migrateAgentResourcePolicyValues(source.values);
+  } catch (error) {
+    if (error?.code === 'AGENT_RESOURCE_POLICY_SCHEMA_MIGRATION_INVALID') {
+      throwAgentResourcePolicyMigrationInvalid('invalid_deprecated_source_values');
+    }
+    throw error;
+  }
+  if (migrationResult.unknownKeys.length) {
     throwAgentResourcePolicyMigrationInvalid('unsupported_source_values');
   }
-
-  const values = { ...AGENT_RESOURCE_POLICY_BOOTSTRAP_VALUES, ...source.values };
-  const validation = validateAgentResourcePolicyValues(values);
+  const validation = validateAgentResourcePolicyValues(migrationResult.values);
   if (!validation.ok) throwAgentResourcePolicyMigrationInvalid('migrated_values_invalid');
   const checksum = checksumAgentResourcePolicyValues(validation.values);
   const migrationId = crypto.createHash('sha256')
@@ -2997,7 +2967,7 @@ function createAgentResourcePolicySchemaMigrationRow(sourceRow, options = {}) {
     checksum,
     validation,
     sourceVersionId: source.versionId,
-    notes: `Non-destructive Agent resource policy Schema migration from ${source.versionId}.`,
+    notes: `Non-destructive Agent resource policy Schema migration from ${source.versionId}; deprecated fields were mapped explicitly.`,
     createdBy: AGENT_RESOURCE_POLICY_SCHEMA_MIGRATION_ACTOR,
     validatedAt: now,
     publishedBy: AGENT_RESOURCE_POLICY_SCHEMA_MIGRATION_ACTOR,
