@@ -15,7 +15,7 @@ const providerConfigSchema = z
     apiKey: z.string().min(1).max(2_000).optional(),
     headers: z.record(z.string(), z.string().max(4_000)).optional(),
     includeUsage: z.boolean().default(true),
-    compatibilityMode: z.enum(["generic-openai", "deepseek-v4-thinking-tools"])
+    compatibilityMode: z.enum(["generic-openai", "gateway-thinking-tools-non-null-content"])
       .default("generic-openai"),
   })
   .strict();
@@ -38,19 +38,18 @@ export function createOpenAICompatibleAgentModel(
     headers: parsed.headers,
     includeUsage: parsed.includeUsage,
     fetch: runtime.fetch,
-    transformRequestBody: parsed.compatibilityMode === "deepseek-v4-thinking-tools"
-      ? normalizeDeepSeekV4ThinkingToolRequest
+    transformRequestBody: parsed.compatibilityMode === "gateway-thinking-tools-non-null-content"
+      ? normalizeThinkingToolRequest
       : undefined,
   });
   return provider.chatModel(parsed.modelId);
 }
 
 /**
- * DeepSeek V4思考模式的Tool续轮协议与通用OpenAI兼容格式有两个差异：
- * 不接受tool_choice，并要求带tool_calls的assistant消息保留非null content。
- * 变换只对显式启用思考的专用模型生效，避免污染其他OpenAI兼容Provider。
+ * 该变换由冻结的执行Profile声明，不依赖Provider名称。仅当Profile同时要求
+ * Thinking Tool省略tool_choice且assistant content非null时启用。
  */
-function normalizeDeepSeekV4ThinkingToolRequest(
+function normalizeThinkingToolRequest(
   args: Record<string, unknown>,
 ): Record<string, unknown> {
   const thinking = args.thinking;
@@ -78,5 +77,5 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export const agentProviderTesting = {
-  normalizeDeepSeekV4ThinkingToolRequest,
+  normalizeThinkingToolRequest,
 };

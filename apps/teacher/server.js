@@ -12,7 +12,8 @@ const {
   applySingleLinePatchSuggestion,
   validateRequestSize,
   redactSecrets,
-  publicError
+  publicError,
+  validateModelCapabilitySnapshot
 } = require('../../packages/teacher-contract');
 const { createTeacherRetriever, retrieverStatus } = require('./retriever');
 const {
@@ -545,15 +546,78 @@ function resourcePolicyConfigForContext(config, context) {
     context.runtimeAssignment.resourcePolicySnapshot = snapshot;
   }
   const projection = agentResourcePolicyRuntimeProjection(validation.values);
+  const modelCapabilitySnapshot = context?.runtimeAssignment?.modelCapabilitySnapshot;
+  const modelCapabilityValidation = validateModelCapabilitySnapshot(modelCapabilitySnapshot);
+  const contextWindowTokens = modelCapabilityValidation.ok
+    ? modelCapabilitySnapshot.effectiveContextWindowTokens
+    : config.agentContextWindowTokens;
+  const resolvedStageModelRoutes = modelCapabilityValidation.ok
+    ? resolveStageModelRoutes(projection.teacher.agentStageModelRoutes, modelCapabilitySnapshot)
+    : projection.teacher.agentStageModelRoutes;
+  const resolvedStageModelProtocols = modelCapabilityValidation.ok && modelCapabilitySnapshot.schemaVersion >= 2
+    ? resolveStageModelProtocols(projection.teacher.agentStageModelRoutes, modelCapabilitySnapshot)
+    : undefined;
   return {
     ...config,
     ...projection.teacher,
+    agentStageModelRoutes: Object.freeze(resolvedStageModelRoutes),
+    ...(resolvedStageModelProtocols
+      ? { agentStageModelProtocols: Object.freeze(resolvedStageModelProtocols) }
+      : {}),
+    agentContextWindowTokens: contextWindowTokens,
     validatorTransientRetryMax: projection.validator.transientRetryMax,
     resourcePolicySnapshot: Object.freeze({
       ...snapshot,
       values: Object.freeze({ ...validation.values })
     })
   };
+}
+
+function resolveStageModelRoutes(policyReferences, modelCapabilitySnapshot) {
+  return Object.fromEntries(Object.entries(policyReferences || {}).map(([stageId, aliasReference]) => {
+    const stage = modelCapabilitySnapshot?.stages?.[stageId];
+    const reference = String(aliasReference || '').trim();
+    const resolvedAliasId = String(stage?.aliasId || '').trim();
+    const runtimeAlias = String(stage?.alias || '').trim();
+    if (!runtimeAlias || (resolvedAliasId !== reference && runtimeAlias !== reference)) {
+      const error = new Error(`AI Teacher model reference could not be resolved for stage ${stageId}.`);
+      error.code = 'AI_TEACHER_MODEL_REFERENCE_UNRESOLVED';
+      error.statusCode = 503;
+      throw error;
+    }
+    return [stageId, runtimeAlias];
+  }));
+}
+
+function resolveStageModelProtocols(policyReferences, modelCapabilitySnapshot) {
+  return Object.fromEntries(Object.entries(policyReferences || {}).map(([stageId, aliasReference]) => {
+    const stage = modelCapabilitySnapshot?.stages?.[stageId];
+    const reference = String(aliasReference || '').trim();
+    const resolvedAliasId = String(stage?.aliasId || '').trim();
+    const runtimeAlias = String(stage?.alias || '').trim();
+    if (stage?.protocolStatus !== 'ready'
+      || !String(stage?.protocolMode || '').trim()
+      || (resolvedAliasId !== reference && runtimeAlias !== reference)) {
+      const error = new Error(`AI Teacher model protocol could not be resolved for stage ${stageId}.`);
+      error.code = 'AI_TEACHER_MODEL_PROTOCOL_UNRESOLVED';
+      error.statusCode = 503;
+      throw error;
+    }
+    return [stageId, Object.freeze({
+      protocolMode: String(stage.protocolMode),
+      adapterProfileId: String(stage.adapterProfileId || ''),
+      adapterProfileRevision: Number(stage.adapterProfileRevision || 0),
+      modelProtocolProfileId: String(stage.modelProtocolProfileId || ''),
+      modelProtocolProfileRevision: Number(stage.modelProtocolProfileRevision || 0),
+      executionPolicy: deepFreezeProtocolValue(stage.executionPolicy || null)
+    })];
+  }));
+}
+
+function deepFreezeProtocolValue(value) {
+  if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
+  for (const child of Object.values(value)) deepFreezeProtocolValue(child);
+  return Object.freeze(value);
 }
 
 function throwInvalidResourcePolicySnapshot(validation) {

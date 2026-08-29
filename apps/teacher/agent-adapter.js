@@ -203,8 +203,13 @@ async function runAgentCapability(hostContext, config = {}, options = {}) {
       onLifecycleEvent: lifecycle.onLifecycleEvent
     },
     reasoningMode,
+    stageReasoningModes: Object.fromEntries(AGENT_STAGE_IDS.map((stageId) => [
+      stageId,
+      stageModelAssignment.stages[stageId].reasoningMode
+    ])),
     providerOptionsName: providerName(config.llm?.providerMode),
     providerCompatibility: config.agentProviderCompatibility,
+    stageProtocolProfiles: stageProtocolProfilesFromAssignment(stageModelAssignment),
     policy,
     abortSignal: config.abortSignal
   }));
@@ -287,12 +292,13 @@ async function runEngineeringReviewEvaluationCapability(hostContext, baselineCan
     dependencies,
     reasoningMode: normalizeReasoningMode(config.agentReasoningMode),
     providerOptionsName: providerName(config.llm?.providerMode),
-    providerCompatibility: config.agentProviderCompatibility
+    providerCompatibility: config.agentProviderCompatibility,
+    stageProtocolProfiles: stageProtocolProfilesFromAssignment(stageModelAssignment)
   };
-  const assessmentGeneration = runtime.v2GenerationSettings(generationOptions, false);
-  const verificationGeneration = runtime.v2GenerationSettings(generationOptions, true);
-  const mainGeneration = runtime.v2GenerationSettings(generationOptions, true);
-  const candidateGeneration = runtime.v2GenerationSettings(generationOptions, false);
+  const assessmentGeneration = runtime.v2GenerationSettings(generationOptions, false, 'semanticReview');
+  const verificationGeneration = runtime.v2GenerationSettings(generationOptions, true, 'semanticReview');
+  const mainGeneration = runtime.v2GenerationSettings(generationOptions, true, 'main');
+  const candidateGeneration = runtime.v2GenerationSettings(generationOptions, false, 'candidate');
   const repairGeneration = runtime.v2RepairGenerationSettings(generationOptions);
   const modelCalls = [];
   const currentStudentQuestion = agentStudentQuestion(hostContext, config.workflowResume);
@@ -3999,6 +4005,16 @@ function resolvedStageModelAssignment(config, hostContext) {
         finalizer: agentReasoningModelAlias(config, 'disabled') || agentReasoningModelAlias(config, 'high')
       }
     : AGENT_RESOURCE_POLICY_BOOTSTRAP_PROJECTION.teacher.agentStageModelRoutes);
+  const configuredReasoning = config.agentStageReasoningPolicies
+    || AGENT_RESOURCE_POLICY_BOOTSTRAP_PROJECTION.teacher.agentStageReasoningPolicies
+    || {
+      fastGate: 'disabled',
+      main: 'provider-managed',
+      candidate: 'provider-managed',
+      repair: 'provider-managed',
+      semanticReview: 'provider-managed',
+      finalizer: 'disabled'
+    };
   const stages = Object.freeze(Object.fromEntries(AGENT_STAGE_IDS.map((stageId) => {
     const modelAlias = String(configuredRoutes?.[stageId] || '').trim();
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._/-]{1,199}$/.test(modelAlias)) {
@@ -4009,7 +4025,8 @@ function resolvedStageModelAssignment(config, hostContext) {
     }
     return [stageId, Object.freeze({
       modelAlias,
-      reasoningMode: stageId === 'fastGate' || stageId === 'finalizer' ? 'disabled' : 'provider-managed'
+      reasoningMode: normalizeReasoningMode(configuredReasoning?.[stageId]),
+      ...stageProtocolProfile(config, stageId)
     })];
   })));
   const policySnapshot = hostContext?.runtimeAssignment?.resourcePolicySnapshot || config.resourcePolicySnapshot;
@@ -4026,9 +4043,6 @@ function resolvedStageModelAssignment(config, hostContext) {
 
 function createStageModels(runtime, config, assignment) {
   const injected = config.agentStageModels || {};
-  const thinkingCompatibilityMode = String(config.agentProviderCompatibility || '').startsWith('deepseek-v4-')
-    ? 'deepseek-v4-thinking-tools'
-    : 'generic-openai';
   const models = {};
   for (const stageId of AGENT_STAGE_IDS) {
     const fallback = stageId === 'fastGate' || stageId === 'finalizer'
@@ -4040,13 +4054,48 @@ function createStageModels(runtime, config, assignment) {
       modelId: assignment.stages[stageId].modelAlias,
       apiKey: config.llm?.apiKey,
       includeUsage: true,
-      compatibilityMode: stageId === 'fastGate' || stageId === 'finalizer'
-        ? 'generic-openai'
-        : thinkingCompatibilityMode
+      compatibilityMode: stageId !== 'fastGate'
+        && stageId !== 'finalizer'
+        && ((assignment.stages[stageId].executionPolicy?.continuation?.assistantContent === 'non_null'
+          && assignment.stages[stageId].executionPolicy?.toolChoice?.thinking === 'omit')
+          || assignment.stages[stageId].protocolMode === 'deepseek-v4-litellm')
+        ? 'gateway-thinking-tools-non-null-content'
+        : 'generic-openai'
     });
     models[stageId] = guardAgentModel(rawModel, config.providerGateway, config.abortSignal);
   }
   return Object.freeze(models);
+}
+
+function stageProtocolProfilesFromAssignment(assignment) {
+  return Object.freeze(Object.fromEntries(AGENT_STAGE_IDS.map((stageId) => [stageId, Object.freeze({
+    protocolMode: assignment.stages[stageId].protocolMode,
+    adapterProfileId: assignment.stages[stageId].adapterProfileId,
+    adapterProfileRevision: assignment.stages[stageId].adapterProfileRevision,
+    modelProtocolProfileId: assignment.stages[stageId].modelProtocolProfileId,
+    modelProtocolProfileRevision: assignment.stages[stageId].modelProtocolProfileRevision,
+    executionPolicy: assignment.stages[stageId].executionPolicy
+  })])));
+}
+
+function stageProtocolProfile(config, stageId) {
+  const configured = config.agentStageModelProtocols?.[stageId] || {};
+  const mode = String(configured.protocolMode || '').trim();
+  if (['gateway-chat-v1', 'generic-openai', 'deepseek-v4-litellm', 'glm-5.2-litellm'].includes(mode)) {
+    return {
+      protocolMode: mode,
+      adapterProfileId: String(configured.adapterProfileId || ''),
+      adapterProfileRevision: Number(configured.adapterProfileRevision || 0),
+      modelProtocolProfileId: String(configured.modelProtocolProfileId || ''),
+      modelProtocolProfileRevision: Number(configured.modelProtocolProfileRevision || 0),
+      executionPolicy: configured.executionPolicy || undefined
+    };
+  }
+  return {
+    protocolMode: String(config.agentProviderCompatibility || '').startsWith('deepseek-v4-')
+      ? 'deepseek-v4-litellm'
+      : 'generic-openai'
+  };
 }
 
 function agentReasoningModelAlias(config, reasoningMode = normalizeReasoningMode(config.agentReasoningMode)) {

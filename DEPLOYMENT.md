@@ -162,6 +162,15 @@ Provider Connection
 
 同一个 Alias 可以在配置中包含多个 Deployment，用于路由或故障转移；不要把删除的 Alias 自动映射到另一个 Alias。修改 Alias 后，还需要同步检查平台 Agent 资源策略中的引用。
 
+schema v2 管理配置默认使用动态运行时所有权。首次迁移时：
+
+1. 保留当前 `config/litellm/config.example.yaml` 作为可回滚的静态配置。
+2. 将 `LITELLM_CONFIG_PATH` 设为 `./config/litellm/config.dynamic.example.yaml`。
+3. 重启 LiteLLM，确认静态 `model_list` 已退出。
+4. 在管理界面完成 Connection、Deployment、Alias 和 Capability Probe，再发布配置。
+
+发布不是一次“写配置成功”请求。API 会验证 Agent Policy 引用闭包，经 LiteLLM 原生模型管理 API 应用 Desired 状态，再读取 `/model/info`、`/v1/models` 和 `/router/settings` 比对 Observed 状态，并执行业务 Alias canary。任一环节不一致都会阻止版本成为 Active；静态同名 Alias 冲突会返回 `restart_required` 且不写入运行时。
+
 LiteLLM 管理端口不映射到宿主机，也不应直接暴露到公网。平台通过容器网络访问它。
 
 #### 5.5 部署验收
@@ -227,6 +236,7 @@ docker compose \
 | `AI_TEACHER_TOOL_TOKEN` | API、Teacher | Validator Tool 请求认证；必须不同于 Internal Token |
 | `LITELLM_MASTER_KEY` | API、Teacher、LiteLLM | LiteLLM 管理和网关认证 |
 | `LITELLM_SALT_KEY` | LiteLLM | 稳定加密 Salt，迁移时必须保留 |
+| `LITELLM_CONFIG_PATH` | LiteLLM | 静态/动态运行时所有权配置文件；迁移前保持默认静态模板 |
 | `PROVIDER_API_BASE` | LiteLLM | Provider HTTPS 入口 |
 | `PROVIDER_API_KEY` | LiteLLM | Provider Key，不得进入 Web、API 响应或日志 |
 | `PROVIDER_MODEL` | LiteLLM | 真实 Model Deployment 名称 |
@@ -379,7 +389,13 @@ Provider Connection
 
 `PROVIDER_API_BASE` and `PROVIDER_API_KEY` define the connection. `PROVIDER_MODEL` identifies the concrete deployment. `AI_TEACHER_MODEL`, defaulting to `ai-teacher-fast`, is the stable business alias used by SynFeld. Never silently remap a deleted alias to a different alias.
 
+The rollback-safe static template exposes both `ai-teacher-fast` and `ai-teacher-reasoning`, because the default Agent Policy uses the latter for Candidate and Repair. In a single-provider installation both aliases intentionally reuse `PROVIDER_MODEL`; publish a schema-v2 dynamic control-plane configuration when the stages should use different deployments.
+
 The LiteLLM management port is not published to the host. SynFeld reaches it only through the Compose network.
+
+Schema v2 administration uses dynamic runtime ownership by default. Keep `config/litellm/config.example.yaml` as the rollback-safe static configuration, set `LITELLM_CONFIG_PATH=./config/litellm/config.dynamic.example.yaml`, restart LiteLLM, and verify that the static `model_list` has been removed before publishing from the administration UI.
+
+Publication validates Agent Policy reference closure, applies Desired state through LiteLLM's native model-management APIs, reads back `/model/info`, `/v1/models`, and `/router/settings`, and runs business-alias canaries. The version becomes Active only after Observed state converges. A conflicting static alias returns `restart_required` with zero runtime writes.
 
 ### 7. Bootstrap the first administrator
 

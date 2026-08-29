@@ -15,8 +15,8 @@ const {
 const currentCatalog = catalog();
 const valid = validatePolicyValues(BOOTSTRAP_VALUES);
 assert.equal(valid.ok, true, JSON.stringify(valid.errors));
-assert.equal(SCHEMA_VERSION, 7);
-assert.equal(currentCatalog.schemaVersion, 7);
+assert.equal(SCHEMA_VERSION, 8);
+assert.equal(currentCatalog.schemaVersion, 8);
 assert.equal(currentCatalog.definitions.length, Object.keys(BOOTSTRAP_VALUES).length);
 assert.equal(BOOTSTRAP_VALUES['repair.maxRounds'], 3);
 assert.equal(BOOTSTRAP_VALUES['candidate.maxArtifactBytes'], 262_144);
@@ -35,8 +35,35 @@ for (const rounds of [0, 3, 12]) {
 }
 
 const snapshot = createPolicySnapshot({ versionId: 'arp_public_v7_test', values: BOOTSTRAP_VALUES });
-assert.equal(snapshot.schemaVersion, 7);
+assert.equal(snapshot.schemaVersion, 8);
 assert.match(snapshot.checksum, /^sha256:[a-f0-9]{64}$/u);
+
+const projectedReasoning = runtimeProjection(BOOTSTRAP_VALUES).teacher.agentStageReasoningPolicies;
+assert.equal(projectedReasoning.main, 'provider-managed');
+assert.equal(projectedReasoning.finalizer, 'disabled');
+const migratedV7 = migratePolicyValues(v7Values());
+assert.equal(migratedV7.values['model.mainReasoningPolicy'], 'provider-managed');
+assert.equal(migratedV7.values['model.finalizerReasoningPolicy'], 'disabled');
+
+const registry = {
+  profiles: [
+    modelProfile('ai-teacher-fast', true),
+    modelProfile('ai-teacher-reasoning', true),
+    modelProfile('ai-teacher-glm-flash', false)
+  ]
+};
+const incompatibleGlmFinalizer = validatePolicyValues({
+  ...BOOTSTRAP_VALUES,
+  'model.finalizerRoute': 'ai-teacher-glm-flash'
+}, { modelRegistry: registry });
+assert.equal(incompatibleGlmFinalizer.ok, false);
+assert(incompatibleGlmFinalizer.errors.some((item) => item.code === 'POLICY_MODEL_REASONING_MODE_UNSUPPORTED'));
+const compatibleGlmFinalizer = validatePolicyValues({
+  ...BOOTSTRAP_VALUES,
+  'model.finalizerRoute': 'ai-teacher-glm-flash',
+  'model.finalizerReasoningPolicy': 'provider-managed'
+}, { modelRegistry: registry });
+assert.equal(compatibleGlmFinalizer.ok, true, JSON.stringify(compatibleGlmFinalizer.errors));
 
 const unknown = validatePolicyValues({ ...BOOTSTRAP_VALUES, 'unknown.resource.gate': 1 });
 assert.equal(unknown.ok, false);
@@ -72,7 +99,26 @@ assert.throws(() => migratePolicyValues({
   'repair.maxOutputTokens': 'invalid'
 }), (error) => error?.code === 'AGENT_RESOURCE_POLICY_SCHEMA_MIGRATION_INVALID');
 
-console.log('Agent resource policy v7 tests passed.');
+console.log('Agent resource policy v8 tests passed.');
+
+function v7Values() {
+  const values = { ...BOOTSTRAP_VALUES };
+  delete values['model.mainReasoningPolicy'];
+  delete values['model.finalizerReasoningPolicy'];
+  return values;
+}
+
+function modelProfile(litellmAlias, supportsDisabled) {
+  return {
+    litellmAlias,
+    executionPolicy: {
+      reasoning: {
+        enabled: { supported: true, sdkReasoning: 'high' },
+        disabled: { supported: supportsDisabled }
+      }
+    }
+  };
+}
 
 function publicV6Values() {
   const values = { ...BOOTSTRAP_VALUES };

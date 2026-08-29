@@ -2,7 +2,7 @@
 
 const crypto = require('crypto');
 
-const SCHEMA_VERSION = 7;
+const SCHEMA_VERSION = 8;
 
 const GROUPS = Object.freeze([
   Object.freeze({ id: 'api', label: 'API 外层', description: '平台 API 到 Teacher 的请求宽限与外层终止边界。' }),
@@ -97,10 +97,12 @@ const DEFINITIONS = Object.freeze([
 
   modelRef('model.fastRoute', 'Fast Gate 模型', 'ai-teacher-fast', 'Fast Gate 固定非思考调用。'),
   modelRef('model.mainRoute', 'Main 模型', 'ai-teacher-fast', '意图理解、澄清、普通回答与只读 Tool 编排。'),
+  enumDefinition('model.mainReasoningPolicy', 'model', 'Main 推理策略', 'provider-managed', ['disabled', 'provider-managed'], 'high', 'new_run', 'teacher', '按所选模型协议决定 Main 是否启用 Provider 推理。'),
   modelRef('model.candidateRoute', 'Candidate 模型', 'ai-teacher-reasoning', '完整 SysML v2 Candidate 生成。'),
   modelRef('model.repairRoute', 'Repair 模型', 'ai-teacher-reasoning', 'Validator 失败后的多轮 Repair。'),
   modelRef('model.semanticReviewRoute', '工程语义 Review 模型', 'ai-teacher-reasoning', '用于独立Assessment与Verification；只读建议、失败回退，不形成交付硬门。'),
-  modelRef('model.finalizerRoute', 'Finalizer 模型', 'ai-teacher-fast', '将可信结果整理为学生可见回答，固定非思考调用。')
+  modelRef('model.finalizerRoute', 'Finalizer 模型', 'ai-teacher-fast', '将可信结果整理为学生可见回答。'),
+  enumDefinition('model.finalizerReasoningPolicy', 'model', 'Finalizer 推理策略', 'disabled', ['disabled', 'provider-managed'], 'high', 'new_run', 'teacher', '默认关闭；始终思考模型必须显式使用 Provider 管理策略。')
 ]);
 
 const HARD_INVARIANTS = Object.freeze([
@@ -137,6 +139,10 @@ function booleanDefinition(key, group, label, defaultValue, risk, applyMode, own
   return Object.freeze({ key, group, label, valueType: 'boolean', defaultValue, risk, applyMode, owner, state: 'active', description });
 }
 
+function enumDefinition(key, group, label, defaultValue, allowedValues, risk, applyMode, owner, description) {
+  return Object.freeze({ key, group, label, valueType: 'enum', defaultValue, allowedValues: Object.freeze([...allowedValues]), risk, applyMode, owner, state: 'active', description });
+}
+
 function modelRef(key, label, defaultValue, description) {
   return Object.freeze({
     key,
@@ -168,6 +174,7 @@ function validatePolicyValues(input, options = {}) {
   const errors = [];
   const warnings = [];
   const normalized = {};
+  const modelProfilesByAlias = normalizedModelProfilesByAlias(options.modelRegistry);
   if (!isPlainObject(input)) errors.push(issue('values', 'POLICY_VALUES_OBJECT_REQUIRED', '策略值必须是对象。'));
 
   for (const key of Object.keys(values)) {
@@ -199,6 +206,11 @@ function validatePolicyValues(input, options = {}) {
       else normalized[definition.key] = value;
       continue;
     }
+    if (definition.valueType === 'enum') {
+      if (!definition.allowedValues.includes(value)) errors.push(issue(definition.key, 'POLICY_FIELD_ENUM', `${definition.label}不在允许值内。`));
+      else normalized[definition.key] = value;
+      continue;
+    }
     if (!Number.isInteger(value)) {
       errors.push(issue(definition.key, 'POLICY_FIELD_TYPE', `${definition.label}必须是整数。`));
       continue;
@@ -210,7 +222,7 @@ function validatePolicyValues(input, options = {}) {
     normalized[definition.key] = value;
   }
 
-  if (!errors.length || options.collectCrossFieldErrors === true) validateCrossFields(normalized, errors, warnings);
+  if (!errors.length || options.collectCrossFieldErrors === true) validateCrossFields(normalized, errors, warnings, modelProfilesByAlias);
   if (options.baseline && isPlainObject(options.baseline)) {
     for (const definition of DEFINITIONS) {
       if (definition.risk !== 'high') continue;
@@ -222,7 +234,7 @@ function validatePolicyValues(input, options = {}) {
   return { ok: errors.length === 0, values: normalized, errors, warnings };
 }
 
-function validateCrossFields(values, errors, warnings) {
+function validateCrossFields(values, errors, warnings, modelProfilesByAlias) {
   compare(values, errors, 'api.outerTimeoutMs', '>', values['run.maxDurationMs'], 'API 外层超时必须大于 Run 最长执行时间。');
   compare(values, errors, 'run.convergeLeadMs', '<', values['run.maxDurationMs'] - values['run.terminalReserveMs'], '收敛提前量必须小于 Run 时限减去终态阶段预留。');
   compare(values, errors, 'run.toolTimeoutMs', '<=', values['run.maxDurationMs'] - values['run.terminalReserveMs'], 'Tool 超时不能超过 Run 可工作窗口。');
@@ -286,6 +298,36 @@ function validateCrossFields(values, errors, warnings) {
   }
   if (values['scope.enabled'] === false) warnings.push(issue('scope.enabled', 'POLICY_SCOPE_GATE_DISABLED', 'Scope Gate 将关闭；授权和安全硬门仍保持。', 'warning'));
   if (values['candidate.repairEnabled'] === false) warnings.push(issue('candidate.repairEnabled', 'POLICY_REPAIR_DISABLED', 'Repair 将关闭；Validator FAIL 不会绕过。', 'warning'));
+  validateModelReasoningCompatibility(values, errors, modelProfilesByAlias);
+}
+
+function validateModelReasoningCompatibility(values, errors, modelProfilesByAlias) {
+  if (!(modelProfilesByAlias instanceof Map)) return;
+  const requirements = [
+    ['model.fastRoute', 'disabled', 'Fast Gate'],
+    ['model.mainRoute', values['model.mainReasoningPolicy'], 'Main'],
+    ['model.candidateRoute', 'provider-managed', 'Candidate'],
+    ['model.repairRoute', 'provider-managed', 'Repair'],
+    ['model.semanticReviewRoute', 'provider-managed', 'Semantic Review'],
+    ['model.finalizerRoute', values['model.finalizerReasoningPolicy'], 'Finalizer']
+  ];
+  for (const [routeKey, reasoningPolicy, label] of requirements) {
+    const profile = modelProfilesByAlias.get(String(values[routeKey] || '').trim());
+    const reasoning = profile?.executionPolicy?.reasoning;
+    if (!reasoning) continue;
+    const supported = reasoningPolicy === 'disabled'
+      ? reasoning.disabled?.supported === true
+      : reasoningPolicy === 'provider-managed'
+        && reasoning.enabled?.supported === true
+        && reasoning.enabled?.sdkReasoning !== 'none';
+    if (!supported) {
+      errors.push(issue(
+        routeKey,
+        'POLICY_MODEL_REASONING_MODE_UNSUPPORTED',
+        `${label}引用的模型协议不支持当前推理策略${reasoningPolicy}。`
+      ));
+    }
+  }
 }
 
 function compare(values, errors, key, operator, right, message) {
@@ -418,6 +460,14 @@ function runtimeProjection(values) {
         repair: v['model.repairRoute'],
         semanticReview: v['model.semanticReviewRoute'],
         finalizer: v['model.finalizerRoute']
+      }),
+      agentStageReasoningPolicies: Object.freeze({
+        fastGate: 'disabled',
+        main: v['model.mainReasoningPolicy'],
+        candidate: 'provider-managed',
+        repair: 'provider-managed',
+        semanticReview: 'provider-managed',
+        finalizer: v['model.finalizerReasoningPolicy']
       })
     }),
     validator: Object.freeze({
@@ -517,6 +567,18 @@ function normalizedRegisteredAliases(modelRegistry) {
         ? modelRegistry.profiles.map((profile) => profile?.litellmAlias || profile?.alias)
         : [];
   return new Set(source.map((value) => String(value || '').trim()).filter(Boolean));
+}
+
+function normalizedModelProfilesByAlias(modelRegistry) {
+  if (!modelRegistry || !Array.isArray(modelRegistry.profiles)) return null;
+  const profiles = new Map();
+  for (const profile of modelRegistry.profiles) {
+    for (const alias of [profile?.aliasId, profile?.litellmAlias, profile?.alias]) {
+      const normalized = String(alias || '').trim();
+      if (normalized) profiles.set(normalized, profile);
+    }
+  }
+  return profiles;
 }
 
 module.exports = {

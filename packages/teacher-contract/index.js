@@ -5,6 +5,15 @@ const OFFICIAL_VALIDATOR_ARTIFACT_MANIFEST = require('./official-validator-runti
 
 const CONTRACT_VERSION = '1.0';
 const DEFAULT_MAX_REQUEST_BYTES = 256 * 1024;
+const MODEL_CAPABILITY_SNAPSHOT_VERSION = 2;
+const SUPPORTED_MODEL_CAPABILITY_SNAPSHOT_VERSIONS = Object.freeze([1, 2]);
+const MODEL_PROTOCOL_MODES = Object.freeze([
+  'gateway-chat-v1',
+  'generic-openai',
+  'deepseek-v4-litellm',
+  'glm-5.2-litellm'
+]);
+const BOOTSTRAP_MODEL_CONTEXT_WINDOW_TOKENS = 64_000;
 const MAX_EDITOR_FILES = 20;
 const MAX_RESPONSE_SECTIONS = 12;
 const MAX_RESPONSE_EVIDENCE = 20;
@@ -158,6 +167,11 @@ function validateHostContextEnvelope(value) {
     } else if (value.runtimeAssignment.workflowVersion !== undefined
       && value.runtimeAssignment.workflowVersion !== 'intent-orchestrator-v2') {
       errors.push('runtimeAssignment.workflowVersion must be intent-orchestrator-v2');
+    } else if (value.runtimeAssignment.modelCapabilitySnapshot !== undefined) {
+      const capabilityValidation = validateModelCapabilitySnapshot(
+        value.runtimeAssignment.modelCapabilitySnapshot
+      );
+      errors.push(...capabilityValidation.errors);
     }
   }
 
@@ -1314,9 +1328,103 @@ function fail(message) {
   return { ok: false, errors: [message] };
 }
 
+function validateModelCapabilitySnapshot(value) {
+  const errors = [];
+  if (!isObject(value)) return fail('modelCapabilitySnapshot must be an object');
+  if (!SUPPORTED_MODEL_CAPABILITY_SNAPSHOT_VERSIONS.includes(value.schemaVersion)) {
+    errors.push('modelCapabilitySnapshot.schemaVersion is not supported');
+  }
+  if (!Number.isInteger(value.effectiveContextWindowTokens) || value.effectiveContextWindowTokens <= 0) {
+    errors.push('modelCapabilitySnapshot.effectiveContextWindowTokens must be a positive integer');
+  }
+  if (!isObject(value.stages)) {
+    errors.push('modelCapabilitySnapshot.stages must be an object');
+  } else {
+    const stageWindows = Object.entries(value.stages).map(([stageId, stage]) => {
+      if (!isObject(stage)) {
+        errors.push(`modelCapabilitySnapshot.stages.${stageId} must be an object`);
+        return null;
+      }
+      if (typeof stage.alias !== 'string' || !stage.alias.trim()) {
+        errors.push(`modelCapabilitySnapshot.stages.${stageId}.alias is required`);
+      }
+      if (stage.aliasId !== undefined && (typeof stage.aliasId !== 'string' || !stage.aliasId.trim())) {
+        errors.push(`modelCapabilitySnapshot.stages.${stageId}.aliasId must be a non-empty string when provided`);
+      }
+      if (!Number.isInteger(stage.contextWindowTokens) || stage.contextWindowTokens <= 0) {
+        errors.push(`modelCapabilitySnapshot.stages.${stageId}.contextWindowTokens must be a positive integer`);
+        return null;
+      }
+      if (value.schemaVersion >= 2) {
+        if (stage.protocolStatus !== 'ready') {
+          errors.push(`modelCapabilitySnapshot.stages.${stageId}.protocolStatus must be ready`);
+        }
+        if (!MODEL_PROTOCOL_MODES.includes(stage.protocolMode)) {
+          errors.push(`modelCapabilitySnapshot.stages.${stageId}.protocolMode is not supported`);
+        }
+        if (typeof stage.adapterProfileId !== 'string' || !stage.adapterProfileId.trim()) {
+          errors.push(`modelCapabilitySnapshot.stages.${stageId}.adapterProfileId is required`);
+        }
+        if (!Number.isInteger(stage.adapterProfileRevision) || stage.adapterProfileRevision <= 0) {
+          errors.push(`modelCapabilitySnapshot.stages.${stageId}.adapterProfileRevision must be a positive integer`);
+        }
+        if (stage.modelProtocolProfileId
+          && (!Number.isInteger(stage.modelProtocolProfileRevision) || stage.modelProtocolProfileRevision <= 0)) {
+          errors.push(`modelCapabilitySnapshot.stages.${stageId}.modelProtocolProfileRevision must be a positive integer when a profile is present`);
+        }
+        if (stage.protocolMode === 'gateway-chat-v1') {
+          validateGatewayExecutionPolicy(stage.executionPolicy, stageId, errors);
+        }
+      }
+      return stage.contextWindowTokens;
+    }).filter((item) => item !== null);
+    if (stageWindows.length > 0
+      && value.effectiveContextWindowTokens !== Math.min(...stageWindows)) {
+      errors.push('modelCapabilitySnapshot.effectiveContextWindowTokens must equal the minimum stage capability');
+    }
+  }
+  if (!/^sha256:[a-f0-9]{64}$/u.test(String(value.checksum || ''))) {
+    errors.push('modelCapabilitySnapshot.checksum must be a SHA-256 identifier');
+  } else {
+    const { checksum, ...material } = value;
+    if (checksum !== hashContent(canonicalJson(material))) {
+      errors.push('modelCapabilitySnapshot.checksum does not match the snapshot content');
+    }
+  }
+  return { ok: errors.length === 0, errors };
+}
+
+function validateGatewayExecutionPolicy(value, stageId, errors) {
+  const prefix = `modelCapabilitySnapshot.stages.${stageId}.executionPolicy`;
+  if (!isObject(value)) {
+    errors.push(`${prefix} must be an object for gateway-chat-v1`);
+    return;
+  }
+  if (value.gatewayContract !== 'gateway-chat.v1') {
+    errors.push(`${prefix}.gatewayContract must be gateway-chat.v1`);
+  }
+  if (!isObject(value.reasoning) || !['enabled', 'disabled'].includes(value.reasoning.defaultMode)) {
+    errors.push(`${prefix}.reasoning is invalid`);
+  } else {
+    for (const mode of ['enabled', 'disabled']) {
+      const branch = value.reasoning[mode];
+      if (!isObject(branch) || typeof branch.supported !== 'boolean') {
+        errors.push(`${prefix}.reasoning.${mode} is invalid`);
+      }
+    }
+  }
+  if (!isObject(value.toolChoice)
+    || !['auto', 'omit', 'unsupported'].includes(value.toolChoice.nonThinking)
+    || !['auto', 'omit', 'unsupported'].includes(value.toolChoice.thinking)) {
+    errors.push(`${prefix}.toolChoice is invalid`);
+  }
+}
+
 module.exports = {
   CONTRACT_VERSION,
   DEFAULT_MAX_REQUEST_BYTES,
+  MODEL_CAPABILITY_SNAPSHOT_VERSION,
+  BOOTSTRAP_MODEL_CONTEXT_WINDOW_TOKENS,
   TRUSTED_OFFICIAL_VALIDATOR_ATTESTATION,
   validateHostContextEnvelope,
   validateTeacherCapabilityResponse,
@@ -1329,5 +1437,6 @@ module.exports = {
   hashContent,
   redactSecrets,
   containsSecret,
-  publicError
+  publicError,
+  validateModelCapabilitySnapshot
 };

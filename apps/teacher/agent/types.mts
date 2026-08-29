@@ -1558,6 +1558,35 @@ export interface AgentRunOutcome {
   mainAgentOutcome?: MainAgentOutcome;
 }
 
+export type AgentStageId = "fastGate" | "main" | "candidate" | "repair" | "semanticReview" | "finalizer";
+export type AgentStageProtocolMode = "gateway-chat-v1" | "generic-openai" | "deepseek-v4-litellm" | "glm-5.2-litellm";
+export interface AgentProtocolReasoningBranch {
+  supported: boolean;
+  sdkReasoning: "none" | "medium" | "high" | "xhigh";
+  providerOptions: Readonly<Record<string, unknown>>;
+}
+export interface AgentProtocolExecutionPolicy {
+  gatewayContract: "gateway-chat.v1";
+  reasoning: {
+    defaultMode: "enabled" | "disabled";
+    enabled: AgentProtocolReasoningBranch;
+    disabled: AgentProtocolReasoningBranch;
+  };
+  toolChoice: {
+    nonThinking: "auto" | "omit" | "unsupported";
+    thinking: "auto" | "omit" | "unsupported";
+  };
+  continuation: Readonly<Record<string, unknown>>;
+}
+export interface AgentStageProtocolProfile {
+  protocolMode: AgentStageProtocolMode;
+  adapterProfileId?: string;
+  adapterProfileRevision?: number;
+  modelProtocolProfileId?: string;
+  modelProtocolProfileRevision?: number;
+  executionPolicy?: AgentProtocolExecutionPolicy;
+}
+
 export interface RunTeacherAgentOptions {
   model: LanguageModel;
   modelId?: string;
@@ -1578,10 +1607,12 @@ export interface RunTeacherAgentOptions {
   thinkingModel?: LanguageModel;
   thinkingModelId?: string;
   reasoningMode?: "adaptive" | "provider-managed" | "max" | "high" | "medium" | "disabled";
+  stageReasoningModes?: Partial<Record<AgentStageId, "adaptive" | "provider-managed" | "max" | "high" | "medium" | "disabled">>;
   /** V2一次请求内唯一的服务端共享工作台；不得进入Provider请求或公共响应。 */
   runResources?: RunResources;
   providerOptionsName?: string;
   providerCompatibility?: "generic-openai" | "deepseek-v4-direct" | "deepseek-v4-litellm";
+  stageProtocolProfiles?: Partial<Record<AgentStageId, AgentStageProtocolProfile>>;
   finalizeVisibleAnswer?: (input: {
     response: TrustedTeacherResponse;
     ledger: readonly ToolLedgerEntry[];
