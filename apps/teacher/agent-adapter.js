@@ -3872,9 +3872,11 @@ function agentPolicy(config) {
       config.agentRepairPhaseReserveMs,
       defaults.agentRepairPhaseReserveMs
     ),
-    repairMaxOutputTokens: positiveInteger(
-      config.agentRepairMaxOutputTokens,
-      defaults.agentRepairMaxOutputTokens
+    repairMaxRounds: nonNegativeInteger(config.agentRepairMaxRounds)
+      ?? defaults.agentRepairMaxRounds,
+    candidateMaxArtifactBytes: positiveInteger(
+      config.agentCandidateMaxArtifactBytes,
+      defaults.agentCandidateMaxArtifactBytes
     ),
     semanticReviewEnabled: booleanSetting(
       config.agentSemanticReviewEnabled,
@@ -3953,10 +3955,6 @@ function agentPolicy(config) {
     validatorToolTimeoutMs: positiveInteger(
       config.agentValidatorToolTimeoutMs,
       defaults.agentValidatorToolTimeoutMs
-    ),
-    maxUniqueCandidateValidationsPerWorker: positiveInteger(
-      config.agentMaxUniqueCandidateValidationsPerWorker,
-      defaults.agentMaxUniqueCandidateValidationsPerWorker
     ),
     reviewedKnowledgeMaxNewQueriesPerRun: nonNegativeInteger(config.agentReviewedKnowledgeMaxNewQueriesPerRun)
       ?? defaults.agentReviewedKnowledgeMaxNewQueriesPerRun,

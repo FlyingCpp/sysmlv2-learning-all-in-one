@@ -2,7 +2,7 @@
 
 const crypto = require('crypto');
 
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 7;
 
 const GROUPS = Object.freeze([
   Object.freeze({ id: 'api', label: 'API 外层', description: '平台 API 到 Teacher 的请求宽限与外层终止边界。' }),
@@ -10,8 +10,8 @@ const GROUPS = Object.freeze([
   Object.freeze({ id: 'scope', label: 'Scope Gate', description: '首次范围筛选与独立复核预算。' }),
   Object.freeze({ id: 'answer', label: '回答 Token', description: '最终回答的上下文与输出 ceiling。' }),
   Object.freeze({ id: 'knowledge', label: '知识检索', description: '每个 Run 可发起的新知识查询 ceiling。' }),
-  Object.freeze({ id: 'candidate', label: 'Candidate', description: '候选生成、内容恢复与 Validator 使用上限；初始 Candidate 输出由 Provider 管理。' }),
-  Object.freeze({ id: 'repair', label: 'Repair 阶段', description: 'Validator 失败后的 Repair 时间预留与单步输出预算。' }),
+  Object.freeze({ id: 'candidate', label: 'Candidate', description: '候选生成、内容恢复与 Artifact 输入安全边界；初始 Candidate 输出由 Provider 管理。' }),
+  Object.freeze({ id: 'repair', label: 'Repair 阶段', description: 'Validator 失败后的 Repair 时间预留、有效轮次和上下文准入边界。' }),
   Object.freeze({ id: 'semanticReview', label: '工程语义软 Review', description: 'Official Validator PASS 后的只读评议、Main 判读、一次工程完善和确认预算。' }),
   Object.freeze({ id: 'engineeringRevision', label: '工程语义完善', description: '工程建议被准入后，由 Candidate Worker 完成一次完整候选修订和必要语法修复。' }),
   Object.freeze({ id: 'engineeringImprovement', label: '工程改进续跑', description: 'Primary Run 无法容纳完整改进链时，唯一 Improvement 子 Run 的时间和 lineage 边界。' }),
@@ -41,15 +41,15 @@ const DEFINITIONS = Object.freeze([
   integer('answer.mediumMaxOutputTokens', 'answer', 'MEDIUM 回答上限', 4500, 512, 8000, 'tokens', 'medium', 'new_run', 'MEDIUM 档最终回答输出 ceiling。'),
   integer('answer.highMaxOutputTokens', 'answer', 'HIGH 回答上限', 6000, 512, 8000, 'tokens', 'medium', 'new_run', 'HIGH 档最终回答输出 ceiling。'),
 
-  integer('knowledge.reviewedMaxNewQueriesPerRun', 'knowledge', 'Reviewed Knowledge 每 Run 最多新查询', 2, 0, 2, 'calls', 'medium', 'new_run', '查询预算是 ceiling，证据充分时允许 0 次。'),
+  integer('knowledge.reviewedMaxNewQueriesPerRun', 'knowledge', 'Reviewed Knowledge 每 Run 最多新查询', 4, 0, 12, 'calls', 'medium', '这是 Main、Candidate 与 Repair 共享的 Run ceiling；证据充分时允许 0 次，Repair 失败换轮不会重置。'),
 
   integer('candidate.recoveryMaxAttempts', 'candidate', 'Candidate 恢复次数', 1, 0, 1, 'calls', 'medium', 'new_run', '候选内容截断或不可解析时的有界恢复。'),
   integer('candidate.maxAttemptMs', 'candidate', 'Candidate 单次上限', 420000, 30000, 600000, 'ms', 'high', 'new_run', 'teacher', '单次 Candidate 生成的绝对上限；实际截止时间还必须保留 Validator、Repair 和终态预算。'),
   booleanDefinition('candidate.repairEnabled', 'candidate', '启用 Repair', true, 'high', 'new_run', 'teacher', '关闭后 Validator FAIL 不进入 Repair，但仍不得绕过 Validator。'),
-  integer('candidate.maxValidatorCallsPerWorker', 'candidate', '每 Worker 最大 Validator 次数', 12, 4, 20, 'calls', 'high', 'new_run', '单个 Candidate 或 Repair Worker 的唯一候选验证上限。'),
+  integer('candidate.maxArtifactBytes', 'candidate', 'Candidate Artifact 上限', 262144, 16384, 2097152, 'bytes', 'high', 'new_run', '完整 Candidate 在进入 Hash、Validator 与持久化前必须满足的 UTF-8 字节安全边界。'),
 
   integer('repair.phaseReserveMs', 'repair', 'Repair 阶段预留', 120000, 30000, 300000, 'ms', 'high', 'new_run', 'teacher', '为至少一次 Repair、完整候选提交和再验证预留的时间。'),
-  integer('repair.maxOutputTokens', 'repair', 'Repair 单步输出上限', 32000, 4096, 64000, 'tokens', 'high', 'new_run', '每次 Repair 模型调用的 completion ceiling；reasoning、可见文本和完整 Candidate Tool 参数共享该额度。'),
+  integer('repair.maxRounds', 'repair', 'Repair 最大有效轮次', 3, 0, 12, 'rounds', 'high', 'new_run', '每轮必须产生新的 Candidate、诊断或证据；0 表示 Validator FAIL 后不启动 Repair 模型。'),
 
   booleanDefinition('semanticReview.enabled', 'semanticReview', '启用工程语义软 Review', false, 'high', 'new_run', 'teacher', '首版默认关闭；启用后只产生建议并允许一次有界工程完善，失败时回退已通过Validator的基线，不形成阻断门。'),
   booleanDefinition('semanticReview.shadowOnly', 'semanticReview', '仅运行 Shadow Assessment', false, 'medium', 'new_run', 'teacher', '启用时只记录Assessment建议，不进入Main或Candidate完善；关闭且Review启用时按taskEffect执行一次完整软审查链。'),
@@ -113,6 +113,10 @@ const HARD_INVARIANTS = Object.freeze([
 
 const BOOTSTRAP_VALUES = Object.freeze(Object.fromEntries(DEFINITIONS.map((definition) => [definition.key, definition.defaultValue])));
 const DEFINITION_BY_KEY = new Map(DEFINITIONS.map((definition) => [definition.key, definition]));
+const DEPRECATED_KEYS = Object.freeze({
+  'candidate.maxValidatorCallsPerWorker': Object.freeze({ replacement: 'derived:initial-candidate+repair.maxRounds' }),
+  'repair.maxOutputTokens': Object.freeze({ replacement: 'removed:repair-output-is-provider-managed' })
+});
 
 function integer(key, group, label, defaultValue, minimum, maximum, unit, risk, applyMode, owner, description) {
   if (description === undefined) {
@@ -154,7 +158,8 @@ function catalog() {
     schemaVersion: SCHEMA_VERSION,
     groups: GROUPS.map((group) => ({ ...group })),
     definitions: DEFINITIONS.map((definition) => ({ ...definition })),
-    hardInvariants: HARD_INVARIANTS.map((item) => ({ ...item }))
+    hardInvariants: HARD_INVARIANTS.map((item) => ({ ...item })),
+    deprecatedKeys: { ...DEPRECATED_KEYS }
   };
 }
 
@@ -226,7 +231,6 @@ function validateCrossFields(values, errors, warnings) {
   compare(values, errors, 'answer.lowMaxOutputTokens', '<=', values['answer.mediumMaxOutputTokens'], 'LOW 回答上限不能大于 MEDIUM。');
   compare(values, errors, 'answer.mediumMaxOutputTokens', '<=', values['answer.highMaxOutputTokens'], 'MEDIUM 回答上限不能大于 HIGH。');
   compare(values, errors, 'answer.highMaxOutputTokens', '<=', values['answer.hardMaxOutputTokens'], 'HIGH 回答上限不能超过硬上限。');
-  compare(values, errors, 'repair.maxOutputTokens', '<', values['answer.contextWindowTokens'], 'Repair 单步输出上限必须小于模型上下文窗口。');
   compare(values, errors, 'semanticReview.maxOutputTokens', '<=', values['answer.hardMaxOutputTokens'], '工程语义Review输出上限不能超过单步输出硬上限。');
   compare(values, errors, 'semanticReview.minimumCompleteChainMs', '<', values['run.maxDurationMs'] - values['run.terminalReserveMs'], '完整改进链最小预算必须小于Run可工作窗口。');
   compare(values, errors, 'engineeringRevision.maxDurationMs', '<', values['engineeringImprovement.runMaxDurationMs'] - values['run.terminalReserveMs'], '工程完善Candidate上限必须为Validator、Repair、Verification和终态保留时间。');
@@ -356,6 +360,7 @@ function runtimeProjection(values) {
     throw error;
   }
   const v = validation.values;
+  const maxUniqueCandidateValidationsPerWorker = 1 + v['repair.maxRounds'];
   return Object.freeze({
     api: Object.freeze({
       outerTimeoutMs: v['api.outerTimeoutMs']
@@ -377,7 +382,8 @@ function runtimeProjection(values) {
       agentCandidateMaxAttemptMs: v['candidate.maxAttemptMs'],
       agentCandidateRepairEnabled: v['candidate.repairEnabled'],
       agentRepairPhaseReserveMs: v['repair.phaseReserveMs'],
-      agentRepairMaxOutputTokens: v['repair.maxOutputTokens'],
+      agentRepairMaxRounds: v['repair.maxRounds'],
+      agentCandidateMaxArtifactBytes: v['candidate.maxArtifactBytes'],
       agentSemanticReviewEnabled: v['semanticReview.enabled'],
       agentSemanticReviewShadowOnly: v['semanticReview.shadowOnly'],
       agentSemanticReviewAssessmentMaxCalls: v['semanticReview.assessmentMaxCalls'],
@@ -398,7 +404,7 @@ function runtimeProjection(values) {
       agentEngineeringImprovementOrchestrationReserveMs: v['engineeringImprovement.orchestrationReserveMs'],
       agentEngineeringImprovementMinimumCompleteChainMs: v['engineeringImprovement.minimumCompleteChainMs'],
       agentValidatorToolTimeoutMs: v['validator.toolTimeoutMs'],
-      agentMaxUniqueCandidateValidationsPerWorker: v['candidate.maxValidatorCallsPerWorker'],
+      agentMaxUniqueCandidateValidationsPerWorker: maxUniqueCandidateValidationsPerWorker,
       agentReviewedKnowledgeMaxNewQueriesPerRun: v['knowledge.reviewedMaxNewQueriesPerRun'],
       agentLowAnswerMaxOutputTokens: v['answer.lowMaxOutputTokens'],
       agentMediumAnswerMaxOutputTokens: v['answer.mediumMaxOutputTokens'],
@@ -445,6 +451,51 @@ function runtimeProjection(values) {
   });
 }
 
+function migratePolicyValues(sourceValues = {}) {
+  const source = isPlainObject(sourceValues) ? sourceValues : {};
+  const values = { ...BOOTSTRAP_VALUES };
+  for (const key of Object.keys(values)) {
+    if (Object.prototype.hasOwnProperty.call(source, key)) values[key] = source[key];
+  }
+
+  if (Object.prototype.hasOwnProperty.call(source, 'candidate.maxValidatorCallsPerWorker')
+    && !Object.prototype.hasOwnProperty.call(source, 'repair.maxRounds')) {
+    const oldLimit = source['candidate.maxValidatorCallsPerWorker'];
+    if (!Number.isInteger(oldLimit) || oldLimit < 1 || oldLimit > 20) {
+      throw policyMigrationError('candidate.maxValidatorCallsPerWorker');
+    }
+    values['repair.maxRounds'] = Math.min(
+      BOOTSTRAP_VALUES['repair.maxRounds'],
+      Math.max(0, oldLimit - 1)
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(source, 'repair.maxOutputTokens')) {
+    const oldLimit = source['repair.maxOutputTokens'];
+    if (!Number.isInteger(oldLimit) || oldLimit < 4096 || oldLimit > 64000) {
+      throw policyMigrationError('repair.maxOutputTokens');
+    }
+  }
+
+  const validation = validatePolicyValues(values);
+  if (!validation.ok) {
+    const error = policyMigrationError('migrated_values');
+    error.details = validation;
+    throw error;
+  }
+  return {
+    values: validation.values,
+    deprecatedKeys: Object.keys(source).filter((key) => DEPRECATED_KEYS[key]),
+    unknownKeys: Object.keys(source).filter((key) => !DEFINITION_BY_KEY.has(key) && !DEPRECATED_KEYS[key])
+  };
+}
+
+function policyMigrationError(key) {
+  const error = new Error(`Agent resource policy migration rejected ${key}.`);
+  error.code = 'AGENT_RESOURCE_POLICY_SCHEMA_MIGRATION_INVALID';
+  error.key = key;
+  return error;
+}
+
 function diffPolicyValues(before = {}, after = {}) {
   return DEFINITIONS.flatMap((definition) => {
     if (before[definition.key] === after[definition.key]) return [];
@@ -473,6 +524,7 @@ module.exports = {
   GROUPS,
   DEFINITIONS,
   HARD_INVARIANTS,
+  DEPRECATED_KEYS,
   BOOTSTRAP_VALUES,
   catalog,
   validatePolicyValues,
@@ -480,6 +532,7 @@ module.exports = {
   checksumPolicyValues,
   createPolicySnapshot,
   runtimeProjection,
+  migratePolicyValues,
   diffPolicyValues,
   canonicalJson
 };

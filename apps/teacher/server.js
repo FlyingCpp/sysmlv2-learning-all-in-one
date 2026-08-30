@@ -442,12 +442,12 @@ function createConfig(options) {
       ?? bootstrapResourcePolicyProjection.teacher.agentCandidateRepairEnabled,
     agentRepairPhaseReserveMs: options.agentRepairPhaseReserveMs
       ?? bootstrapResourcePolicyProjection.teacher.agentRepairPhaseReserveMs,
-    agentRepairMaxOutputTokens: options.agentRepairMaxOutputTokens
-      ?? bootstrapResourcePolicyProjection.teacher.agentRepairMaxOutputTokens,
+    agentRepairMaxRounds: options.agentRepairMaxRounds
+      ?? bootstrapResourcePolicyProjection.teacher.agentRepairMaxRounds,
+    agentCandidateMaxArtifactBytes: options.agentCandidateMaxArtifactBytes
+      ?? bootstrapResourcePolicyProjection.teacher.agentCandidateMaxArtifactBytes,
     agentValidatorToolTimeoutMs: options.agentValidatorToolTimeoutMs
       ?? bootstrapResourcePolicyProjection.teacher.agentValidatorToolTimeoutMs,
-    agentMaxUniqueCandidateValidationsPerWorker: options.agentMaxUniqueCandidateValidationsPerWorker
-      ?? bootstrapResourcePolicyProjection.teacher.agentMaxUniqueCandidateValidationsPerWorker,
     agentReviewedKnowledgeMaxNewQueriesPerRun: options.agentReviewedKnowledgeMaxNewQueriesPerRun
       ?? bootstrapResourcePolicyProjection.teacher.agentReviewedKnowledgeMaxNewQueriesPerRun,
     agentLowAnswerMaxOutputTokens: options.agentLowAnswerMaxOutputTokens

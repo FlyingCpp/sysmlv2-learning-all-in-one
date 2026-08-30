@@ -17,7 +17,7 @@ SynFeld 是一个面向 SysML v2 初学者、系统工程师和 MBSE 实践者�
 - 页面也提供游客入口；游客、普通注册用户和获授权用户的能力可能不同。
 - AI 功能需要注册并获得相应权限。
 
-> 当前体验服务以 IP 地址提供。若浏览器显示证书不受信任或连接不安全，请勿继续注册、输入密码或上传内容，应等待可信证书完成配置后再访问。
+> 在线体验仅通过正式 HTTPS 地址提供。若浏览器显示证书不受信任或连接不安全，请勿继续注册、输入密码或上传内容。
 
 体验服务不承诺 SLA，也可能随版本升级重置测试数据。请勿上传涉密信息、商业机密、个人敏感信息或未获授权的工程模型。
 
@@ -130,6 +130,12 @@ DEPLOYMENT.md         Core and Full deployment guide
 
 发现安全问题时，请勿在公开 Issue 中粘贴 Token、账号信息、模型数据或漏洞利用细节。
 
+### AI Teacher 单段 Repair Loop
+
+Full 档位使用 Policy v7 驱动单段 Validator Repair Tool Loop。Repair 不再设置应用层输出 Token 硬帽，而是在每个模型步骤前根据上下文窗口动态预留完整 Tool Result 和可见输出空间。默认边界为 3 个 Repair 轮次、256 KiB 候选制品、每个 Run 共享 4 次新知识查询；Validator 调用上限由“初始候选 + Repair 轮次”派生。已有 Policy v6 部署会显式迁移弃用字段，未知字段或非法旧值继续 fail closed。
+
+运行 `npm run test:teacher-agent-loop` 可验证 Policy v7、v6→v7 迁移、动态上下文预留、共享查询预算、候选提交和 Validator Repair 终止条件。该测试使用可控模型桩验证协议与预算，不代表真实 Provider 验收；真实 AI 验收必须在 Full 镜像中连接 LiteLLM Provider，并将候选模型交给 Official Validator。
+
 ### 开源版与托管服务
 
 | 能力 | 开源 v0.1.0 | 托管体验服务 |
@@ -164,7 +170,7 @@ The current public release is **v0.1.0**. It includes one sample course pack, on
 - Guest access is available, but capabilities differ by account and entitlement.
 - AI features require registration and the appropriate entitlement.
 
-> The current experience is served from an IP address. Do not register, enter a password, or upload content if the browser reports an untrusted certificate or insecure connection.
+> The hosted experience is available only through the official HTTPS address. Do not register, enter a password, or upload content if the browser reports an untrusted certificate or insecure connection.
 
 The hosted service is an early experience environment with no SLA. Do not upload confidential, personal, proprietary, or unauthorized engineering data.
 
@@ -259,6 +265,12 @@ DEPLOYMENT.md        Core and Full deployment guide
 Run `npm run test:public-boundary` before every release. The gate rejects real environment files, key material, common token patterns, server-specific operations, private workspace references, private repository references, author-profile UI, and content outside the one-course/one-knowledge-pack v0.1 contract.
 
 `.env.example` contains names and obvious placeholders only. Real `.env` files are ignored by Git. Never paste credentials, model data, or exploit details into a public issue.
+
+### AI Teacher single-stage Repair Loop
+
+The Full profile uses Policy v7 to drive one Validator Repair Tool Loop. Repair no longer applies an application-level output-token cap. Before each model step, it reserves room dynamically for complete tool results and visible output within the context window. Defaults are three Repair rounds, a 256 KiB candidate artifact, and four new reviewed-knowledge queries shared by the run; the Validator ceiling is derived from the initial candidate plus the Repair rounds. Existing Policy v6 deployments use an explicit deprecated-key migration, while unknown keys and invalid legacy values remain fail closed.
+
+Run `npm run test:teacher-agent-loop` to verify Policy v7, v6-to-v7 migration, dynamic context admission, the shared query budget, candidate submission, and Validator Repair termination. This deterministic suite uses a controllable model double to test the protocol and budgets; it is not real-provider acceptance. Real AI acceptance requires a Full image connected to a LiteLLM provider and an Official Validator check of the generated candidate.
 
 ### Open source versus hosted service
 

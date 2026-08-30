@@ -39,9 +39,6 @@ import {
   type RepairRoundTrace,
 } from "./repair-convergence.mjs";
 
-const MAX_REPAIR_CANDIDATE_CHARS = 40_000;
-const DEFAULT_MAX_STEPS = 30;
-const KNOWLEDGE_QUERIES_PER_ROUND = 3;
 const KNOWLEDGE_MODEL_VIEW_TOKEN_BUDGET = 3_000;
 const CONTEXT_SAFETY_TOKENS = 4_000;
 const REPAIR_RESUME_VIEW_RESERVE_TOKENS = 8_000;
@@ -65,11 +62,6 @@ export type RepairWorkerTerminalStopReason =
   | "model_terminated_without_candidate"
   | "step_budget_exhausted";
 
-export interface RepairWorkerValidation<CANDIDATE> {
-  candidate: CANDIDATE;
-  validation: ValidationOutput;
-}
-
 export interface ValidatorRepairWorkerOptions<CANDIDATE> {
   model: LanguageModel;
   instructions: string;
@@ -77,9 +69,11 @@ export interface ValidatorRepairWorkerOptions<CANDIDATE> {
   abortSignal: AbortSignal;
   timeoutMs: number;
   toolTimeoutMs: number;
-  maxOutputTokens: number;
   contextWindowTokens: number;
   maxCandidateAttempts: number;
+  maxRepairRounds?: number;
+  maxKnowledgeQueries?: number;
+  maxCandidateArtifactBytes?: number;
   maxValidatorCalls: number;
   initialValidatorCalls: number;
   initialValidation?: ValidationOutput;
@@ -134,6 +128,11 @@ export interface ValidatorRepairWorkerOptions<CANDIDATE> {
   onCheckpointProgress?: (progress: RepairWorkerCheckpointProgress) => Promise<void> | void;
 }
 
+export interface RepairWorkerValidation<CANDIDATE> {
+  candidate: CANDIDATE;
+  validation: ValidationOutput;
+}
+
 export interface ValidatorRepairWorkerResult<CANDIDATE> {
   accepted?: RepairWorkerValidation<CANDIDATE> & {
     content: string;
@@ -167,6 +166,7 @@ export interface ValidatorRepairWorkerResult<CANDIDATE> {
     messageCountAfterSdkPrune: number;
     messageCountAfterPrune: number;
     latestCandidateOccurrences: number;
+    visibleOutputReserveTokens: number;
     projectedTokens: number;
     remainingTokens: number;
     knowledgeQueriesThisRound: number;
@@ -250,8 +250,17 @@ export async function runValidatorRepairWorker<CANDIDATE>(
       : undefined);
   const startedAt = Date.now();
   const stageDeadlineAtMs = startedAt + options.timeoutMs;
-  const candidateCharLimit = deriveRepairCandidateCharLimit(options);
-  if (candidateCharLimit < 1 || options.initialCandidateContent.length > candidateCharLimit) {
+  const maxRepairRounds = Math.max(0, options.maxRepairRounds ?? options.maxCandidateAttempts);
+  const maxKnowledgeQueries = Math.max(0, options.maxKnowledgeQueries ?? options.maxValidatorCalls);
+  const maxCandidateArtifactBytes = Math.max(1, options.maxCandidateArtifactBytes ?? Number.MAX_SAFE_INTEGER);
+  const maxToolLoopSteps = options.maxValidatorCalls + maxKnowledgeQueries + 1;
+  const candidateCharLimit = deriveRepairCandidateCharLimit(options, maxCandidateArtifactBytes);
+  if (maxRepairRounds < 1 || options.maxCandidateAttempts < 1) {
+    return emptyResult(options, candidateCharLimit, "candidate_budget_exhausted");
+  }
+  if (candidateCharLimit < 1
+    || options.initialCandidateContent.length > candidateCharLimit
+    || Buffer.byteLength(options.initialCandidateContent, "utf8") > maxCandidateArtifactBytes) {
     return emptyResult(options, candidateCharLimit, "repair_context_not_admitted");
   }
   const initialCandidateHash = hashContent(options.initialCandidateContent);
@@ -268,6 +277,7 @@ export async function runValidatorRepairWorker<CANDIDATE>(
     terminalStopReason: undefined as RepairWorkerTerminalStopReason | undefined,
     validatorCalls: options.initialValidatorCalls,
     maxValidatorCalls: options.maxValidatorCalls,
+    maxKnowledgeQueries,
     candidateAttempts: 0,
     candidateSubmissionCalls: 0,
     timeToFirstCandidateSubmissionMs: undefined as number | undefined,
@@ -286,7 +296,7 @@ export async function runValidatorRepairWorker<CANDIDATE>(
     queryHashesByEpoch: new Map<number, Set<string>>([[1, new Set<string>()]]),
     searchClosedByEpoch: new Set<number>(
       hasActionableValidationDiagnostics(options.initialValidation)
-        && shouldCloseInitialRepairSearch(initialIssueSet, initialKnowledge)
+        && shouldCloseRepairSearch(initialIssueSet, initialKnowledge, 0)
         ? [1]
         : [],
     ),
@@ -359,7 +369,7 @@ export async function runValidatorRepairWorker<CANDIDATE>(
   };
 
   const searchReviewedKnowledge = tool({
-    description: "查询受审核SysML v2知识。仅在当前模型和Validator诊断不足以确定修复语义时调用；每个Validator修复轮次最多3次。",
+    description: "查询受审核SysML v2知识。仅在当前模型和Validator诊断不足以确定修复语义时调用；所有Repair轮次共享Run知识预算。",
     strict: true,
     inputSchema: searchReviewedKnowledgeInputSchema,
     execute: async (input, execution) => {
@@ -372,7 +382,7 @@ export async function runValidatorRepairWorker<CANDIDATE>(
       if (session.validationInFlight) {
         return { status: "validation_in_flight", roundEpoch: callEpoch };
       }
-      if (used >= KNOWLEDGE_QUERIES_PER_ROUND) {
+      if (!options.runResources && session.knowledgeQueries >= maxKnowledgeQueries) {
         return { status: "budget_exhausted", roundEpoch: callEpoch };
       }
       if (session.searchClosedByEpoch.has(callEpoch)) {
@@ -423,7 +433,7 @@ export async function runValidatorRepairWorker<CANDIDATE>(
             toolCallId: execution.toolCallId,
             roundEpoch: callEpoch,
             queryOrdinalThisRound,
-            maxQueriesThisRound: KNOWLEDGE_QUERIES_PER_ROUND,
+            maxQueriesThisRound: maxKnowledgeQueries,
             alreadyProvidedClaimIds: [...session.providedClaimIds],
             alreadyProvidedEvidenceIds: [...session.providedEvidenceIds],
             abortSignal: execution.abortSignal,
@@ -475,10 +485,9 @@ export async function runValidatorRepairWorker<CANDIDATE>(
       return {
         status,
         roundEpoch: callEpoch,
-        remainingKnowledgeQueriesThisRound: Math.max(
-          0,
-          KNOWLEDGE_QUERIES_PER_ROUND - (session.queriesByEpoch.get(callEpoch) ?? 0),
-        ),
+        remainingKnowledgeQueriesThisRound: options.runResources
+          ? options.runResources.knowledge.reviewedKnowledgeQueryBudget().remainingNewQueries
+          : Math.max(0, maxKnowledgeQueries - session.knowledgeQueries),
         result: projection.modelResult,
       };
       } finally {
@@ -510,6 +519,21 @@ export async function runValidatorRepairWorker<CANDIDATE>(
           ...targetAudit(options.targetBinding),
         });
         return candidateActionResult("candidate_invalid", "候选内容为空。", session, callEpoch);
+      }
+      if (Buffer.byteLength(input.content, "utf8") > maxCandidateArtifactBytes) {
+        session.attempts.push({
+          round: callEpoch,
+          status: "rejected",
+          rejectionReason: "candidate_artifact_too_large",
+          toolCallId: execution.toolCallId,
+          ...targetAudit(options.targetBinding),
+        });
+        return candidateActionResult(
+          "candidate_invalid",
+          "候选内容超过 UTF-8 Artifact 字节上限。",
+          session,
+          callEpoch,
+        );
       }
       if (session.validationInFlight) {
         return candidateActionResult("validation_in_flight", "已有候选正在验证。", session, callEpoch);
@@ -664,8 +688,14 @@ export async function runValidatorRepairWorker<CANDIDATE>(
         session.roundEpoch += 1;
         session.queriesByEpoch.set(session.roundEpoch, 0);
         session.queryHashesByEpoch.set(session.roundEpoch, new Set<string>());
+        if (hasActionableValidationDiagnostics(observation.validation)
+          && shouldCloseRepairSearch(nextIssueSet, initialKnowledge, session.consecutiveNoProgress)) {
+          session.searchClosedByEpoch.add(session.roundEpoch);
+        }
         if (session.terminalStopReason === "repair_no_progress") {
           // 相同可信诊断连续两轮没有变化时停止，避免为了用满上限继续消耗Validator。
+        } else if (session.roundEpoch > maxRepairRounds) {
+          session.terminalStopReason = "candidate_budget_exhausted";
         } else if (session.candidateAttempts >= options.maxCandidateAttempts) {
           session.terminalStopReason = "candidate_budget_exhausted";
         } else if (session.validatorCalls >= options.maxValidatorCalls) {
@@ -685,7 +715,9 @@ export async function runValidatorRepairWorker<CANDIDATE>(
           diagnosticDelta: diagnosticDeltaForModel(diagnosticDelta),
           candidateChangeSummary: candidateChangeSummaryForModel(candidateChangeSummary),
           remainingValidatorCalls: Math.max(0, options.maxValidatorCalls - session.validatorCalls),
-          remainingKnowledgeQueriesThisRound: KNOWLEDGE_QUERIES_PER_ROUND,
+          remainingKnowledgeQueriesThisRound: options.runResources
+            ? options.runResources.knowledge.reviewedKnowledgeQueryBudget().remainingNewQueries
+            : Math.max(0, maxKnowledgeQueries - session.knowledgeQueries),
         };
       } catch (error) {
         const stopReason = validatorFailureStopReason(error);
@@ -729,6 +761,8 @@ export async function runValidatorRepairWorker<CANDIDATE>(
     submit_candidate_for_validation: submitCandidateForValidation,
   };
 
+  const explicitToolChoice = options.explicitToolChoice !== false;
+
   let observedUsage = zeroUsage();
   const observedSteps: unknown[] = [];
   const providerCalls: Array<{
@@ -737,7 +771,6 @@ export async function runValidatorRepairWorker<CANDIDATE>(
     startedAt: string;
     completedAt?: string;
   }> = [];
-  const explicitToolChoice = options.explicitToolChoice !== false;
   const agent = new ToolLoopAgent({
     id: "validator-repair-worker-v1",
     model: options.model,
@@ -745,7 +778,7 @@ export async function runValidatorRepairWorker<CANDIDATE>(
     tools,
     ...(explicitToolChoice ? { toolChoice: "required" as const } : {}),
     stopWhen: [
-      stepCountIs(DEFAULT_MAX_STEPS),
+      stepCountIs(maxToolLoopSteps),
       () => Boolean(session.accepted || session.terminalStopReason),
     ],
     prepareStep: ({ messages, stepNumber }) => {
@@ -775,7 +808,6 @@ export async function runValidatorRepairWorker<CANDIDATE>(
           resumeKnowledgeEvidence: session.resumeKnowledgeEvidence,
           remainingCandidateAttempts: Math.max(0, options.maxCandidateAttempts - session.candidateAttempts),
           remainingValidatorCalls: Math.max(0, options.maxValidatorCalls - session.validatorCalls),
-          maxOutputTokens: options.maxOutputTokens,
         }),
         reasoning: "all",
         toolCalls: "all",
@@ -784,11 +816,15 @@ export async function runValidatorRepairWorker<CANDIDATE>(
       const estimatedInputTokens = estimateTokens(JSON.stringify(resumeMessages))
         + estimateTokens(options.instructions)
         + CONTEXT_SAFETY_TOKENS;
-      const projectedTokens = estimatedInputTokens + options.maxOutputTokens;
+      const visibleOutputReserveTokens = requiredVisibleOutputReserveTokens(
+        session.latestCandidateContent,
+      );
+      const projectedTokens = estimatedInputTokens + visibleOutputReserveTokens;
       const queriesThisRound = session.queriesByEpoch.get(session.roundEpoch) ?? 0;
-      const searchAvailable = (options.runResources?.isAllowed("knowledge_search") ?? true)
-        && options.knowledgeSearchEnabled
-        && queriesThisRound < KNOWLEDGE_QUERIES_PER_ROUND
+      const searchAvailable = options.knowledgeSearchEnabled
+        && (options.runResources
+          ? options.runResources.isNewReviewedKnowledgeQueryAllowed()
+          : session.knowledgeQueries < maxKnowledgeQueries)
         && !session.searchClosedByEpoch.has(session.roundEpoch);
       const activeTools: Array<keyof typeof tools> = searchAvailable
         ? ["search_reviewed_knowledge", "submit_candidate_for_validation"]
@@ -808,6 +844,7 @@ export async function runValidatorRepairWorker<CANDIDATE>(
           )).join("\n"),
           JSON.stringify(session.latestCandidateContent).slice(1, -1),
         ),
+        visibleOutputReserveTokens,
         projectedTokens,
         remainingTokens: options.contextWindowTokens - projectedTokens,
         knowledgeQueriesThisRound: queriesThisRound,
@@ -823,7 +860,7 @@ export async function runValidatorRepairWorker<CANDIDATE>(
         throw new RepairWorkerControlledStop("repair_context_budget_exhausted");
       }
       session.contextAdmissions.push(admission);
-      if (stepNumber >= DEFAULT_MAX_STEPS - 1) {
+      if (stepNumber >= maxToolLoopSteps - 1) {
         session.terminalStopReason = "step_budget_exhausted";
       }
       if (session.terminalStopReason || session.accepted) {
@@ -851,7 +888,6 @@ export async function runValidatorRepairWorker<CANDIDATE>(
       };
     },
     maxRetries: 0,
-    maxOutputTokens: options.maxOutputTokens,
     temperature: options.temperature ?? 0,
     reasoning: options.reasoning,
     providerOptions: options.providerOptions,
@@ -918,7 +954,6 @@ export async function runValidatorRepairWorker<CANDIDATE>(
         instructions: options.instructions,
         prompt: options.prompt,
         maxRetries: 0,
-        maxOutputTokens: options.maxOutputTokens,
         temperature: options.temperature ?? 0,
         reasoning: options.reasoning,
         toolChoice: explicitToolChoice ? "required" : "provider_managed",
@@ -940,7 +975,6 @@ export async function runValidatorRepairWorker<CANDIDATE>(
           instructions: options.instructions,
           prompt: options.prompt,
           maxRetries: 0,
-          maxOutputTokens: options.maxOutputTokens,
           temperature: options.temperature ?? 0,
           reasoning: options.reasoning,
           toolChoice: explicitToolChoice ? "required" : "provider_managed",
@@ -960,7 +994,6 @@ export async function runValidatorRepairWorker<CANDIDATE>(
           instructions: options.instructions,
           prompt: options.prompt,
           maxRetries: 0,
-          maxOutputTokens: options.maxOutputTokens,
           temperature: options.temperature ?? 0,
           reasoning: options.reasoning,
           toolChoice: explicitToolChoice ? "required" : "provider_managed",
@@ -999,7 +1032,7 @@ export async function runValidatorRepairWorker<CANDIDATE>(
       .filter((call) => call.invalid === true).length
   ), 0);
   if (!session.terminalStopReason) {
-    session.terminalStopReason = steps.length >= DEFAULT_MAX_STEPS
+    session.terminalStopReason = steps.length >= maxToolLoopSteps
       ? "step_budget_exhausted"
       : "model_terminated_without_candidate";
   }
@@ -1067,13 +1100,9 @@ function createWorkerResumeMessages(input: {
   resumeKnowledgeEvidence: readonly unknown[];
   remainingCandidateAttempts: number;
   remainingValidatorCalls: number;
-  maxOutputTokens: number;
 }): ModelMessage[] {
   const evidenceAdmission = repairEvidenceAdmission(input.issueSet);
-  const resultPriority = visibleResultReserveAdvisory(
-    input.latestCandidateContent,
-    input.maxOutputTokens,
-  );
+  const resultPriority = visibleResultReserveAdvisory(input.latestCandidateContent);
   const resumeView = {
     protocolVersion: "repair-worker-resume-view-v1",
     task: repairTaskForResume(input.prompt, input.latestCandidateContent),
@@ -1102,9 +1131,7 @@ function createWorkerResumeMessages(input: {
       shared: input.initialKnowledge
         ? knowledgeForResume(input.initialKnowledge, evidenceAdmission.sharedContent === "bounded_body")
         : undefined,
-      latestRepairQuery: evidenceAdmission.latestRepairQueryContent === "references_only"
-        ? input.resumeKnowledgeEvidence.map(projectRepairKnowledgeQueryReferences)
-        : input.resumeKnowledgeEvidence,
+      latestRepairQuery: input.resumeKnowledgeEvidence,
     },
     remainingBudget: {
       candidateAttempts: input.remainingCandidateAttempts,
@@ -1119,36 +1146,28 @@ function createWorkerResumeMessages(input: {
   }];
 }
 
-function visibleResultReserveAdvisory(
-  latestCandidateContent: string,
-  maxOutputTokens: number,
-): Record<string, unknown> {
+function requiredVisibleOutputReserveTokens(latestCandidateContent: string): number {
+  return estimateTokens(JSON.stringify({
+    type: "tool-call",
+    toolName: "submit_candidate_for_validation",
+    input: { content: latestCandidateContent },
+  }));
+}
+
+function visibleResultReserveAdvisory(latestCandidateContent: string): Record<string, unknown> {
   const estimatedCompleteToolJsonTokens = estimateTokens(JSON.stringify({
     type: "tool-call",
     toolName: "submit_candidate_for_validation",
     input: { content: latestCandidateContent },
   }));
-  const safetyMarginTokens = Math.max(
-    512,
-    Math.ceil(estimatedCompleteToolJsonTokens * 0.25),
-  );
-  const requiredVisibleOutputReserveTokens = estimatedCompleteToolJsonTokens + safetyMarginTokens;
-  const analysisStopBeforeOutputTokens = Math.max(
-    0,
-    maxOutputTokens - requiredVisibleOutputReserveTokens,
-  );
   return {
-    mode: "dynamic_complete_tool_result_reserve",
+    mode: "complete_tool_result_context_reserve",
     advisoryOnly: true,
     providerHardGuarantee: false,
     latestCandidateChars: latestCandidateContent.length,
-    maxOutputTokens,
     estimatedCompleteToolJsonTokens,
-    safetyMarginTokens,
-    requiredVisibleOutputReserveTokens,
-    analysisStopBeforeOutputTokens,
-    outputBudgetSufficient: requiredVisibleOutputReserveTokens <= maxOutputTokens,
-    instruction: `高效、简洁地完成当前最小修复。完整Tool JSON预计需要约${requiredVisibleOutputReserveTokens}个可见输出Token（含安全余量）；当预计剩余输出额度接近该值时，立即停止继续分析并调用submit_candidate_for_validation提交完整候选。该估算仅用于结果优先提示，不是Provider硬保证。`,
+    requiredVisibleOutputReserveTokens: estimatedCompleteToolJsonTokens,
+    instruction: `高效、简洁地完成当前最小修复，并优先调用submit_candidate_for_validation提交完整候选。完整Tool JSON按当前候选正文估算需要约${estimatedCompleteToolJsonTokens}个可见输出Token；该值只用于上下文准入和结果优先提示，不会作为Provider输出硬帽。`,
   };
 }
 
@@ -1214,10 +1233,9 @@ function repairEvidenceAdmission(issueSet: RepairIssueSet | undefined) {
     sharedContent: "references_only" as const,
     // Domain Search用于领域建模，不用于修复局部语言/Validator诊断。
     domainContent: "references_only" as const,
-    // syntax由Candidate与可信诊断即可确定；其他类别仅允许Repair主动查询到的最新有界证据正文。
-    latestRepairQueryContent: activeCategory === "syntax"
-      ? "references_only" as const
-      : "issue_directed_bounded_body" as const,
+    // 历史共享证据仍只保留引用；Repair针对当前问题簇主动查询后，
+    // 必须投影最新的有界正文，否则模型只看到Claim/覆盖标记而拿不到可执行语法证据。
+    latestRepairQueryContent: "issue_directed_bounded_body" as const,
   };
 }
 
@@ -1279,40 +1297,6 @@ function projectDomainEvidenceReferences(
       sourceIds: boundedReferenceList(research.sources.map((source) => source.sourceId)),
     })),
     truncated: domainEvidence.truncated || domainEvidence.researches.length > 8,
-  };
-}
-
-function projectRepairKnowledgeQueryReferences(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return { admission: "references_only", resultHash: hashContent(JSON.stringify(value)) };
-  }
-  const source = value as Record<string, unknown>;
-  const claims = Array.isArray(source.newClaims) ? source.newClaims : [];
-  const evidenceBlocks = Array.isArray(source.newEvidenceBlocks) ? source.newEvidenceBlocks : [];
-  return {
-    admission: "references_only",
-    projectionHash: hashContent(JSON.stringify(value)),
-    protocolVersion: boundedText(source.protocolVersion, 80),
-    coverage: boundedText(source.coverage, 32),
-    closureStatus: boundedText(source.closureStatus, 32),
-    resultHash: boundedText(source.resultHash, 160),
-    claimIds: boundedReferenceList(claims.flatMap((claim) => (
-      claim && typeof claim === "object" ? [(claim as Record<string, unknown>).claimId] : []
-    ))),
-    evidenceIds: boundedReferenceList(evidenceBlocks.flatMap((evidence) => (
-      evidence && typeof evidence === "object"
-        ? [(evidence as Record<string, unknown>).evidenceId]
-        : []
-    ))),
-    alreadyProvidedClaimIds: boundedReferenceList(
-      Array.isArray(source.alreadyProvidedClaimIds) ? source.alreadyProvidedClaimIds : [],
-    ),
-    alreadyProvidedEvidenceIds: boundedReferenceList(
-      Array.isArray(source.alreadyProvidedEvidenceIds) ? source.alreadyProvidedEvidenceIds : [],
-    ),
-    totalClaims: numericCount(source.totalClaims, claims.length),
-    totalEvidenceBlocks: numericCount(source.totalEvidenceBlocks, evidenceBlocks.length),
-    truncated: source.truncated === true,
   };
 }
 
@@ -1416,14 +1400,15 @@ function countTextOccurrences(value: string, search: string): number {
 
 function deriveRepairCandidateCharLimit<CANDIDATE>(
   options: ValidatorRepairWorkerOptions<CANDIDATE>,
+  maxCandidateArtifactBytes: number,
 ): number {
   const fixedTokens = estimateTokens(options.instructions)
-    + options.maxOutputTokens
+    + requiredVisibleOutputReserveTokens(options.initialCandidateContent)
     + CONTEXT_SAFETY_TOKENS
     + REPAIR_RESUME_VIEW_RESERVE_TOKENS;
   const remainingChars = Math.max(0, (options.contextWindowTokens - fixedTokens) * 4);
   // WorkerResumeView每步只携带一份最新Candidate，因此候选上限不再除以历史轮数。
-  return Math.min(MAX_REPAIR_CANDIDATE_CHARS, Math.floor(remainingChars));
+  return Math.min(maxCandidateArtifactBytes, Math.floor(remainingChars));
 }
 
 function diagnosticsForModel(validation: ValidationOutput): {
@@ -1462,7 +1447,9 @@ function candidateActionResult(
   session: {
     validatorCalls: number;
     maxValidatorCalls: number;
+    maxKnowledgeQueries: number;
     queriesByEpoch: Map<number, number>;
+    knowledgeQueries: number;
   },
   roundEpoch: number,
 ) {
@@ -1472,7 +1459,7 @@ function candidateActionResult(
     remainingValidatorCalls: Math.max(0, session.maxValidatorCalls - session.validatorCalls),
     remainingKnowledgeQueriesThisRound: Math.max(
       0,
-      KNOWLEDGE_QUERIES_PER_ROUND - (session.queriesByEpoch.get(roundEpoch) ?? 0),
+      session.maxKnowledgeQueries - session.knowledgeQueries,
     ),
   };
 }
@@ -1799,12 +1786,16 @@ function hasSharedReviewedEvidence(knowledge: KnowledgeView | undefined): boolea
   return knowledge.claims.length > 0 || knowledge.evidenceBlocks.length > 0;
 }
 
-function shouldCloseInitialRepairSearch(
+function shouldCloseRepairSearch(
   issueSet: RepairIssueSet | undefined,
   knowledge: KnowledgeView | undefined,
+  _consecutiveNoProgress: number,
 ): boolean {
-  if (issueSet?.activeCluster?.category === "syntax") return true;
-  // 没有服务端问题分类时保留旧兼容行为；有非syntax active cluster时允许Repair按问题主动查询。
+  // Active Cluster只限制当前修复范围，不代表Validator诊断已经提供可执行的SysML v2语法证据。
+  // 保持Search Tool可选，由Repair根据Prompt对明显词法/定界符错误直接修复，其他问题簇优先检索。
+  // 共享Run预算、COMPLETE/no_new_evidence和当轮Search Guard仍由服务端硬性关闭。
+  if (issueSet?.activeCluster) return false;
+  // 没有服务端问题分类时保留旧兼容行为；已有共享审核证据则不重复查询。
   return !issueSet?.activeCluster && hasSharedReviewedEvidence(knowledge);
 }
 
@@ -1812,6 +1803,10 @@ function isStepTimeoutError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   return /step timeout(?: of)?(?: \d+ms)? exceeded/iu.test(error.message)
     || error.name === "StepTimeoutError";
+}
+
+function boundedRepairOutputTokens(value: number | undefined, fallback: number): number {
+  return Math.min(64_000, Math.max(256, Number.isInteger(value) ? Number(value) : fallback));
 }
 
 function semanticEvidenceSpans(value: string): string[] {
@@ -1967,6 +1962,7 @@ export function projectRepairTelemetryCheckpointState(input: {
     readonly messageCountAfterSdkPrune: number;
     readonly messageCountAfterPrune: number;
     readonly latestCandidateOccurrences: number;
+    readonly visibleOutputReserveTokens: number;
     readonly projectedTokens: number;
     readonly remainingTokens: number;
     readonly knowledgeQueriesThisRound: number;
@@ -1992,6 +1988,7 @@ export function projectRepairTelemetryCheckpointState(input: {
     messageCountAfterSdkPrune: item.messageCountAfterSdkPrune,
     messageCountAfterPrune: item.messageCountAfterPrune,
     latestCandidateOccurrences: item.latestCandidateOccurrences,
+    visibleOutputReserveTokens: item.visibleOutputReserveTokens,
     projectedTokens: item.projectedTokens,
     remainingTokens: item.remainingTokens,
     knowledgeQueriesThisRound: item.knowledgeQueriesThisRound,
