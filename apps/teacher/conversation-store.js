@@ -123,7 +123,7 @@ function createMemoryConversationStore(options = {}) {
     },
     async listSuccessfulMessages(threadId, limit = 8) {
       return (state.messages.get(threadId) || [])
-        .filter((message) => message.status === 'succeeded')
+        .filter(modelConversationMessage)
         .slice(-Math.max(0, limit));
     },
     async createRun({ threadId, context, intent, route }) {
@@ -193,7 +193,12 @@ function createMemoryConversationStore(options = {}) {
           run: { ...existingRun },
           reused: true,
           response: responseMessage?.response,
-          workflowResume: buildMemoryWorkflowResume(state, checkpoint, context)
+          workflowResume: buildMemoryWorkflowResume(
+            state,
+            checkpoint,
+            context,
+            checkpoint.resumedRunId
+          )
         };
       }
       if (checkpoint.state !== 'waiting') {
@@ -241,7 +246,7 @@ function createMemoryConversationStore(options = {}) {
       return {
         run,
         reused: false,
-        workflowResume: buildMemoryWorkflowResume(state, checkpoint, context),
+        workflowResume: buildMemoryWorkflowResume(state, checkpoint, context, run.runId),
         sourceResponse: automaticContinuationSourceResponse(state, sourceRun)
       };
     },
@@ -913,15 +918,15 @@ function createPostgresConversationStore(options = {}) {
     },
     async listSuccessfulMessages(threadId, limit = 8) {
       const result = await pool.query(`
-        select message_id, thread_id, run_id, role, content, response, created_at
+        select message_id, thread_id, run_id, role, status, content, response, request_id, created_at
         from teacher_messages
-        where thread_id = $1 and status = 'succeeded'
+        where thread_id = $1 and (role = 'user' or status = 'succeeded')
         order by created_at desc, run_id desc,
           case role when 'assistant' then 0 when 'user' then 1 else 2 end asc,
           message_id desc
         limit $2
       `, [threadId, Math.max(0, Number(limit || 8))]);
-      return result.rows.reverse();
+      return result.rows.reverse().map(messageRow).filter(modelConversationMessage);
     },
     async createRun({ threadId, context, intent, route }) {
       const run = {
@@ -996,7 +1001,12 @@ function createPostgresConversationStore(options = {}) {
             where run_id = $1 and role = 'assistant' and status = 'succeeded'
             order by created_at desc limit 1
           `, [checkpoint.resumed_run_id]);
-          const workflowResume = await buildPostgresWorkflowResume(client, checkpoint, context);
+          const workflowResume = await buildPostgresWorkflowResume(
+            client,
+            checkpoint,
+            context,
+            checkpoint.resumed_run_id
+          );
           await client.query('commit');
           return {
             run: runRow(existingRun.rows[0]),
@@ -1038,7 +1048,7 @@ function createPostgresConversationStore(options = {}) {
               resumed_run_id = $4, resolved_at = now()
           where checkpoint_id = $1 and state = 'waiting'
         `, [checkpoint.checkpoint_id, run.requestId, responseMessageId, run.runId]);
-        const workflowResume = await buildPostgresWorkflowResume(client, checkpoint, context);
+        const workflowResume = await buildPostgresWorkflowResume(client, checkpoint, context, run.runId);
         const sourceResponse = await postgresAutomaticContinuationSourceResponse(client, checkpoint.source_run_id);
         await client.query('commit');
         return { run: { ...run, status: 'running' }, reused: false, workflowResume, sourceResponse };
@@ -3592,7 +3602,7 @@ function sanitizeModelCalls(value) {
   }));
 }
 
-async function buildPostgresWorkflowResume(client, checkpoint, context) {
+async function buildPostgresWorkflowResume(client, checkpoint, context, taskSourceRunId = checkpoint.source_run_id) {
   const sourceRun = await client.query('select provider_meta from teacher_runs where run_id = $1', [checkpoint.source_run_id]);
   const fastGate = sourceRun.rows[0]?.provider_meta?.agent?.fastGatePassThroughV2;
   if (!fastGate) throw clarificationCheckpointError('CLARIFICATION_CHECKPOINT_UNAVAILABLE', 409);
@@ -3605,7 +3615,9 @@ async function buildPostgresWorkflowResume(client, checkpoint, context) {
     order by started_at asc nulls last, tool_call_id asc
     limit 22
   `, [checkpoint.source_run_id]);
-  const taskSources = await buildPostgresTaskSources(client, checkpoint.source_run_id);
+  // 澄清恢复先创建新Run和当前用户消息，再从新Run向源Run回溯。这样当前回答扩展
+  // 已有TaskSourceSet，而不是只作为非规范conversation上下文到达模型。
+  const taskSources = await buildPostgresTaskSources(client, taskSourceRunId);
   const sourceStudentQuestion = checkpoint.includeSourceStudentQuestion === true
     ? taskSources[0]?.text || await postgresSourceStudentQuestion(client, checkpoint.source_run_id)
     : '';
@@ -4143,6 +4155,17 @@ function visibleFallbackBaselineMessage(state, message) {
   });
 }
 
+/**
+ * 历史页面仍保留所有可见消息；进入下一次模型调用的Transcript只接收已完成回答
+ * 和澄清问题。未完成的Assistant正文不是执行事实，续跑改由Checkpoint恢复。
+ */
+function modelConversationMessage(message) {
+  if (message?.role === 'user') return Boolean(String(message.content || '').trim());
+  if (message?.role !== 'assistant' || message?.status !== 'succeeded') return false;
+  const completion = String(message.response?.answerCompletionStatus || '').trim();
+  return !completion || completion === 'complete' || completion === 'waiting_for_clarification';
+}
+
 function buildMemoryTaskSources(state, sourceRunId) {
   const runs = [];
   let run = state.runs.get(safeId(sourceRunId));
@@ -4299,7 +4322,7 @@ function clarificationCheckpointError(code, statusCode) {
   return error;
 }
 
-function buildMemoryWorkflowResume(state, checkpoint, context) {
+function buildMemoryWorkflowResume(state, checkpoint, context, taskSourceRunId = checkpoint.sourceRunId) {
   const sourceRun = state.runs.get(checkpoint.sourceRunId);
   const fastGate = sourceRun?.providerMeta?.agent?.fastGatePassThroughV2;
   if (!fastGate) throw clarificationCheckpointError('CLARIFICATION_CHECKPOINT_UNAVAILABLE', 409);
@@ -4314,7 +4337,8 @@ function buildMemoryWorkflowResume(state, checkpoint, context) {
       input: entry.canonicalArgs || {},
       output: entry.resultPayload || entry.resultProjection || {}
     }));
-  const taskSources = buildMemoryTaskSources(state, checkpoint.sourceRunId);
+  // 与PostgreSQL路径保持同一事实：澄清回答属于新恢复Run的授权来源链。
+  const taskSources = buildMemoryTaskSources(state, taskSourceRunId);
   const sourceStudentQuestion = checkpoint.includeSourceStudentQuestion === true
     ? taskSources[0]?.text || boundedResumeQuestion((state.messages.get(sourceRun.threadId) || []).find((entry) => (
       entry.runId === checkpoint.sourceRunId && entry.role === 'user'

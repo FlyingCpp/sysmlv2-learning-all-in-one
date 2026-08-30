@@ -137,6 +137,8 @@ export function projectWorkerTaskView(
     taskRevision: task.revision,
     question: resources.input.question,
     questionHash: task.questionHash,
+    conversationMessages: resources.input.conversationMessages,
+    taskSources: resources.input.taskSources,
     authorizationScopeRef: resources.input.authorizationScopeRef,
     target: task.target,
     baseline: task.baseline,

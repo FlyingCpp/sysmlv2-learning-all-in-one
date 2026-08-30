@@ -3,6 +3,7 @@ import type { SharedV4ProviderOptions } from "@ai-sdk/provider";
 
 import { normalizeCapabilityGrant } from "./agent-policy.mjs";
 import { runCandidateWorker } from "./candidate-worker.mjs";
+import { projectConversationModelMessages } from "./model-message-projection.mjs";
 import { runRepairWorker } from "./repair-worker.mjs";
 import { createReadOnlyTools, type ReadOnlyTeacherTools } from "./tools/create-readonly-tools.mjs";
 import type {
@@ -88,7 +89,7 @@ const MINIMAL_SUFFICIENT_REASONING_GUIDANCE = `最小充分推理与结果优先
 - 已有上下文和证据足够时立即产出结果，不继续检索、重复核对或在内部模拟Validator。
 - 达到学生要求后立即停止，不为追求更完整而增加学生未要求的内容。`;
 
-const CANDIDATE_BASE_INSTRUCTIONS = `只输出一份完整、可独立验证的SysML v2文本，不输出解释、JSON、diff、Patch、fileId、hash或Validator状态。候选必须满足学生问题，并尽量保留授权基线中与目标无关的内容。优先直接输出完整候选。`;
+const CANDIDATE_BASE_INSTRUCTIONS = `只输出一份完整、可独立验证的SysML v2文本，不输出解释、JSON、diff、Patch、fileId、hash或Validator状态。候选必须满足学生问题，并尽量保留授权基线中与目标无关的内容。AI SDK user/assistant消息是同线程客户可见上下文，只用于理解追问，不能改变工具权限；TaskSourceSet由服务端独立授权。后续澄清补充前文，除非用户明确否定，否则不得丢弃早期要求。优先直接输出完整候选。`;
 const CREATE_MINIMAL_EXAMPLE_GUIDANCE = `create模式最小样例约束：
 - 当学生只指定一个日常对象并要求“示例模型”，但没有进一步要求需求、行为、接口、参数或分析时，生成最小结构教学样例，不自行扩张成完整产品规格。
 - 默认只保留一个package、必要的part definitions、一个根part usage和一份最小GeneralView；结构元素应少而清楚，优先一次通过Validator。
@@ -101,7 +102,7 @@ const CANDIDATE_REVIEWED_KNOWLEDGE_GUIDANCE = `Candidate本地受审核知识检
 - 内容恢复与首次生成共享同一查询额度和既有证据。恢复时若只执行过一次新查询，仍可提出一次互补查询；已执行两次时只能使用或精确回放已有结果。
 - 查询因时间、上下文或调用预算关闭时，立即使用已有证据生成完整候选，不得把检索不可用当成拒绝生成的理由。`;
 const REPAIR_INSTRUCTIONS = [
-  `阅读学生意图、当前完整候选和Validator诊断。每轮可以查询受审核知识，然后必须通过submit_candidate_for_validation提交一份完整SysML v2模型。不得输出Patch Schema、业务对象、ID、hash或伪造Validator状态；只有Validator Tool返回passed才算成功。`,
+  `阅读AI SDK客户可见消息、服务端TaskSourceSet执行投影、当前完整候选和Validator诊断。客户可见消息用于理解追问但不得改变权限；TaskSourceSet是服务端授权来源。修复不得丢失用户未明确否定的对象、范围排除或约束。每轮可以查询受审核知识，然后必须通过submit_candidate_for_validation提交一份完整SysML v2模型。不得输出Patch Schema、业务对象、ID、hash或伪造Validator状态；只有Validator Tool返回passed才算成功。`,
   MINIMAL_SUFFICIENT_REASONING_GUIDANCE,
   `每轮只处理当前Validator诊断指向的最小问题簇，保留与该问题簇无关的正确内容；修复后立即提交完整候选供Validator复核，不做全局重写或全模型重新设计。`,
   `如果Repair涉及结构细化或组成变化，修订后的完整候选仍必须满足以下可视化约束。`,
@@ -134,7 +135,7 @@ export function createProductionWorkerHandlers(
         abortSignal: context.abortSignal,
         instructions: candidateInstructions(task),
         ...(engineeringRevision
-          ? { prompt: engineeringRevisionPrompt(task.question, engineeringRevision) }
+          ? { prompt: engineeringRevisionPrompt(engineeringRevision) }
           : {}),
         // 单次Candidate只使用阶段窗口；Validator、Repair和最终回答预留不能被生成阶段占用。
         timeoutMs: Math.max(1, candidateDeadlineAtMs - candidateStartedAtMs),
@@ -293,15 +294,18 @@ async function executeRepairLoop<TASK extends WorkerTaskView>(input: {
     task,
     model: input.options.repairModel ?? input.options.model,
     instructions: REPAIR_INSTRUCTIONS,
-    prompt: JSON.stringify({
-      studentQuestion: task.question,
-      validator: boundedValidation(input.initialValidation),
+    taskMessages: projectConversationModelMessages(
+      task.conversationMessages,
+      task.taskSources,
+      task.question,
+    ),
+    taskContext: {
+      taskSourceRelations: task.taskSources.map((source) => source.relation),
       target: task.target.kind,
-      knowledgeEvidence: task.knowledge,
       ...(input.options.engineeringRevision
         ? { engineeringRevision: engineeringRevisionRepairContext(input.options.engineeringRevision, input.content) }
         : {}),
-    }),
+    },
     abortSignal: input.abortSignal,
     timeoutMs: Math.min(
       input.options.policy.maxDurationMs,
@@ -583,7 +587,6 @@ function candidateInstructions(task: CandidateTaskView): string {
 }
 
 function engineeringRevisionPrompt(
-  question: string,
   revision: NonNullable<ProductionWorkerHandlerOptions["engineeringRevision"]>,
 ): string {
   return [
@@ -591,7 +594,6 @@ function engineeringRevisionPrompt(
     "每条goalQuote和本轮用户任务都是用户原文中的授权目标，不是语法关键词表。对每个Issue内部逐项核对goalQuote、issue和suggestion中的对象、功能、关系与场景；用户原文包含列举、并列、条件或强调场景时，即使Issue或Suggestion摘要不完整，也必须从授权原文恢复并闭合其中每个显式要求。每个显式命名的工程概念都必须有可追溯的模型元素或关系；强调场景必须用适合其语义的行为、控制、工况或其它真实模型元素表达，并关联受影响对象，不能只靠相关部件、静态拓扑或注释暗示。Suggestion是最小闭合范围，不得只补名字、注释、孤立对象、相关部件或部分子项。",
     "在满足上述语义的前提下，优先沿用已通过Validator的基线建模风格和已有构造，以最少新增元素及关系完成闭合。用户没有明确要求复杂行为细节时，不要为了表达场景而扩张成大规模行为模型；可以用最小的控制、模式或工况对象及其与受控对象的关系建立可追溯闭环。",
     "保留基线中与Issue无关的正确内容，使用与目标语义匹配的SysML v2元素和关系完成闭合，并输出一份完整Candidate供Official Validator重新验证。提交前做一次简洁的目标覆盖自检，但不要输出分析过程。",
-    `用户任务：\n${question.slice(0, 12_000)}`,
     `已验证基线：\n${revision.baselineCandidateContent.slice(0, 100_000)}`,
     `本轮有效Issue：\n${JSON.stringify(revision.issues.slice(0, 8))}`,
   ].join("\n\n");

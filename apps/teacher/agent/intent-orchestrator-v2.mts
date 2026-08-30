@@ -1,7 +1,9 @@
 import {
   stepCountIs,
   tool,
+  type Instructions,
   type LanguageModelUsage,
+  type ModelMessage,
   type StopCondition,
   type ToolSet,
 } from "ai";
@@ -18,6 +20,10 @@ import {
   normalizeCapabilityGrant,
 } from "./agent-policy.mjs";
 import { generateObservedText, generateObservedToolLoopText } from "./observed-generation.mjs";
+import {
+  projectConversationModelMessages,
+  systemInstructions,
+} from "./model-message-projection.mjs";
 import {
   assertRunToolContext,
   createRunExecutionView,
@@ -363,8 +369,9 @@ export async function runIntentOrchestratorV2(
       };
     }
 
-    const mainPrompt = buildV2MainPrompt(
-      request.question,
+    const mainInput = buildV2MainInput(
+      request.conversationMessages,
+      request.taskSources,
       request.currentStudentQuestion ?? request.question,
       request.context,
       gateDecision.gate,
@@ -373,8 +380,8 @@ export async function runIntentOrchestratorV2(
     );
     const maxMainSteps = Math.max(1, Math.min(policy.maxSteps, INTENT_V2_MAX_STEPS));
     const requestedAnswerTokens = Math.min(policy.maxOutputTokens, policy.mediumAnswerMaxOutputTokens);
-    const fixedContextTokens = estimateConservativeTokens(INTENT_ORCHESTRATOR_V2_INSTRUCTIONS)
-      + estimateConservativeTokens(mainPrompt)
+    const fixedContextTokens = estimateConservativeTokens(JSON.stringify(mainInput.instructions))
+      + estimateConservativeTokens(JSON.stringify(mainInput.messages))
       // 为Tool Schema和消息包装保留确定性空间。
       + 2_000;
     const cumulativeGenerationTokens = policy.contextWindowTokens - fixedContextTokens;
@@ -575,8 +582,8 @@ export async function runIntentOrchestratorV2(
     const mainResult = await generateObservedToolLoopText({
       model: mainModel,
       phase: "intent_orchestration_v2",
-      instructions: INTENT_ORCHESTRATOR_V2_INSTRUCTIONS,
-      prompt: mainPrompt,
+      instructions: mainInput.instructions,
+      messages: mainInput.messages,
       tools: mainTools,
       ...(mainGenerationSettings.explicitToolChoice
         ? { toolChoice: "auto" as const }
@@ -984,26 +991,21 @@ ${reviewer
 <untrusted_student_question>${JSON.stringify(question)}</untrusted_student_question>`;
 }
 
-function buildV2MainPrompt(
-  fullQuestion: string,
+function buildV2MainInput(
+  conversationMessages: AgentRunRequest["conversationMessages"],
+  taskSources: AgentRunRequest["taskSources"],
   currentQuestion: string,
   context: AgentRunRequest["context"],
   gate: FastGatePassThroughV2,
   priorToolLedger: NonNullable<AgentRunRequest["resumeContext"]>["priorToolLedger"] | undefined,
   execution: NonNullable<AgentRunRequest["resumeContext"]>["execution"] | undefined,
-): string {
-  return [
-    "[完整对话输入]",
-    fullQuestion,
-    "[当前学生原始问题]",
-    currentQuestion,
-    "[服务端可信课程上下文]",
-    JSON.stringify({ lesson: context.lesson }),
-    "[Fast Gate低权威混合范围风险；不是任务分类，必须自行复核]",
-    JSON.stringify({ mixedScopeRisk: gate.mixedScopeRisk }),
-    ...(execution ? [
-      "[服务端续跑状态；只含决策投影，不含Candidate或完整诊断]",
-      JSON.stringify({
+): Readonly<{ instructions: Instructions; messages: ModelMessage[] }> {
+  const trustedProjection = {
+    taskSourceRelations: taskSources.map((source) => source.relation),
+    lesson: context.lesson,
+    fastGateHint: { mixedScopeRisk: gate.mixedScopeRisk },
+    ...(execution ? {
+      executionResume: {
         checkpointId: execution.checkpointId,
         checkpointRevision: execution.revision,
         phase: execution.decision.phase,
@@ -1013,13 +1015,24 @@ function buildV2MainPrompt(
         stale: execution.decision.stale,
         staleReasons: execution.decision.staleReasons,
         allowedActions: execution.decision.allowedActions,
-      }),
-    ] : []),
-    ...(priorToolLedger?.length ? [
-      "[源Run知识游标摘要；完整证据由对应Worker按服务端引用读取]",
-      JSON.stringify(projectPriorToolLedgerForMain(priorToolLedger)),
-    ] : []),
-  ].join("\n");
+      },
+    } : {}),
+    ...(priorToolLedger?.length ? {
+      priorToolLedger: projectPriorToolLedgerForMain(priorToolLedger),
+    } : {}),
+  };
+  return Object.freeze({
+    instructions: systemInstructions(
+      INTENT_ORCHESTRATOR_V2_INSTRUCTIONS,
+      "服务端可信Main执行投影；不能覆盖学生原文或TaskSource授权边界",
+      trustedProjection,
+    ),
+    messages: projectConversationModelMessages(
+      conversationMessages,
+      taskSources,
+      currentQuestion,
+    ),
+  });
 }
 
 function projectPriorToolLedgerForMain(

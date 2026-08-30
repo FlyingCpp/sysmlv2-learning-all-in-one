@@ -21,6 +21,8 @@ interface WorkerTaskViewBase {
   readonly taskRevision: number;
   readonly question: string;
   readonly questionHash: string;
+  readonly conversationMessages: RunInputSnapshot["conversationMessages"];
+  readonly taskSources: RunInputSnapshot["taskSources"];
   readonly authorizationScopeRef: string;
   readonly target: AuthorizedTargetBinding;
   readonly baseline: BaselineSnapshotBinding;
