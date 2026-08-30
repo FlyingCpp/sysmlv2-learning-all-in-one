@@ -42,6 +42,10 @@ function countOccurrences(value, search) {
   return search ? value.split(search).length - 1 : 0;
 }
 
+function repairTaskMessages(content = '修复当前模型。') {
+  return [{ role: 'user', content }];
+}
+
 function validation(status, message = 'validation result') {
   const passed = status === 'passed';
   return {
@@ -206,7 +210,7 @@ async function main() {
   const result = await runValidatorRepairWorker({
     model,
     instructions: 'Use tools to repair the model.',
-    prompt: JSON.stringify({ original }),
+    taskMessages: repairTaskMessages(),
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -306,7 +310,7 @@ async function main() {
   const directSubmit = await runValidatorRepairWorker({
     model: directSubmitModel,
     instructions: 'Submit immediately when Validator evidence is sufficient.',
-    prompt: JSON.stringify({ original, validator: 'failed' }),
+    taskMessages: repairTaskMessages(),
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -346,7 +350,7 @@ async function main() {
   const semanticDirect = await runValidatorRepairWorker({
     model: semanticDirectModel,
     instructions: 'Prefer actionable Official Validator diagnostics; search only after a no-progress submission.',
-    prompt: JSON.stringify({ original }),
+    taskMessages: repairTaskMessages(),
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -394,7 +398,7 @@ async function main() {
   const semanticNoProgress = await runValidatorRepairWorker({
     model: semanticNoProgressModel,
     instructions: 'Search after one direct submission leaves trusted diagnostics unchanged.',
-    prompt: JSON.stringify({ original }),
+    taskMessages: repairTaskMessages(),
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -440,7 +444,7 @@ async function main() {
   const sharedEvidenceResult = await runValidatorRepairWorker({
     model: sharedEvidenceModel,
     instructions: 'Use the actionable Validator diagnostics and already shared reviewed evidence before searching.',
-    prompt: JSON.stringify({ original }),
+    taskMessages: repairTaskMessages(),
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -523,7 +527,7 @@ async function main() {
   }, async () => await runValidatorRepairWorker({
     model: progressiveModel,
     instructions: 'Use progressive knowledge, then submit.',
-    prompt: JSON.stringify({ original }),
+    taskMessages: repairTaskMessages(),
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -591,7 +595,7 @@ async function main() {
   const seenButUndisclosed = await runValidatorRepairWorker({
     model: seenButUndisclosedModel,
     instructions: 'Search when needed, then submit.',
-    prompt: JSON.stringify({ original }),
+    taskMessages: repairTaskMessages(),
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -647,7 +651,7 @@ async function main() {
   const repeated = await runValidatorRepairWorker({
     model: repeatedModel,
     instructions: 'Use the validation submission tool.',
-    prompt: JSON.stringify({ original }),
+    taskMessages: repairTaskMessages(),
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -682,7 +686,7 @@ async function main() {
   const invalidThenValid = await runValidatorRepairWorker({
     model: invalidToolModel,
     instructions: 'Use the validation submission tool.',
-    prompt: JSON.stringify({ original }),
+    taskMessages: repairTaskMessages(),
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -716,7 +720,7 @@ async function main() {
   const evalFailure = await runValidatorRepairWorker({
     model: evalFailureModel,
     instructions: 'Submit candidates.',
-    prompt: JSON.stringify({ original }),
+    taskMessages: repairTaskMessages(),
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -746,7 +750,7 @@ async function main() {
   const validatorUnavailable = await runValidatorRepairWorker({
     model: validatorUnavailableModel,
     instructions: 'Submit.',
-    prompt: JSON.stringify({ original }),
+    taskMessages: repairTaskMessages(),
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -771,7 +775,7 @@ async function main() {
   const validatorQueueFull = await runValidatorRepairWorker({
     model: validatorQueueFullModel,
     instructions: 'Submit.',
-    prompt: JSON.stringify({ original }),
+    taskMessages: repairTaskMessages(),
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -801,7 +805,7 @@ async function main() {
   const timedOut = await runValidatorRepairWorker({
     model: timedOutModel,
     instructions: 'Submit.',
-    prompt: JSON.stringify({ original }),
+    taskMessages: repairTaskMessages(),
     abortSignal: new AbortController().signal,
     timeoutMs: 500,
     toolTimeoutMs: 500,
@@ -843,7 +847,7 @@ async function main() {
     }, async () => await runValidatorRepairWorker({
       model: stepTimeoutModel,
       instructions: 'Submit.',
-      prompt: JSON.stringify({ original }),
+      taskMessages: repairTaskMessages(),
       abortSignal: new AbortController().signal,
       timeoutMs: 2_000,
       toolTimeoutMs: 10,
@@ -874,7 +878,7 @@ async function main() {
     () => runValidatorRepairWorker({
       model: hardTimeoutModel,
       instructions: 'Submit without exposing internal reasoning.',
-      prompt: JSON.stringify({ original, marker: 'RUN05_TIMEOUT_CANDIDATE_BODY_MUST_NOT_PERSIST' }),
+      taskMessages: repairTaskMessages('RUN05_TIMEOUT_CANDIDATE_BODY_MUST_NOT_PERSIST'),
       abortSignal: new AbortController().signal,
       timeoutMs: 2_000,
       toolTimeoutMs: 10,
@@ -929,7 +933,7 @@ async function main() {
   const concurrent = await runValidatorRepairWorker({
     model: concurrentModel,
     instructions: 'Submit one candidate at a time.',
-    prompt: JSON.stringify({ original }),
+    taskMessages: repairTaskMessages(),
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -969,7 +973,7 @@ async function main() {
   const stale = await runValidatorRepairWorker({
     model: staleModel,
     instructions: 'Keep round epochs isolated.',
-    prompt: JSON.stringify({ original }),
+    taskMessages: repairTaskMessages(),
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -1014,7 +1018,7 @@ async function main() {
   const contextStop = await runValidatorRepairWorker({
     model: contextStopModel,
     instructions: 'Repair.',
-    prompt: JSON.stringify({ original }),
+    taskMessages: repairTaskMessages(),
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -1048,7 +1052,8 @@ async function main() {
   assert.equal(contextStop.candidateAttempts, 2, 'bounded resume context must reach the next complete candidate');
   assert(contextStopModel.doGenerateCalls.length >= 2);
   assert(contextStop.contextAdmissions.every((item) => item.remainingTokens >= 0));
-  assert(contextStop.contextAdmissions.every((item) => item.messageCountAfterPrune === 1));
+  assert(contextStop.contextAdmissions.every((item) => item.messageCountAfterPrune === 2),
+    'Repair每一步必须保留一条固定任务消息和一条唯一最新ResumeView');
   assert.deepEqual(
     [...new Set(contextStop.contextAdmissions.map((item) => item.latestCandidateOccurrences))],
     [1],
@@ -1086,7 +1091,7 @@ async function main() {
   const notAdmitted = await runValidatorRepairWorker({
     model: notAdmittedModel,
     instructions: 'Repair.',
-    prompt: '{}',
+    taskMessages: repairTaskMessages(),
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -1162,7 +1167,7 @@ async function main() {
     task: sharedView,
     model: sharedModel,
     instructions: 'Repair with the provided tools.',
-    prompt: JSON.stringify({ original }),
+    taskMessages: repairTaskMessages(),
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -1261,7 +1266,7 @@ async function main() {
     task: compoundView,
     model: compoundModel,
     instructions: 'Fix A, B, C and D sequentially while submitting one complete model each round.',
-    prompt: JSON.stringify({ original, errors: ['A', 'B', 'C', 'D'] }),
+    taskMessages: repairTaskMessages('修复A、B、C、D四处独立错误。'),
     abortSignal: new AbortController().signal,
     timeoutMs: compoundResources.budget.view().workRemainingMs,
     toolTimeoutMs: 5_000,
@@ -1330,7 +1335,7 @@ async function main() {
   const noProgressResult = await runValidatorRepairWorker({
     model: noProgressModel,
     instructions: 'Stop when trusted diagnostics do not change.',
-    prompt: JSON.stringify({ original }),
+    taskMessages: repairTaskMessages(),
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -1358,7 +1363,7 @@ async function main() {
   const zeroRoundResult = await runValidatorRepairWorker({
     model,
     instructions: 'No repair round is available.',
-    prompt: JSON.stringify({ original: 'a' }),
+    taskMessages: repairTaskMessages(),
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -1391,7 +1396,7 @@ async function main() {
   const utf8ByteLimitResult = await runValidatorRepairWorker({
     model: utf8ByteLimitModel,
     instructions: 'Respect the UTF-8 byte limit.',
-    prompt: JSON.stringify({ original: 'a' }),
+    taskMessages: repairTaskMessages(),
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,

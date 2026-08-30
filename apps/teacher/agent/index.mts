@@ -20,6 +20,11 @@ export {
   generateObservedText,
   generateObservedToolLoopText,
 } from "./observed-generation.mjs";
+export {
+  projectConversationModelMessages,
+  projectFinalAnswerModelMessages,
+  systemInstructions,
+} from "./model-message-projection.mjs";
 export type {
   OpenAICompatibleAgentProviderConfig,
   OpenAICompatibleAgentRuntimeOptions,

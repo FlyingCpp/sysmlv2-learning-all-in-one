@@ -65,7 +65,8 @@ export type RepairWorkerTerminalStopReason =
 export interface ValidatorRepairWorkerOptions<CANDIDATE> {
   model: LanguageModel;
   instructions: string;
-  prompt: string;
+  taskMessages: readonly ModelMessage[];
+  taskContext?: unknown;
   abortSignal: AbortSignal;
   timeoutMs: number;
   toolTimeoutMs: number;
@@ -241,6 +242,7 @@ class RepairWorkerControlledStop extends Error {
 export async function runValidatorRepairWorker<CANDIDATE>(
   options: ValidatorRepairWorkerOptions<CANDIDATE>,
 ): Promise<ValidatorRepairWorkerResult<CANDIDATE>> {
+  const taskMessages = [...options.taskMessages];
   const sharedTask = resolveSharedRepairTask(options);
   const initialKnowledge = options.initialKnowledge
     ?? options.taskView?.knowledge;
@@ -796,7 +798,8 @@ export async function runValidatorRepairWorker<CANDIDATE>(
       });
       const resumeMessages = pruneMessages({
         messages: createWorkerResumeMessages({
-          prompt: options.prompt,
+          taskMessages,
+          taskContext: options.taskContext,
           targetBinding: options.targetBinding,
           roundEpoch: session.roundEpoch,
           latestCandidateContent: session.latestCandidateContent,
@@ -920,7 +923,21 @@ export async function runValidatorRepairWorker<CANDIDATE>(
   const generationStartedAt = new Date().toISOString();
   try {
     generated = await agent.generate({
-      prompt: options.prompt,
+      messages: createWorkerResumeMessages({
+        taskMessages,
+        taskContext: options.taskContext,
+        targetBinding: options.targetBinding,
+        roundEpoch: session.roundEpoch,
+        latestCandidateContent: session.latestCandidateContent,
+        latestCandidateHash: session.latestCandidateHash,
+        issueSet: session.latestIssueSet,
+        diagnosticDelta: session.latestDiagnosticDelta,
+        changeSummary: session.latestCandidateChangeSummary,
+        initialKnowledge,
+        resumeKnowledgeEvidence: session.resumeKnowledgeEvidence,
+        remainingCandidateAttempts: Math.max(0, options.maxCandidateAttempts - session.candidateAttempts),
+        remainingValidatorCalls: Math.max(0, options.maxValidatorCalls - session.validatorCalls),
+      }),
       abortSignal: options.abortSignal,
       ...(runtimeContext ? { runtimeContext } : {}),
       timeout: {
@@ -952,7 +969,7 @@ export async function runValidatorRepairWorker<CANDIDATE>(
       phase: "validator_repair_worker",
       request: {
         instructions: options.instructions,
-        prompt: options.prompt,
+        messages: taskMessages,
         maxRetries: 0,
         temperature: options.temperature ?? 0,
         reasoning: options.reasoning,
@@ -973,7 +990,7 @@ export async function runValidatorRepairWorker<CANDIDATE>(
         phase: "validator_repair_worker",
         request: {
           instructions: options.instructions,
-          prompt: options.prompt,
+          messages: taskMessages,
           maxRetries: 0,
           temperature: options.temperature ?? 0,
           reasoning: options.reasoning,
@@ -992,7 +1009,7 @@ export async function runValidatorRepairWorker<CANDIDATE>(
         phase: "validator_repair_worker",
         request: {
           instructions: options.instructions,
-          prompt: options.prompt,
+          messages: taskMessages,
           maxRetries: 0,
           temperature: options.temperature ?? 0,
           reasoning: options.reasoning,
@@ -1088,7 +1105,8 @@ export async function runValidatorRepairWorker<CANDIDATE>(
 }
 
 function createWorkerResumeMessages(input: {
-  prompt: string;
+  taskMessages: readonly ModelMessage[];
+  taskContext?: unknown;
   targetBinding: ValidatorRepairWorkerOptions<unknown>["targetBinding"];
   roundEpoch: number;
   latestCandidateContent: string;
@@ -1105,7 +1123,7 @@ function createWorkerResumeMessages(input: {
   const resultPriority = visibleResultReserveAdvisory(input.latestCandidateContent);
   const resumeView = {
     protocolVersion: "repair-worker-resume-view-v1",
-    task: repairTaskForResume(input.prompt, input.latestCandidateContent),
+    ...(input.taskContext === undefined ? {} : { taskContext: input.taskContext }),
     targetBinding: input.targetBinding,
     roundEpoch: input.roundEpoch,
     control: {
@@ -1140,10 +1158,13 @@ function createWorkerResumeMessages(input: {
     resultPriority,
     requiredNextAction: "修复active cluster并通过submit_candidate_for_validation提交一份完整候选；不要提交Patch、diff或业务状态。",
   };
-  return [{
-    role: "user",
-    content: `Repair Worker续跑状态（服务端可信投影）：\n${JSON.stringify(resumeView)}`,
-  }];
+  return [
+    ...input.taskMessages,
+    {
+      role: "user",
+      content: `Repair Worker续跑状态（服务端可信投影）：\n${JSON.stringify(resumeView)}`,
+    },
+  ];
 }
 
 function requiredVisibleOutputReserveTokens(latestCandidateContent: string): number {
@@ -1169,52 +1190,6 @@ function visibleResultReserveAdvisory(latestCandidateContent: string): Record<st
     requiredVisibleOutputReserveTokens: estimatedCompleteToolJsonTokens,
     instruction: `高效、简洁地完成当前最小修复，并优先调用submit_candidate_for_validation提交完整候选。完整Tool JSON按当前候选正文估算需要约${estimatedCompleteToolJsonTokens}个可见输出Token；该值只用于上下文准入和结果优先提示，不会作为Provider输出硬帽。`,
   };
-}
-
-function repairTaskForResume(prompt: string, latestCandidateContent: string): Record<string, unknown> {
-  const result: Record<string, unknown> = { promptHash: hashContent(prompt) };
-  try {
-    const parsed = JSON.parse(prompt) as unknown;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return result;
-    const source = parsed as Record<string, unknown>;
-    for (const key of [
-      "studentQuestion",
-      "question",
-      "goal",
-      "requirements",
-      "target",
-      "errors",
-      "engineeringRevision",
-    ] as const) {
-      const value = source[key];
-      if (typeof value === "string") {
-        result[key] = boundedText(removeCandidateCopy(value, latestCandidateContent), 4_000);
-      } else if (Array.isArray(value)) {
-        result[key] = value.slice(0, 20)
-          .map((item) => boundedText(removeCandidateCopy(String(item ?? ""), latestCandidateContent), 1_000))
-          .filter(Boolean);
-      } else if (value && typeof value === "object") {
-        result[key] = boundedJsonValue(value, 4_000, latestCandidateContent);
-      }
-    }
-  } catch {
-    // 原始Prompt可能包含完整旧候选；续跑只保留hash，禁止将其作为第二份Candidate滚入上下文。
-  }
-  return result;
-}
-
-function boundedJsonValue(value: unknown, maxChars: number, latestCandidateContent: string): unknown {
-  const serialized = JSON.stringify(value);
-  if (latestCandidateContent && serialized.includes(latestCandidateContent)) {
-    return { candidateCopyRemoved: true, contentHash: hashContent(serialized) };
-  }
-  if (serialized.length <= maxChars) return value;
-  return { truncated: true, contentHash: hashContent(serialized) };
-}
-
-function removeCandidateCopy(value: string, latestCandidateContent: string): string {
-  if (!latestCandidateContent || !value.includes(latestCandidateContent)) return value;
-  return value.split(latestCandidateContent).join("[latest candidate omitted; use latestCandidate.content]");
 }
 
 function repairEvidenceAdmission(issueSet: RepairIssueSet | undefined) {

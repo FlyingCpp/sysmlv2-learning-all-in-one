@@ -395,6 +395,16 @@ export const agentRunRequestSchema = z
     runId: opaqueIdSchema,
     question: z.string().trim().min(1).max(20_000),
     currentStudentQuestion: z.string().trim().min(1).max(8_000).optional(),
+    conversationMessages: z.array(z.discriminatedUnion("role", [
+      z.object({
+        role: z.literal("user"),
+        content: z.string().trim().min(1).max(8_000),
+      }).strict(),
+      z.object({
+        role: z.literal("assistant"),
+        content: z.string().trim().min(1).max(8_000),
+      }).strict(),
+    ])).max(8).default([]),
     taskSources: z.array(taskSourceSchema).max(8).default([]),
     operation: z.enum(["repair"]).optional(),
     evaluationMode: z.enum(["local_benchmark"]).optional(),

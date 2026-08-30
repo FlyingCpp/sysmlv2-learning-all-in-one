@@ -23,6 +23,8 @@ export type RunParticipant = "main" | TaskWorkerType;
 export interface RunInputSnapshot {
   readonly question: string;
   readonly questionHash: string;
+  readonly conversationMessages: readonly Readonly<AgentRunRequest["conversationMessages"][number]>[];
+  readonly taskSources: readonly Readonly<AgentRunRequest["taskSources"][number]>[];
   readonly threadId: string;
   readonly authorizationScopeRef: string;
   readonly lesson: Readonly<{
@@ -1075,6 +1077,11 @@ function createRunInputSnapshot(request: AgentRunRequest): RunInputSnapshot {
     question,
     // 与hashCanonicalValue(string)一致：字符串先按JSON规范序列化再哈希。
     questionHash: stableHash(question),
+    // 客户可见角色消息只作为非规范理解上下文；TaskSourceSet继续独立承担授权语义。
+    conversationMessages: Object.freeze(request.conversationMessages.map((message) => Object.freeze({ ...message }))),
+    // TaskSourceSet已由Agent Adapter按服务端授权范围和Hash绑定规则形成；
+    // Run内只冻结并投影，不再让Main或Worker重新抽取一套事实对象。
+    taskSources: Object.freeze(request.taskSources.map((source) => Object.freeze({ ...source }))),
     threadId: request.context.threadId,
     authorizationScopeRef: stableHash({
       tenantId: request.context.tenantId,

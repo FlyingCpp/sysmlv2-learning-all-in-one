@@ -1,7 +1,11 @@
-import { stepCountIs, type LanguageModel, type ToolSet } from "ai";
+import { stepCountIs, type Instructions, type LanguageModel, type ToolSet } from "ai";
 import type { SharedV4ProviderOptions } from "@ai-sdk/provider";
 
 import { generateObservedText, generateObservedToolLoopText } from "./observed-generation.mjs";
+import {
+  projectConversationModelMessages,
+  systemInstructions,
+} from "./model-message-projection.mjs";
 import {
   createRunExecutionView,
   createRunToolsContext,
@@ -216,13 +220,16 @@ async function generateCandidate(
 ) {
   const permit = options.resources.budget.reserve("candidate_generation");
   try {
+    const candidateInput = candidateModelInput(options.task, options.resources, options.prompt);
     const commonOptions = {
       model: options.model,
       phase: recovery ? "candidate_content_recovery" : "candidate_generation",
-      instructions: recovery
-        ? `${options.instructions}\n\n上一次未形成唯一、完整的候选（${priorFailure ?? "invalid"}）。本次只输出一份完整SysML v2候选，不要解释。`
-        : options.instructions,
-      prompt: options.prompt ?? candidatePrompt(options.task, options.resources),
+      instructions: candidateInstructions(
+        options.instructions,
+        candidateInput.projection,
+        recovery ? priorFailure ?? "invalid" : undefined,
+      ),
+      messages: candidateInput.messages,
       maxRetries: 0,
       ...(options.maxOutputTokens === undefined
         ? {}
@@ -274,13 +281,19 @@ async function generateCandidate(
   }
 }
 
-function candidatePrompt(task: CandidateTaskView, resources: RunResources): string {
+function candidateModelInput(
+  task: CandidateTaskView,
+  resources: RunResources,
+  overridePrompt?: string,
+): Readonly<{
+  messages: ReturnType<typeof projectConversationModelMessages>;
+  projection: unknown;
+}> {
   const currentTask = resources.tasks.get(task.taskId);
   const knowledgeEvidence = currentTask
     ? projectWorkerEvidenceView(resources, currentTask)
     : task.knowledge;
-  return JSON.stringify({
-    studentQuestion: task.question,
+  const projection = overridePrompt ? { specializedTask: overridePrompt } : {
     candidateMode: task.mode,
     target: task.target.kind,
     preservationPolicy: task.preservationPolicyRef,
@@ -294,7 +307,26 @@ function candidatePrompt(task: CandidateTaskView, resources: RunResources): stri
       content: file.content,
       editable: file.editable,
     })),
+  };
+  return Object.freeze({
+    messages: projectConversationModelMessages(
+      task.conversationMessages,
+      task.taskSources,
+      task.question,
+    ),
+    projection,
   });
+}
+
+function candidateInstructions(
+  base: string,
+  projection: unknown,
+  recoveryFailure?: CandidateContentFailure | "invalid",
+): Instructions {
+  const instructions = recoveryFailure
+    ? `${base}\n\n上一次未形成唯一、完整的候选（${recoveryFailure}）。本次只输出一份完整SysML v2候选，不要解释。`
+    : base;
+  return systemInstructions(instructions, "服务端可信Candidate执行投影", projection);
 }
 
 function reviewedKnowledgeSearchResults(resources: RunResources): readonly unknown[] {

@@ -8,6 +8,8 @@ import {
   type LanguageModel,
   type LanguageModelCallStartEvent,
   type LanguageModelUsage,
+  type Instructions,
+  type ModelMessage,
   type OnToolExecutionEndCallback,
   type OnToolExecutionStartCallback,
   type PrepareStepFunction,
@@ -34,12 +36,11 @@ export interface ObservedTextResult {
   timeToFirstOutputMs?: number;
 }
 
-export interface ObservedTextOptions {
+interface ObservedTextOptionsBase {
   model: LanguageModel;
   phase?: string;
   promptVersion?: string;
-  instructions?: string;
-  prompt: string;
+  instructions?: Instructions;
   maxRetries?: number;
   maxOutputTokens?: number;
   temperature?: number;
@@ -52,7 +53,13 @@ export interface ObservedTextOptions {
   runtimeContext?: RunExecutionView;
 }
 
-export interface ObservedToolLoopTextOptions<TOOLS extends ToolSet> extends ObservedTextOptions {
+type ObservedPromptInput =
+  | { prompt: string; messages?: never }
+  | { messages: ModelMessage[]; prompt?: never };
+
+export type ObservedTextOptions = ObservedTextOptionsBase & ObservedPromptInput;
+
+export type ObservedToolLoopTextOptions<TOOLS extends ToolSet> = Omit<ObservedTextOptionsBase, "timeout"> & ObservedPromptInput & {
   tools: TOOLS;
   toolChoice?: ToolChoice<TOOLS>;
   stopWhen: StopCondition<TOOLS> | Array<StopCondition<TOOLS>>;
@@ -61,7 +68,7 @@ export interface ObservedToolLoopTextOptions<TOOLS extends ToolSet> extends Obse
   toolsContext?: Readonly<Record<string, RunToolContext>>;
   onToolExecutionStart?: OnToolExecutionStartCallback<TOOLS>;
   onToolExecutionEnd?: OnToolExecutionEndCallback<TOOLS>;
-}
+};
 
 export interface ObservedToolLoopTextResult<TOOLS extends ToolSet> {
   text: string;
@@ -82,23 +89,23 @@ export interface ObservedObjectResult<T> {
   timeToFirstOutputMs?: number;
 }
 
-export interface ObservedObjectOptions<T> extends ObservedTextOptions {
+export type ObservedObjectOptions<T> = ObservedTextOptionsBase & ObservedPromptInput & {
   schema: FlexibleSchema<T>;
   schemaName?: string;
   schemaDescription?: string;
-}
+};
 
-export interface WorkflowObjectOptions<T> extends ObservedObjectOptions<T> {
+export type WorkflowObjectOptions<T> = ObservedObjectOptions<T> & {
   phase: string;
   toolChoiceMode?: "required" | "auto";
-}
+};
 
-export interface WorkflowChoiceOptions<CHOICE extends string> extends ObservedTextOptions {
+export type WorkflowChoiceOptions<CHOICE extends string> = ObservedTextOptions & {
   phase: string;
   choices: readonly CHOICE[];
   choiceName?: string;
   choiceDescription?: string;
-}
+};
 
 export type WorkflowObjectErrorCategory =
   | "aborted"
@@ -287,10 +294,10 @@ export async function generateWorkflowObject<T>(
   });
   const structuredGenerationOptions = {
     ...generationOptions,
-    instructions: [
+    instructions: appendSystemInstruction(
       generationOptions.instructions,
       WORKFLOW_JSON_RESPONSE_INSTRUCTION,
-    ].filter(Boolean).join("\n\n"),
+    ),
   };
   const startedAt = new Date().toISOString();
   let observedSteps: readonly unknown[] | undefined;
@@ -379,10 +386,10 @@ export async function generateWorkflowChoice<CHOICE extends string>(
   });
   const structuredGenerationOptions = {
     ...generationOptions,
-    instructions: [
+    instructions: appendSystemInstruction(
       generationOptions.instructions,
       "本调用使用AI SDK的最小类型化选择通道。只选择一个给定值；业务状态由服务端派生。",
-    ].filter(Boolean).join("\n\n"),
+    ),
   };
   const startedAt = new Date().toISOString();
   let observedSteps: readonly unknown[] | undefined;
@@ -496,6 +503,7 @@ function auditConfiguredRequest(options: Record<string, unknown>): Record<string
   return {
     instructions: options.instructions,
     prompt: options.prompt,
+    messages: options.messages,
     maxRetries: options.maxRetries,
     maxOutputTokens: options.maxOutputTokens,
     temperature: options.temperature,
@@ -504,4 +512,16 @@ function auditConfiguredRequest(options: Record<string, unknown>): Record<string
     toolNames: tools.map((entry) => entry.name),
     tools,
   };
+}
+
+function appendSystemInstruction(
+  instructions: Instructions | undefined,
+  content: string,
+): Instructions {
+  if (!instructions) return content;
+  if (typeof instructions === "string") return `${instructions}\n\n${content}`;
+  const appended = { role: "system" as const, content };
+  return Array.isArray(instructions)
+    ? [...instructions, appended]
+    : [instructions, appended];
 }

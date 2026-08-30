@@ -2,6 +2,10 @@ import type { LanguageModel } from "ai";
 import type { SharedV4ProviderOptions } from "@ai-sdk/provider";
 
 import { generateObservedText } from "./observed-generation.mjs";
+import {
+  projectFinalAnswerModelMessages,
+  systemInstructions,
+} from "./model-message-projection.mjs";
 import { createRunExecutionView, type RunResources } from "./run-resources.mjs";
 import type { WorkerTerminalBinding } from "./result-binding.mjs";
 import type { WorkerResult } from "./worker-contracts.mjs";
@@ -60,8 +64,15 @@ export async function finalizeDelegatedAnswer(
     const generated = await generateObservedText({
       model: options.model,
       phase: "answer_generation",
-      instructions: FINALIZER_INSTRUCTIONS,
-      prompt: JSON.stringify(finalizerProjection(options)),
+      instructions: systemInstructions(
+        FINALIZER_INSTRUCTIONS,
+        "服务端可信终末事实投影",
+        finalizerProjection(options),
+      ),
+      messages: projectFinalAnswerModelMessages(
+        options.resources.input.taskSources,
+        options.resources.input.question,
+      ),
       maxRetries: 0,
       maxOutputTokens: options.maxOutputTokens,
       temperature: 0,
@@ -115,7 +126,6 @@ export function deterministicFinalizerFallback(workerResult: WorkerResult): stri
 function finalizerProjection(options: MainFinalizerOptions): unknown {
   const result = options.binding.workerResult;
   return {
-    studentQuestion: options.resources.input.question.slice(0, 8_000),
     obligation: {
       outcomeType: options.binding.obligation.outcomeType,
       deliverableType: options.binding.obligation.deliverableType,
