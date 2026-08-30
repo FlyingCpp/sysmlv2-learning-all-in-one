@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 
 const CREDENTIAL_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9._:-]{0,119}$/;
+const ENV_NAME_PATTERN = /^[A-Z][A-Z0-9_]{0,127}$/;
 
 function managedCredentialRuntime(options = {}) {
   const env = options.env || process.env;
@@ -84,7 +85,14 @@ async function testManagedCredentialConnection(input = {}, options = {}) {
 }
 
 async function createManagedProbeModel(input = {}, options = {}) {
-  const credentialName = normalizeCredentialName(input.credentialName);
+  const credentialName = input.credentialName ? normalizeCredentialName(input.credentialName) : '';
+  const apiKeyEnv = String(input.apiKeyEnv || '').trim();
+  if (apiKeyEnv && !ENV_NAME_PATTERN.test(apiKeyEnv)) {
+    throw managedCredentialError('LITELLM_PROBE_ENV_REFERENCE_INVALID', 'Probe environment credential reference is invalid.', 400);
+  }
+  if (Boolean(credentialName) === Boolean(apiKeyEnv)) {
+    throw managedCredentialError('LITELLM_PROBE_CREDENTIAL_REFERENCE_INVALID', 'Probe model requires exactly one managed or environment credential reference.', 400);
+  }
   const providerModel = String(input.providerModel || '').trim();
   const apiBase = String(input.apiBase || '').trim();
   if (!providerModel || !apiBase) throw managedCredentialError('LITELLM_PROBE_MODEL_INPUT_INVALID', 'Provider model and API base URL are required.', 400);
@@ -98,7 +106,9 @@ async function createManagedProbeModel(input = {}, options = {}) {
       litellm_params: {
         model: providerModel,
         api_base: apiBase,
-        litellm_credential_name: credentialName
+        ...(credentialName
+          ? { litellm_credential_name: credentialName }
+          : { api_key: `os.environ/${apiKeyEnv}` })
       },
       model_info: {
         id: modelId,

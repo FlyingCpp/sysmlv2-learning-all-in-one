@@ -8,6 +8,7 @@ const {
   renderLiteLlmConfigYaml,
   validateLiteLlmConfig,
   publicLiteLlmConfigVersion,
+  publicLiteLlmConfigVersionForHistory,
   checksumText
 } = require('./litellm-config');
 const {
@@ -1145,7 +1146,7 @@ function createAccountStore(options = {}) {
         .slice()
         .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)))
         .slice(0, limit)
-        .map((row) => publicLiteLlmConfigVersion(row, { includeRenderedYaml }));
+        .map((row) => publicLiteLlmConfigVersionForHistory(row, { includeRenderedYaml }));
     }
     const result = await poolInstance.query(
       `select version_id, status, config_json, rendered_yaml, checksum, validation_json, created_by, published_by, notes, created_at, published_at
@@ -1154,7 +1155,7 @@ function createAccountStore(options = {}) {
         limit $1`,
       [limit]
     );
-    return result.rows.map((row) => publicLiteLlmConfigVersion(row, { includeRenderedYaml }));
+    return result.rows.map((row) => publicLiteLlmConfigVersionForHistory(row, { includeRenderedYaml }));
   }
 
   async function getLiteLlmConfigVersion(versionId, options = {}) {

@@ -6,6 +6,7 @@ RUN npm ci --omit=dev --cache ./.npm-cache && npm cache clean --force
 COPY apps/api ./apps/api
 COPY apps/teacher ./apps/teacher
 COPY packages ./packages
+COPY config/llm-protocol-catalog.json ./config/llm-protocol-catalog.json
 COPY courses ./courses
 COPY knowledge-packs ./knowledge-packs
 COPY scripts/sysml-knowledge ./scripts/sysml-knowledge

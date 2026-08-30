@@ -49,7 +49,6 @@ type ProviderConnection = {
   networkZone: 'public_provider' | 'approved_private' | 'local_development';
   credentialRef: { kind: 'environment' | 'secret_manager' | 'litellm_credential'; referenceName: string };
   tlsPolicy: 'verify_full' | 'private_ca';
-  requestTimeoutMs: number;
   metadata: { owner: string; purpose: string };
 };
 
@@ -59,7 +58,7 @@ type ModelDeployment = {
   displayName: string;
   providerModelId: string;
   enabled: boolean;
-  limits: { rpm: number; tpm: number; maxParallelRequests: number; requestTimeoutMs?: number };
+  limits: { rpm: number; tpm: number; maxParallelRequests: number };
   declaredCapabilities: {
     contextWindowTokens: number;
     maxOutputTokens: number;
@@ -403,7 +402,7 @@ export function AiTeacherModelAccessWorkbench({ onOpenResourcePolicy }: { onOpen
         body: {
           versionId: desiredVersion.versionId,
           deploymentId: deployment.deploymentId,
-          confirmation: { confirmed: true, maxProviderCalls: 8, maxTotalOutputTokens: 768, maxDurationMs: 90_000 }
+          confirmation: { confirmed: true, maxProviderCalls: 8, maxTotalOutputTokens: 832, maxDurationMs: 90_000 }
         }
       });
     },
@@ -447,7 +446,7 @@ export function AiTeacherModelAccessWorkbench({ onOpenResourcePolicy }: { onOpen
   };
   const confirmCapabilityProbe = () => {
     if (!selectedDeployment || dirty || capabilityProbeMutation.isPending) return;
-    const confirmed = window.confirm('将调用真实模型执行能力验证。上限：8 次 Provider 请求、768 个输出 Token、90 秒；会产生 Provider 费用。固定测试不包含课程或学生数据。确认继续？');
+    const confirmed = window.confirm('将调用真实模型执行能力验证。上限：8 次 Provider 请求、832 个输出 Token、90 秒；会产生 Provider 费用。固定测试不包含课程或学生数据。确认继续？');
     if (confirmed) capabilityProbeMutation.mutate(selectedDeployment);
   };
   const confirmPublish = () => {
@@ -734,7 +733,6 @@ function ConnectionEditor({ connection, profiles, credentials, credentialError, 
         </div>
       </Field>
       <Field label="网络区域" required><select value={connection.networkZone} onChange={(event) => onChange({ ...connection, networkZone: event.target.value as ProviderConnection['networkZone'] })}><option value="public_provider">public_provider</option><option value="approved_private">approved_private</option><option value="local_development">local_development</option></select></Field>
-      <Field label="请求超时"><div className="llmInputSuffix"><input type="number" min={1} value={Math.round(connection.requestTimeoutMs / 1000)} onChange={(event) => onChange({ ...connection, requestTimeoutMs: numberValue(event.target.value, 60) * 1000 })} /><span>s</span></div></Field>
       <ChoiceField label="TLS 校验"><BinaryChoice ariaLabel="TLS 校验策略" value={connection.tlsPolicy === 'verify_full'} positiveLabel="完整校验" negativeLabel="私有 CA" onChange={(value) => onChange({ ...connection, tlsPolicy: value ? 'verify_full' : 'private_ca' })} /></ChoiceField>
       <ChoiceField label="连接状态"><BinaryChoice ariaLabel="Provider Connection 状态" value={connection.enabled} onChange={(value) => onChange({ ...connection, enabled: value })} /></ChoiceField>
       <Field label="用途" wide><input value={connection.metadata.purpose} onChange={(event) => onChange({ ...connection, metadata: { ...connection.metadata, purpose: event.target.value } })} placeholder="例如：AI Teacher 生产模型" /></Field>
@@ -807,7 +805,8 @@ function AliasEditor({ alias, config, onChange }: { alias: BusinessModelAlias; c
   };
   return <div className="llmEditorForm">
     <Field label="显示名称" required><input value={alias.displayName} onChange={(event) => onChange({ ...alias, displayName: event.target.value })} /></Field>
-    <Field label="LiteLLM Alias" required><input value={alias.litellmAlias} onChange={(event) => onChange({ ...alias, litellmAlias: event.target.value })} /></Field>
+    <Field label="不可变 Alias ID"><input value={alias.aliasId} readOnly aria-readonly="true" /></Field>
+    <Field label="LiteLLM 路由名" required><input value={alias.litellmAlias} onChange={(event) => onChange({ ...alias, litellmAlias: event.target.value })} /></Field>
     <Field label="路由策略"><select value={alias.routing.strategy} onChange={(event) => onChange({ ...alias, routing: { ...alias.routing, strategy: event.target.value as BusinessModelAlias['routing']['strategy'] } })}><option value="simple-shuffle">simple-shuffle</option><option value="least-busy">least-busy</option><option value="usage-based-routing">usage-based-routing</option><option value="latency-based-routing">latency-based-routing</option></select></Field>
     <Field label="重试次数"><input type="number" min={0} value={alias.routing.numRetries} onChange={(event) => onChange({ ...alias, routing: { ...alias.routing, numRetries: numberValue(event.target.value, 0) } })} /></Field>
     <Field label="失败阈值"><input type="number" min={0} value={alias.routing.allowedFails} onChange={(event) => onChange({ ...alias, routing: { ...alias.routing, allowedFails: numberValue(event.target.value, 0) } })} /></Field>
@@ -825,7 +824,7 @@ function NetworkCredentialView({ selection, config, health }: { selection: Selec
       : undefined;
   if (!connection) return <div className="llmInfoState"><Network size={24} /><h4>业务别名不直接持有网络或凭据</h4><p>它只引用 Deployment；沿依赖关系可查看实际 Provider Connection。</p></div>;
   const secret = health?.secrets?.find((item) => (item.referenceName || item.envName) === connection.credentialRef.referenceName);
-  return <div className="llmDefinitionList"><div><dt>API Base URL</dt><dd>{endpointUrl(connection.endpoint)}</dd></div><div><dt>Chat Completions</dt><dd>{chatCompletionsUrl(connection.endpoint)}</dd></div><div><dt>网络区域</dt><dd>{connection.networkZone}</dd></div><div><dt>TLS Policy</dt><dd>{connection.tlsPolicy}</dd></div><div><dt>凭据类型</dt><dd>{connection.credentialRef.kind === 'litellm_credential' ? 'LiteLLM 托管凭据' : '环境变量引用'}</dd></div><div><dt>凭据引用</dt><dd>{connection.credentialRef.referenceName}</dd></div><div><dt>凭据状态</dt><dd><StatePill status={secret?.present ? 'ready' : 'missing'} /></dd></div><div><dt>请求超时</dt><dd>{connection.requestTimeoutMs / 1000} s</dd></div></div>;
+  return <div className="llmDefinitionList"><div><dt>API Base URL</dt><dd>{endpointUrl(connection.endpoint)}</dd></div><div><dt>Chat Completions</dt><dd>{chatCompletionsUrl(connection.endpoint)}</dd></div><div><dt>网络区域</dt><dd>{connection.networkZone}</dd></div><div><dt>TLS Policy</dt><dd>{connection.tlsPolicy}</dd></div><div><dt>凭据类型</dt><dd>{connection.credentialRef.kind === 'litellm_credential' ? 'LiteLLM 托管凭据' : '环境变量引用'}</dd></div><div><dt>凭据引用</dt><dd>{connection.credentialRef.referenceName}</dd></div><div><dt>凭据状态</dt><dd><StatePill status={secret?.present ? 'ready' : 'missing'} /></dd></div></div>;
 }
 
 function DependencyView({ selection, config }: { selection: Selection; config: ControlPlaneConfig }) {
@@ -1037,7 +1036,6 @@ function controlPlaneFromVersion(version: LiteLlmVersion, health?: HealthRespons
             ? { kind: 'litellm_credential', referenceName: deployment.litellmCredentialName }
             : { kind: 'environment', referenceName: deployment.apiKeyRef },
           tlsPolicy: 'verify_full',
-          requestTimeoutMs: 60_000,
           metadata: { owner: 'AI Teacher', purpose: `${providerLabel(deployment.provider)} 模型服务` }
         });
       }
@@ -1108,7 +1106,7 @@ function preferredProbeDeployment(deployments: ModelDeployment[], connectionId: 
 
 function addConnection(config: ControlPlaneConfig, setConfig: (config: ControlPlaneConfig) => void, setSelection: (selection: Selection) => void) {
   const connectionId = `draft-connection-${Date.now()}`;
-  const next: ProviderConnection = { connectionId, displayName: '新 Provider 连接', enabled: false, adapterProfileId: 'openai-compatible-public.v1', adapterProfileRevision: 1, endpoint: { scheme: 'https', host: 'api.example.com', port: 443, basePath: '/v1' }, networkZone: 'public_provider', credentialRef: { kind: 'litellm_credential', referenceName: '' }, tlsPolicy: 'verify_full', requestTimeoutMs: 60_000, metadata: { owner: 'AI Teacher', purpose: '' } };
+  const next: ProviderConnection = { connectionId, displayName: '新 Provider 连接', enabled: false, adapterProfileId: 'openai-compatible-public.v1', adapterProfileRevision: 1, endpoint: { scheme: 'https', host: 'api.example.com', port: 443, basePath: '/v1' }, networkZone: 'public_provider', credentialRef: { kind: 'litellm_credential', referenceName: '' }, tlsPolicy: 'verify_full', metadata: { owner: 'AI Teacher', purpose: '' } };
   setConfig({ ...config, providerConnections: [...config.providerConnections, next] });
   setSelection({ domain: 'connections', id: connectionId });
 }

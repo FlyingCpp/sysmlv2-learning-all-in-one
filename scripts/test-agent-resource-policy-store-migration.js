@@ -13,7 +13,7 @@ const MIGRATION_NOW = '2026-08-24T00:00:00.000Z';
 async function main() {
   const emptyMemory = createAccountStore({ agentResourcePolicyVersions: [] });
   const [seed] = await emptyMemory.listAgentResourcePolicyVersions();
-  assert.equal(seed.versionId, 'arp_bootstrap_v7');
+  assert.equal(seed.versionId, 'arp_bootstrap_v8');
   assert.equal(validatePolicyValues(seed.values).ok, true);
 
   const source = v6Version();
@@ -34,7 +34,7 @@ async function main() {
     emptyPostgres,
     { now: MIGRATION_NOW }
   );
-  assert.equal(publicRow(emptyPostgres.rows[0]).versionId, 'arp_bootstrap_v7');
+  assert.equal(publicRow(emptyPostgres.rows[0]).versionId, 'arp_bootstrap_v8');
 
   const postgres = createFakePolicyPool([databaseRow(source)]);
   await agentResourcePolicyStoreTesting.migratePostgresAgentResourcePolicyVersions(postgres, { now: MIGRATION_NOW });
@@ -70,7 +70,7 @@ async function main() {
     (error) => error?.reason === 'multiple_active_versions'
   );
 
-  console.log('Agent resource policy v6 to v7 migration tests passed.');
+  console.log('Agent resource policy v6 to v8 migration tests passed.');
 }
 
 function v6Version() {
@@ -103,11 +103,13 @@ function assertMigrated(versions, source) {
   assert(old && active);
   assert.equal(old.status, 'retired');
   assert.deepEqual(old.values, source.values);
-  assert.match(active.versionId, /^arp_schema_v7_[a-f0-9]{24}$/u);
+  assert.match(active.versionId, /^arp_schema_v8_[a-f0-9]{24}$/u);
   assert.equal(active.sourceVersionId, source.versionId);
   assert.equal(active.values['knowledge.reviewedMaxNewQueriesPerRun'], 2);
   assert.equal(active.values['repair.maxRounds'], 3);
   assert.equal(active.values['candidate.maxArtifactBytes'], 262_144);
+  assert.equal(active.values['model.mainReasoningPolicy'], 'provider-managed');
+  assert.equal(active.values['model.finalizerReasoningPolicy'], 'disabled');
   assert.equal(Object.hasOwn(active.values, 'repair.maxOutputTokens'), false);
   assert.equal(Object.hasOwn(active.values, 'candidate.maxValidatorCallsPerWorker'), false);
   assert.equal(validatePolicyValues(active.values).ok, true);

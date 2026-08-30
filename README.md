@@ -132,9 +132,17 @@ DEPLOYMENT.md         Core and Full deployment guide
 
 ### AI Teacher 单段 Repair Loop
 
-Full 档位使用 Policy v7 驱动单段 Validator Repair Tool Loop。Repair 不再设置应用层输出 Token 硬帽，而是在每个模型步骤前根据上下文窗口动态预留完整 Tool Result 和可见输出空间。默认边界为 3 个 Repair 轮次、256 KiB 候选制品、每个 Run 共享 4 次新知识查询；Validator 调用上限由“初始候选 + Repair 轮次”派生。已有 Policy v6 部署会显式迁移弃用字段，未知字段或非法旧值继续 fail closed。
+Full 档位使用 Policy v8 驱动单段 Validator Repair Tool Loop。Repair 不再设置应用层输出 Token 硬帽，而是在每个模型步骤前根据上下文窗口动态预留完整 Tool Result 和可见输出空间。默认边界为 3 个 Repair 轮次、256 KiB 候选制品、每个 Run 共享 4 次新知识查询；Validator 调用上限由“初始候选 + Repair 轮次”派生。Policy v8 还为 Main 与 Finalizer 增加显式推理策略，使 GLM 5.3 这类始终思考模型只能在兼容的阶段策略下发布。已有 Policy v6/v7 部署会显式迁移弃用字段并补齐新策略，未知字段或非法旧值继续 fail closed。
 
-运行 `npm run test:teacher-agent-loop` 可验证 Policy v7、v6→v7 迁移、动态上下文预留、共享查询预算、候选提交和 Validator Repair 终止条件。该测试使用可控模型桩验证协议与预算，不代表真实 Provider 验收；真实 AI 验收必须在 Full 镜像中连接 LiteLLM Provider，并将候选模型交给 Official Validator。
+运行 `npm run test:teacher-agent-loop` 可验证 Policy v8、v6/v7→v8 迁移、阶段模型/推理协议兼容性、动态上下文预留、共享查询预算、候选提交和 Validator Repair 终止条件。该测试使用可控模型桩验证协议与预算，不代表真实 Provider 验收；真实 AI 验收必须在 Full 镜像中连接 LiteLLM Provider，并将候选模型交给 Official Validator。
+
+### AI Teacher 模型控制平面
+
+Full 档位的模型配置采用 `Provider Connection → Model Deployment → Business Model Alias` 三层边界。协议能力由版本化 Catalog 冻结，Capability Probe 始终通过 LiteLLM 临时模型执行；配置发布只有在 Desired、Applied 与 LiteLLM 实际读回的 Observed 状态一致，并且业务 Alias canary 通过后，才能成为 Active。HTTP 200 本身不代表配置已经生效。
+
+新建的 schema v2 配置默认由 API 动态管理 LiteLLM `model_list`。已有静态部署继续使用 `config/litellm/config.example.yaml`；迁移到动态管理前，应改用 `config/litellm/config.dynamic.example.yaml`（或设置 `LITELLM_CONFIG_PATH`）并重启 LiteLLM。若静态配置仍占有同名 Alias，发布会以 `restart_required` 阻断且不执行写入。
+
+运行 `npm run test:teacher-model-control-plane` 可验证协议 Catalog、配置兼容边界、能力快照、分阶段模型协议、真实 LiteLLM API Reconcile 状态机和 Provider wire contract。该 focused suite 使用受控 HTTP 响应验证协议，不会调用真实 Provider；真实模型仍须按 Full 部署验收执行。
 
 ### 开源版与托管服务
 
@@ -268,9 +276,19 @@ Run `npm run test:public-boundary` before every release. The gate rejects real e
 
 ### AI Teacher single-stage Repair Loop
 
-The Full profile uses Policy v7 to drive one Validator Repair Tool Loop. Repair no longer applies an application-level output-token cap. Before each model step, it reserves room dynamically for complete tool results and visible output within the context window. Defaults are three Repair rounds, a 256 KiB candidate artifact, and four new reviewed-knowledge queries shared by the run; the Validator ceiling is derived from the initial candidate plus the Repair rounds. Existing Policy v6 deployments use an explicit deprecated-key migration, while unknown keys and invalid legacy values remain fail closed.
+The Full profile uses Policy v8 to drive one Validator Repair Tool Loop. Repair no longer applies an application-level output-token cap. Before each model step, it reserves room dynamically for complete tool results and visible output within the context window. Defaults are three Repair rounds, a 256 KiB candidate artifact, and four new reviewed-knowledge queries shared by the run; the Validator ceiling is derived from the initial candidate plus the Repair rounds. Policy v8 also adds explicit Main and Finalizer reasoning policies, so always-thinking models such as GLM 5.3 can only be published with compatible stage policies. Existing Policy v6/v7 deployments use an explicit migration that removes deprecated keys and fills the new policy fields, while unknown keys and invalid legacy values remain fail closed.
 
-Run `npm run test:teacher-agent-loop` to verify Policy v7, v6-to-v7 migration, dynamic context admission, the shared query budget, candidate submission, and Validator Repair termination. This deterministic suite uses a controllable model double to test the protocol and budgets; it is not real-provider acceptance. Real AI acceptance requires a Full image connected to a LiteLLM provider and an Official Validator check of the generated candidate.
+Run `npm run test:teacher-agent-loop` to verify Policy v8, v6/v7-to-v8 migration, stage model/reasoning protocol compatibility, dynamic context admission, the shared query budget, candidate submission, and Validator Repair termination. This deterministic suite uses a controllable model double to test the protocol and budgets; it is not real-provider acceptance. Real AI acceptance requires a Full image connected to a LiteLLM provider and an Official Validator check of the generated candidate.
+
+### AI Teacher model control plane
+
+Full uses a three-layer `Provider Connection → Model Deployment → Business Model Alias` boundary. A versioned protocol catalog freezes execution capabilities, Capability Probe calls always pass through a temporary LiteLLM model, and a config becomes Active only after Desired, Applied, and actual Observed runtime state converge and every business-alias canary passes. An HTTP 200 response alone is not evidence that the runtime changed.
+
+Schema v2 configs default to API-owned dynamic LiteLLM `model_list` management. Existing static deployments remain compatible with `config/litellm/config.example.yaml`; switch to `config/litellm/config.dynamic.example.yaml` (or set `LITELLM_CONFIG_PATH`) and restart LiteLLM before enabling dynamic publication. A conflicting static alias produces a fail-closed `restart_required` result with zero writes.
+
+Run `npm run test:teacher-model-control-plane` for the protocol catalog, compatibility boundaries, capability snapshots, per-stage execution profiles, LiteLLM reconciliation state machine, and provider wire contract. The focused suite uses controlled HTTP responses and does not call a real provider; complete the Full acceptance flow for real-model evidence.
+
+The Full rollback-safe LiteLLM template declares both default stage aliases, `ai-teacher-fast` and `ai-teacher-reasoning`. They may share one provider deployment initially; the schema-v2 control plane can publish separate stage deployments after capability probes pass.
 
 ### Open source versus hosted service
 

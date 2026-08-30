@@ -16,6 +16,14 @@ const { evaluateRules } = require('./rules');
 const { enhanceOfficialDiagnostics } = require('./diagnostic-hints');
 const { validateTeacherCapabilityResponse, diagnosticIdFor, hashContent } = require('../../packages/teacher-contract');
 const { validateLiteLlmConfig } = require('./litellm-config');
+const {
+  buildLiteLlmDesiredState,
+  createLiteLlmAdminClient,
+  dynamicEnvironmentCredentialIssues,
+  observeLiteLlmRuntime,
+  reconcileLiteLlmRuntime,
+  validateLiteLlmReferenceClosure
+} = require('./litellm-reconciler');
 const { createProviderStatusAggregator, createProviderStatusMonitor } = require('./provider-status');
 const { resolveWorkspaceImportClosure } = require('./workspace-import-resolver');
 const {
@@ -35,7 +43,10 @@ const {
   runtimeProjection: agentResourcePolicyRuntimeProjection,
   diffPolicyValues: diffAgentResourcePolicyValues
 } = require('../../packages/agent-resource-policy');
-const { modelRegistryFromLiteLlmVersion } = require('./ai-teacher-model-registry');
+const {
+  modelRegistryFromLiteLlmVersion,
+  modelCapabilitySnapshotFromLiteLlmVersion
+} = require('./ai-teacher-model-registry');
 const { assignServerControlPlaneIds, publicAdapterProfileCatalog, probeProviderConnection } = require('./llm-control-plane');
 const {
   CAPABILITY_PROBE_KEYS,
@@ -864,7 +875,9 @@ function createServer(options = {}) {
         const admin = await requireAdminUser(req, authService);
         const accountStore = requireAdminAccountStore(authService);
         const body = await readJson(req);
-        const result = await probeProviderConnection(body.connection || {}, { providerModelId: body.providerModelId });
+        const activeResourcePolicy = await accountStore.getActiveAgentResourcePolicyVersion();
+        const probeTimeoutMs = agentResourcePolicyRuntimeProjection(activeResourcePolicy.values).probe.timeoutMs;
+        const result = await probeProviderConnection(body.connection || {}, { providerModelId: body.providerModelId, timeoutMs: probeTimeoutMs });
         await accountStore.recordAdminAudit({
           actorUserId: admin.id,
           eventType: 'ai_teacher.llm_connection.probed',
@@ -897,7 +910,9 @@ function createServer(options = {}) {
         const version = await accountStore.getLiteLlmConfigVersion(String(body.versionId || ''), { includeRenderedYaml: false });
         if (!version) return send(res, 404, { error: 'LiteLLM config version not found.', code: 'LITELLM_CONFIG_VERSION_NOT_FOUND' });
         const descriptor = deploymentProbeDescriptor(version.config, body.deploymentId);
-        const rawRun = await capabilityProbeRunner(version.config, descriptor.deployment.deploymentId);
+        const activeResourcePolicy = await accountStore.getActiveAgentResourcePolicyVersion();
+        const probeTimeoutMs = agentResourcePolicyRuntimeProjection(activeResourcePolicy.values).probe.timeoutMs;
+        const rawRun = await capabilityProbeRunner(version.config, descriptor.deployment.deploymentId, { timeoutMs: probeTimeoutMs });
         const run = normalizeCapabilityProbeRun(rawRun, descriptor);
         const persisted = await accountStore.recordLiteLlmCapabilityProbeRun({
           versionId: version.versionId,
@@ -933,8 +948,9 @@ function createServer(options = {}) {
         const admin = await requireAdminUser(req, authService);
         const accountStore = requireAdminAccountStore(authService);
         const body = await readJson(req);
+        const activeVersion = await accountStore.getActiveLiteLlmConfigVersion({ includeRenderedYaml: false });
         const version = await accountStore.createLiteLlmConfigVersion({
-          config: assignServerControlPlaneIds(body.config),
+          config: assignServerControlPlaneIds(body.config, activeVersion?.config),
           notes: body.notes || '',
           createdBy: admin.id
         });
@@ -956,14 +972,29 @@ function createServer(options = {}) {
           includeRenderedYaml: true
         });
         if (!draft) return send(res, 404, { error: 'LiteLLM config version not found.', code: 'LITELLM_CONFIG_VERSION_NOT_FOUND' });
-        const preflight = await validateLiteLlmPublishPreflight(draft);
+        const preflight = await validateLiteLlmPublishPreflight(draft, { accountStore });
         const capabilityEvidence = await capabilityProbeEvidenceForVersion(accountStore, draft);
         assertLiteLlmCapabilityPublishGate(draft, capabilityEvidence);
         preflight.capabilityEvidence = capabilityEvidence;
-        const apply = await applyLiteLlmConfigVersion(draft);
-        if (apply.status !== 'applied') throwLiteLlmPublishGateFailed('LITELLM_CONFIG_APPLY_FAILED', apply.message || 'LiteLLM admin apply failed.', { preflight, apply });
-        const health = await aiTeacherLiteLlmHealth(draft);
-        if (health.status !== 'healthy') throwLiteLlmPublishGateFailed('LITELLM_CONFIG_HEALTH_FAILED', health.error || 'LiteLLM health check failed after apply.', { preflight, apply, health });
+        const credentialIssues = dynamicEnvironmentCredentialIssues(draft);
+        if (credentialIssues.length) {
+          throwLiteLlmPublishGateFailed(
+            'LITELLM_DYNAMIC_CREDENTIAL_UNSUPPORTED',
+            'Dynamic LiteLLM deployments must use a provider-default environment key or a managed LiteLLM credential.',
+            { credentialIssues }
+          );
+        }
+        const desired = buildLiteLlmDesiredState(draft);
+        const reconciled = await reconcileLiteLlmRuntime(liteLlmAdminClient(), desired);
+        if (!reconciled.ok) {
+          throwLiteLlmPublishGateFailed(
+            reconciled.errorCode || 'LITELLM_CONFIG_APPLY_FAILED',
+            reconciled.message || 'LiteLLM runtime reconcile failed.',
+            { preflight, reconcile: reconciled }
+          );
+        }
+        const apply = { ...reconciled, applied: true, status: 'applied' };
+        const health = await aiTeacherLiteLlmHealth(draft, reconciled.observed);
         const version = await accountStore.publishLiteLlmConfigVersion({
           versionId: draft.versionId,
           actorUserId: admin.id
@@ -1801,6 +1832,15 @@ async function prepareTeacherDispatch(authService, user, envelope, trustedResour
     overrideReason: assignment.overrideReason || ''
   };
   envelope.runtimeAssignment.resourcePolicySnapshot = resourcePolicySnapshot;
+  const activeLiteLlmVersion = accountStore?.getActiveLiteLlmConfigVersion
+    ? await accountStore.getActiveLiteLlmConfigVersion({ includeRenderedYaml: false })
+    : null;
+  const resourceProjection = agentResourcePolicyRuntimeProjection(resourcePolicySnapshot.values);
+  envelope.runtimeAssignment.modelCapabilitySnapshot = modelCapabilitySnapshotFromLiteLlmVersion(
+    activeLiteLlmVersion || {},
+    resourceProjection.teacher.agentStageModelRoutes,
+    resourceProjection.teacher.agentStageReasoningPolicies
+  );
   const capabilities = await callTeacher('/v1/capabilities', { method: 'GET' });
   const supported = Array.isArray(capabilities.supportedRuntimes)
     && capabilities.supportedRuntimes.length === 1
@@ -2110,7 +2150,7 @@ async function aiTeacherAdminRuntime(features) {
   };
 }
 
-async function aiTeacherLiteLlmHealth(activeVersion) {
+async function aiTeacherLiteLlmHealth(activeVersion, knownObserved) {
   const baseUrl = process.env.LITELLM_ADMIN_BASE_URL || process.env.LITELLM_BASE_URL || '';
   const publicUrl = publicBaseUrl(baseUrl);
   const result = {
@@ -2126,14 +2166,22 @@ async function aiTeacherLiteLlmHealth(activeVersion) {
     } : null
   };
   if (!baseUrl) return result;
-  const healthPath = process.env.LITELLM_ADMIN_HEALTH_PATH || '/health/liveliness';
   try {
-    const response = await fetch(new URL(healthPath, baseUrl), {
-      method: 'GET',
-      headers: litellmAdminHeaders(false)
-    });
-    result.status = response.ok ? 'healthy' : 'unavailable';
-    result.httpStatus = response.status;
+    if (activeVersion) {
+      const desired = buildLiteLlmDesiredState(activeVersion);
+      const observed = knownObserved || await observeLiteLlmRuntime(liteLlmAdminClient(), desired);
+      result.runtime = observed;
+      result.status = observed.matched
+        ? 'healthy'
+        : observed.status === 'unavailable' ? 'unavailable' : 'drift';
+    } else {
+      const response = await fetch(new URL(process.env.LITELLM_ADMIN_HEALTH_PATH || '/health/liveliness', baseUrl), {
+        method: 'GET',
+        headers: litellmAdminHeaders(false)
+      });
+      result.status = response.ok ? 'healthy' : 'unavailable';
+      result.httpStatus = response.status;
+    }
   } catch (error) {
     result.status = 'unavailable';
     result.error = error.message || 'LiteLLM health check failed.';
@@ -2186,9 +2234,41 @@ async function aiTeacherLiteLlmUsageSummary() {
   return result;
 }
 
-async function validateLiteLlmPublishPreflight(version = {}) {
+async function validateLiteLlmPublishPreflight(version = {}, options = {}) {
   const validation = validateLiteLlmConfig(version.config || {});
   if (!validation.ok) throwLiteLlmPublishGateFailed('LITELLM_CONFIG_INVALID', 'LiteLLM config validation failed.', { validation });
+  const activePolicy = options.accountStore?.getActiveAgentResourcePolicyVersion
+    ? await options.accountStore.getActiveAgentResourcePolicyVersion()
+    : null;
+  if (!activePolicy?.values) {
+    throwLiteLlmPublishGateFailed(
+      'LITELLM_AGENT_POLICY_UNAVAILABLE',
+      'Active Agent resource policy is required before publishing LiteLLM runtime configuration.',
+      { validation }
+    );
+  }
+  const policyReferences = AGENT_RESOURCE_POLICY_DEFINITIONS
+    .filter((definition) => definition.valueType === 'model-ref')
+    .map((definition) => ({
+      key: definition.key,
+      alias: String(activePolicy.values[definition.key] || '').trim()
+    }))
+    .filter((reference) => reference.alias);
+  const referenceClosure = validateLiteLlmReferenceClosure(version, policyReferences);
+  if (!referenceClosure.ok) {
+    const primary = referenceClosure.errors[0];
+    const messages = {
+      LITELLM_STAGE_ALIAS_UNRESOLVED: 'Agent resource policy references a model alias that is absent from the desired LiteLLM configuration.',
+      LITELLM_DEPLOYMENT_ORPHANED: 'Every enabled Model Deployment must belong to an enabled Business Model Alias.',
+      LITELLM_ALIAS_NO_READY_MEMBER: 'Every enabled Business Model Alias must contain at least one ready deployment.',
+      LITELLM_ALIAS_PROTOCOL_UNREADY: 'Every enabled Business Model Alias must resolve to one executable protocol profile.'
+    };
+    throwLiteLlmPublishGateFailed(
+      primary.code,
+      messages[primary.code] || 'LiteLLM reference closure validation failed.',
+      { validation, policyVersionId: activePolicy.versionId, referenceClosure }
+    );
+  }
   const secrets = await liteLlmConfigSecretStatuses(version);
   const missing = secrets.filter((item) => item.required && !item.present);
   if (missing.length) {
@@ -2206,7 +2286,9 @@ async function validateLiteLlmPublishPreflight(version = {}) {
   return {
     ok: true,
     validation,
-    secrets
+    secrets,
+    policyVersionId: activePolicy.versionId,
+    referenceClosure
   };
 }
 
@@ -2448,6 +2530,13 @@ function throwLiteLlmPublishGateFailed(code, message, details = {}) {
   error.code = code;
   error.details = details;
   throw error;
+}
+
+function liteLlmAdminClient() {
+  return createLiteLlmAdminClient({
+    baseUrl: process.env.LITELLM_ADMIN_BASE_URL || process.env.LITELLM_BASE_URL || '',
+    headers: litellmAdminHeaders(false)
+  });
 }
 
 function litellmAdminHeaders(includeJson) {

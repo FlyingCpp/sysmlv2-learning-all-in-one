@@ -1,0 +1,16 @@
+model_list: []
+
+router_settings:
+  routing_strategy: simple-shuffle
+  num_retries: 1
+  allowed_fails: 3
+  cooldown_time: 30
+
+litellm_settings:
+  set_verbose: false
+  json_logs: true
+  turn_off_message_logging: true
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/LITELLM_DATABASE_URL

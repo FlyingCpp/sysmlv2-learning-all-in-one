@@ -13,10 +13,10 @@ services:
     environment:
       NODE_ENV: production
       PORT: "7070"
-      AI_TEACHER_PROVIDER: litellm-compatible
-      AI_TEACHER_REAL_LLM_ENABLED: "true"
-      AI_TEACHER_BASE_URL: http://litellm:4000/v1
-      AI_TEACHER_API_KEY: ${LITELLM_MASTER_KEY:-}
+      AI_TEACHER_PROVIDER: ${AI_TEACHER_PROVIDER:-litellm-compatible}
+      AI_TEACHER_REAL_LLM_ENABLED: ${AI_TEACHER_REAL_LLM_ENABLED:-true}
+      AI_TEACHER_BASE_URL: ${AI_TEACHER_BASE_URL:-http://litellm:4000/v1}
+      AI_TEACHER_API_KEY: ${AI_TEACHER_API_KEY:-${LITELLM_MASTER_KEY:-}}
       AI_TEACHER_MODEL: ${AI_TEACHER_MODEL:-ai-teacher-fast}
       AI_TEACHER_CONVERSATION_BACKEND: postgres
       AI_TEACHER_RAG_BACKEND: postgres_pgvector
@@ -51,8 +51,8 @@ services:
       AUTH_GUEST_LOGIN_ENABLED: ${AUTH_GUEST_LOGIN_ENABLED:-true}
       AI_TEACHER_INTERNAL_TOKEN: ${AI_TEACHER_INTERNAL_TOKEN:-}
       AI_TEACHER_TOOL_TOKEN: ${AI_TEACHER_TOOL_TOKEN:-}
-      LITELLM_ADMIN_BASE_URL: http://litellm:4000
-      LITELLM_BASE_URL: http://litellm:4000
+      LITELLM_ADMIN_BASE_URL: ${LITELLM_ADMIN_BASE_URL:-http://litellm:4000}
+      LITELLM_BASE_URL: ${LITELLM_BASE_URL:-http://litellm:4000}
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-}
       LITELLM_DATABASE_URL: postgresql://litellm:${LITELLM_DB_PASSWORD:-change-me-litellm}@litellm-db:5432/litellm
     depends_on:
@@ -137,7 +137,7 @@ services:
       PROVIDER_API_KEY: ${PROVIDER_API_KEY:-}
       PROVIDER_MODEL: ${PROVIDER_MODEL:-openai/gpt-4.1-mini}
     volumes:
-      - ./config/litellm/config.example.yaml:/app/config.yaml:ro
+      - ${LITELLM_CONFIG_PATH:-./config/litellm/config.example.yaml}:/app/config.yaml:ro
     depends_on:
       litellm-db:
         condition: service_healthy

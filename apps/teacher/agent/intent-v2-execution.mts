@@ -145,7 +145,7 @@ export async function runIntentV2Execution(input: {
   } else if (mainOutcome?.type === "delegate_candidate"
     || mainOutcome?.type === "delegate_repair"
     || mainOutcome?.type === "resume_execution") {
-    const candidateGeneration = v2GenerationSettings(options, false);
+    const candidateGeneration = v2GenerationSettings(options, false, "candidate");
     const repairGeneration = v2RepairGenerationSettings(options);
     const taskOutcome = mainOutcome.type === "resume_execution"
       ? resumedTaskOutcome(mainOutcome, request)
@@ -258,9 +258,9 @@ export async function runIntentV2Execution(input: {
         || mainOutcome.action === "engineering_resume"
         || engineeringContinuation)) {
       const baselineWorkerResult = workerResult;
-      const assessmentGeneration = v2GenerationSettings(options, false);
-      const verificationGeneration = v2GenerationSettings(options, true);
-      const mainDecisionGeneration = v2GenerationSettings(options, true);
+      const assessmentGeneration = v2GenerationSettings(options, false, "semanticReview");
+      const verificationGeneration = v2GenerationSettings(options, true, "semanticReview");
+      const mainDecisionGeneration = v2GenerationSettings(options, true, "main");
       let revisionTask: typeof task | undefined;
       let revisionOutcome: Extract<MainAgentOutcome, { type: "delegate_candidate" }> | undefined;
       const advisory = await runEngineeringSemanticAdvisory({
@@ -401,7 +401,7 @@ export async function runIntentV2Execution(input: {
         repairState: projectRepairCheckpointState(workerResult),
       });
     }
-    const finalizerGeneration = v2GenerationSettings(options, true);
+    const finalizerGeneration = v2GenerationSettings(options, true, "finalizer");
     const finalizer = await finalizeDelegatedAnswer({
       resources,
       binding: workerBinding,

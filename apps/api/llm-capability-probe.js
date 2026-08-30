@@ -2,13 +2,23 @@
 
 const crypto = require('crypto');
 const { normalizeLiteLlmConfig } = require('./litellm-config');
-const { findAdapterProfile, findModelProtocolProfile } = require('./llm-adapter-catalog');
+const { catalogMetadata, findAdapterProfile, findModelProtocolProfile } = require('./llm-adapter-catalog');
 const { createManagedProbeModel, deleteManagedProbeModel, managedProxyRequest } = require('./litellm-managed-credentials');
+const {
+  BOOTSTRAP_VALUES: AGENT_RESOURCE_POLICY_BOOTSTRAP_VALUES,
+  runtimeProjection: agentResourcePolicyRuntimeProjection
+} = require('../../packages/agent-resource-policy');
+
+const DEFAULT_PROVIDER_PROBE_TIMEOUT_MS = agentResourcePolicyRuntimeProjection(
+  AGENT_RESOURCE_POLICY_BOOTSTRAP_VALUES
+).probe.timeoutMs;
 
 const CAPABILITY_PROBE_LIMITS = Object.freeze({
   maxProviderCalls: 8,
+  baseGenerationMaxOutputTokens: 160,
+  structuredOutputMaxOutputTokens: 160,
   maxOutputTokensPerCall: 96,
-  maxTotalOutputTokens: 768,
+  maxTotalOutputTokens: 832,
   maxDurationMs: 90000,
   maxInputBytes: 8192,
   maxResponseBytes: 262144
@@ -59,7 +69,11 @@ function deploymentProbeDescriptor(configInput, deploymentId) {
   if (!connection) throw probeInputError('LITELLM_CAPABILITY_PROBE_CONNECTION_NOT_FOUND', 'Model Deployment references a missing Provider Connection.');
   const profile = findAdapterProfile(connection.adapterProfileId);
   if (!profile) throw probeInputError('LITELLM_CAPABILITY_PROBE_ADAPTER_NOT_FOUND', 'Provider Adapter Profile is not available.');
-  const modelProtocolProfile = findModelProtocolProfile(connection.adapterProfileId, deployment.providerModelId);
+  const modelProtocolProfile = findModelProtocolProfile(
+    connection.adapterProfileId,
+    deployment.providerModelId,
+    deployment.modelProtocolProfileId
+  );
   const declaredCapabilities = Object.fromEntries(CAPABILITY_PROBE_KEYS.map((key) => [key, Boolean(deployment.declaredCapabilities[DECLARED_CAPABILITY_FIELDS[key]])]));
   if ((declaredCapabilities.thinking || declaredCapabilities.thinking_tool) && !modelProtocolProfile) {
     throw probeInputError('LITELLM_CAPABILITY_PROBE_MODEL_PROTOCOL_NOT_REGISTERED', 'Thinking capability requires a registered model protocol profile.');
@@ -73,6 +87,8 @@ function deploymentProbeDescriptor(configInput, deploymentId) {
     providerModelId: deployment.providerModelId,
     modelProtocolProfileId: modelProtocolProfile?.profileId || '',
     modelProtocolProfileRevision: modelProtocolProfile?.revision || 0,
+    protocolCatalog: catalogMetadata(),
+    gatewayRuntime: config.general.gatewayRuntime,
     declaredCapabilities
   };
   return {
@@ -92,43 +108,39 @@ async function runDeploymentCapabilityProbe(configInput, deploymentId, options =
   const startedMs = Date.now();
   const state = {
     fetchImpl: options.fetchImpl || global.fetch,
-    env: options.env || process.env,
     startedMs,
     providerCalls: 0,
+    usageResponses: 0,
+    probeTimeoutMs: positiveProbeTimeout(options.timeoutMs, DEFAULT_PROVIDER_PROBE_TIMEOUT_MS),
     usage: { promptTokens: 0, completionTokens: 0, reasoningTokens: 0, totalTokens: 0 }
   };
   if (typeof state.fetchImpl !== 'function') throw probeInputError('LITELLM_CAPABILITY_PROBE_FETCH_UNAVAILABLE', 'Provider request runtime is unavailable.');
-  const managedCredential = descriptor.connection.credentialRef.kind === 'litellm_credential';
-  const secret = managedCredential ? '' : String(state.env[descriptor.connection.credentialRef.referenceName] || '');
-  if (!managedCredential && !secret) {
-    return blockedProbeResult(descriptor, startedAt, startedMs, 'LITELLM_PROBE_SECRET_MISSING', 'Provider credential reference is not present in the server runtime.');
-  }
-  if (descriptor.profile.gatewayProtocol !== 'openai-compatible') {
+  if (descriptor.profile.gatewayProtocol !== descriptor.config.general.gatewayRuntime.contract) {
     return blockedProbeResult(descriptor, startedAt, startedMs, 'LITELLM_CAPABILITY_PROBE_ADAPTER_NOT_IMPLEMENTED', `Capability Probe is not implemented for ${descriptor.profile.gatewayProtocol}.`);
   }
 
   let managedProbe = null;
-  if (managedCredential) {
-    try {
-      managedProbe = await createManagedProbeModel({
-        credentialName: descriptor.connection.credentialRef.referenceName,
-        providerModel: `${descriptor.profile.litellmProviderPrefix}/${descriptor.deployment.providerModelId}`,
-        apiBase: endpointApiBase(descriptor.connection.endpoint)
-      }, options);
-    } catch {
-      return blockedProbeResult(descriptor, startedAt, startedMs, 'LITELLM_MANAGED_PROBE_MODEL_CREATE_FAILED', 'LiteLLM could not create the bounded temporary probe model.');
-    }
+  try {
+    managedProbe = await createManagedProbeModel({
+      ...(descriptor.connection.credentialRef.kind === 'litellm_credential'
+        ? { credentialName: descriptor.connection.credentialRef.referenceName }
+        : { apiKeyEnv: descriptor.connection.credentialRef.referenceName }),
+      providerModel: `${descriptor.profile.litellmProviderPrefix}/${descriptor.deployment.providerModelId}`,
+      apiBase: endpointApiBase(descriptor.connection.endpoint)
+    }, options);
+  } catch {
+    return blockedProbeResult(descriptor, startedAt, startedMs, 'LITELLM_MANAGED_PROBE_MODEL_CREATE_FAILED', 'LiteLLM could not create the bounded temporary probe model.');
   }
 
-  const context = { ...descriptor, ...state, secret, managedProbe, managedOptions: options };
+  const context = { ...descriptor, ...state, managedProbe, managedOptions: options };
   const results = Object.fromEntries(CAPABILITY_PROBE_KEYS.map((key) => [key, descriptor.declaredCapabilities[key]
     ? { status: 'not_run', errorCode: '' }
     : { status: 'not_declared', errorCode: '' }]));
 
   const minimal = await captureProbe('minimal_generation', () => probeMinimalGeneration(context));
-  if (descriptor.declaredCapabilities.usage) results.usage = usageResultFromMinimal(minimal);
+  if (descriptor.declaredCapabilities.usage) results.usage = usageResultFromObservation(context, minimal);
   if (descriptor.declaredCapabilities.streaming) results.streaming = await captureProbe('streaming', () => probeStreaming(context));
-  if (descriptor.declaredCapabilities.tool_call) results.tool_call = await captureProbe('tool_call', () => probeToolContinuation(context, false));
+  if (descriptor.declaredCapabilities.tool_call) results.tool_call = await captureProbe('tool_call', () => probeToolContinuation(context, defaultReasoningEnabled(context)));
   if (descriptor.declaredCapabilities.thinking) results.thinking = await captureProbe('thinking', () => probeThinking(context));
   if (descriptor.declaredCapabilities.thinking_tool) results.thinking_tool = await captureProbe('thinking_tool', () => probeToolContinuation(context, true));
   if (descriptor.declaredCapabilities.structured_output) results.structured_output = await captureProbe('structured_output', () => probeStructuredOutput(context));
@@ -147,6 +159,7 @@ async function runDeploymentCapabilityProbe(configInput, deploymentId, options =
     completedAt,
     durationMs: Date.now() - startedMs,
     deploymentId: descriptor.deployment.deploymentId,
+    executionPath: 'litellm_gateway',
     sourceDigest: descriptor.sourceDigest,
     declaredCapabilities: descriptor.declaredCapabilities,
     baseProbe: minimal,
@@ -169,30 +182,40 @@ async function runDeploymentCapabilityProbe(configInput, deploymentId, options =
 }
 
 async function probeMinimalGeneration(context) {
+  const thinkingEnabled = defaultReasoningEnabled(context);
   const response = await requestJson(context, {
     model: context.deployment.providerModelId,
     messages: [{ role: 'user', content: 'Reply with exactly OK.' }],
-    max_tokens: 16,
-    ...thinkingControl(context, false)
+    max_tokens: CAPABILITY_PROBE_LIMITS.baseGenerationMaxOutputTokens,
+    ...thinkingControl(context, thinkingEnabled)
   });
+  assertCompletionNotTruncated(response.payload, 'LITELLM_CAPABILITY_MINIMAL_OUTPUT_LIMIT');
   const message = firstMessage(response.payload);
   if (!String(message.content || '').trim()) throw capabilityError('LITELLM_CAPABILITY_MINIMAL_EMPTY', 'Minimal generation returned no final content.', 'failed');
   return structuralEvidence(response, { hasContent: true, finishReason: firstFinishReason(response.payload) });
 }
 
-function usageResultFromMinimal(minimal) {
+function usageResultFromObservation(context, minimal) {
+  if (context.usageResponses > 0) {
+    return {
+      status: 'passed',
+      errorCode: '',
+      responseDigest: sha256(JSON.stringify({ usageObserved: true, responseCount: context.usageResponses })),
+      durationMs: minimal.durationMs
+    };
+  }
   if (minimal.status !== 'passed') return { status: minimal.status, errorCode: minimal.errorCode || 'LITELLM_CAPABILITY_USAGE_BASE_FAILED' };
-  if (!minimal.usageObserved) return { status: 'failed', errorCode: 'LITELLM_CAPABILITY_USAGE_MISSING' };
-  return { status: 'passed', errorCode: '', responseDigest: minimal.responseDigest, durationMs: minimal.durationMs };
+  return { status: 'failed', errorCode: 'LITELLM_CAPABILITY_USAGE_MISSING' };
 }
 
 async function probeStreaming(context) {
+  const thinkingEnabled = defaultReasoningEnabled(context);
   const response = await requestStream(context, {
     model: context.deployment.providerModelId,
     messages: [{ role: 'user', content: 'Reply with OK.' }],
     max_tokens: 16,
     stream: true,
-    ...thinkingControl(context, false)
+    ...thinkingControl(context, thinkingEnabled)
   });
   if (!response.contentType.includes('text/event-stream') || !response.preview.includes('data:')) {
     throw capabilityError('LITELLM_CAPABILITY_STREAM_INVALID', 'Provider did not return a valid event stream.', 'failed');
@@ -224,9 +247,7 @@ async function probeToolContinuation(context, thinkingEnabled) {
     throw capabilityError('LITELLM_CAPABILITY_TOOL_ARGUMENTS_INVALID', 'Provider returned invalid tool arguments.', 'failed');
   }
   if (!args || typeof args !== 'object' || Array.isArray(args)) throw capabilityError('LITELLM_CAPABILITY_TOOL_ARGUMENTS_MISMATCH', 'Provider tool arguments did not match the no-argument probe fixture.', 'failed');
-  if (thinkingEnabled && !String(assistant.reasoning_content || '').trim()) {
-    throw capabilityError('LITELLM_CAPABILITY_THINKING_TOOL_REASONING_MISSING', 'Thinking Tool response did not expose reasoning protocol content.', 'failed');
-  }
+  const reasoningObserved = Boolean(String(assistant.reasoning_content || '').trim());
   const assistantMessage = replayAssistantMessage(context, assistant, thinkingEnabled);
   const second = await requestJson(context, {
     model: context.deployment.providerModelId,
@@ -246,30 +267,43 @@ async function probeToolContinuation(context, thinkingEnabled) {
   }
   return {
     durationMs: first.durationMs + second.durationMs,
-    responseDigest: sha256(JSON.stringify({ toolName: 'get_probe_token', argumentsValid: true, tokenMatched: true, continuationComplete: true, thinkingEnabled }))
+    responseDigest: sha256(JSON.stringify({ toolName: 'get_probe_token', argumentsValid: true, tokenMatched: true, continuationComplete: true, thinkingEnabled, reasoningObserved }))
   };
 }
 
 async function probeThinking(context) {
   const response = await requestJson(context, {
     model: context.deployment.providerModelId,
-    messages: [{ role: 'user', content: 'Calculate 2 + 2 and give only the final number.' }],
+    messages: [{ role: 'user', content: 'Calculate 37 × 19 and give only the final number.' }],
     max_tokens: CAPABILITY_PROBE_LIMITS.maxOutputTokensPerCall,
     ...thinkingControl(context, true)
   });
   const message = firstMessage(response.payload);
-  if (!String(message.reasoning_content || '').trim()) throw capabilityError('LITELLM_CAPABILITY_THINKING_MISSING', 'Thinking response did not expose reasoning protocol content.', 'failed');
-  return structuralEvidence(response, { hasReasoning: true, hasContent: Boolean(String(message.content || '').trim()) });
+  const hasReasoningContent = Boolean(String(message.reasoning_content || '').trim());
+  const hasReasoningUsage = finiteToken(
+    response.payload?.usage?.completion_tokens_details?.reasoning_tokens
+      ?? response.payload?.usage?.reasoning_tokens
+  ) > 0;
+  if (!hasReasoningContent && !hasReasoningUsage) {
+    throw capabilityError('LITELLM_CAPABILITY_THINKING_MISSING', 'Thinking response did not expose reasoning content or reasoning-token usage.', 'failed');
+  }
+  return structuralEvidence(response, {
+    hasReasoningContent,
+    hasReasoningUsage,
+    hasContent: Boolean(String(message.content || '').trim())
+  });
 }
 
 async function probeStructuredOutput(context) {
+  const thinkingEnabled = defaultReasoningEnabled(context);
   const response = await requestJson(context, {
     model: context.deployment.providerModelId,
     messages: [{ role: 'user', content: 'Return a JSON object exactly matching {"probe":true}.' }],
     response_format: { type: 'json_object' },
-    max_tokens: 32,
-    ...thinkingControl(context, false)
+    max_tokens: CAPABILITY_PROBE_LIMITS.structuredOutputMaxOutputTokens,
+    ...thinkingControl(context, thinkingEnabled)
   });
+  assertCompletionNotTruncated(response.payload, 'LITELLM_CAPABILITY_STRUCTURED_OUTPUT_LIMIT');
   const content = String(firstMessage(response.payload).content || '');
   let parsed;
   try {
@@ -329,27 +363,23 @@ async function requestStream(context, body) {
 
 async function providerRequest(context, body, streaming) {
   if (context.providerCalls >= CAPABILITY_PROBE_LIMITS.maxProviderCalls) throw capabilityError('LITELLM_CAPABILITY_PROBE_CALL_LIMIT', 'Capability Probe reached its provider-call limit.', 'blocked');
-  const requestBody = context.managedProbe ? managedProbeRequestBody(context, body) : body;
+  const requestBody = managedProbeRequestBody(context, body);
   const bodyText = JSON.stringify(requestBody);
   if (Buffer.byteLength(bodyText, 'utf8') > CAPABILITY_PROBE_LIMITS.maxInputBytes) throw capabilityError('LITELLM_CAPABILITY_PROBE_INPUT_LIMIT', 'Capability Probe input exceeded its byte limit.', 'blocked');
   const elapsed = Date.now() - context.startedMs;
   const remaining = CAPABILITY_PROBE_LIMITS.maxDurationMs - elapsed;
   if (remaining <= 0) throw capabilityError('LITELLM_CAPABILITY_PROBE_DEADLINE', 'Capability Probe reached its total duration limit.', 'inconclusive');
   const controller = new AbortController();
-  const timeoutMs = Math.max(1000, Math.min(Number(context.connection.requestTimeoutMs || 60000), remaining));
+  const timeoutMs = Math.min(context.probeTimeoutMs, remaining);
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const requestStarted = Date.now();
   context.providerCalls += 1;
   try {
-    const response = context.managedProbe
-      ? await managedProxyRequest({ alias: context.managedProbe.alias, body: requestBody, signal: controller.signal }, context.managedOptions)
-      : await context.fetchImpl(chatCompletionsUrl(context.connection.endpoint), {
-        method: 'POST',
-        headers: providerHeaders(context.profile.profileId, context.secret),
-        body: bodyText,
-        signal: controller.signal,
-        redirect: 'error'
-      });
+    const response = await managedProxyRequest({
+      alias: context.managedProbe.alias,
+      body: requestBody,
+      signal: controller.signal
+    }, context.managedOptions);
     if (!response.ok) throw providerStatusError(response.status);
     return { response, controller, timeout, requestStarted, streaming };
   } catch (error) {
@@ -359,6 +389,12 @@ async function providerRequest(context, body, streaming) {
     if (error?.probeStatus) throw error;
     throw capabilityError('LITELLM_CAPABILITY_PROBE_NETWORK_FAILED', 'Provider request failed before a safe response was received.', 'inconclusive');
   }
+}
+
+function positiveProbeTimeout(value, fallback) {
+  const number = Number(value ?? fallback);
+  if (!Number.isInteger(number) || number <= 0) throw probeInputError('LITELLM_CAPABILITY_PROBE_TIMEOUT_INVALID', 'Capability Probe timeout must come from the active resource policy.');
+  return number;
 }
 
 function managedProbeRequestBody(context, body) {
@@ -430,27 +466,48 @@ function blockedProbeResult(descriptor, startedAt, startedMs, errorCode, message
   };
 }
 
+function defaultReasoningEnabled(context) {
+  return context.modelProtocolProfile?.probePolicy?.defaultReasoningMode === 'enabled';
+}
+
 function thinkingControl(context, enabled) {
-  const control = enabled ? context.modelProtocolProfile?.thinking?.enabledBody : context.modelProtocolProfile?.thinking?.disabledBody;
-  return control ? JSON.parse(JSON.stringify(control)) : {};
+  const reasoning = context.modelProtocolProfile?.executionPolicy?.reasoning;
+  const branch = enabled ? reasoning?.enabled : reasoning?.disabled;
+  if (!branch?.supported) {
+    throw capabilityError(
+      'LITELLM_CAPABILITY_REASONING_MODE_UNSUPPORTED',
+      `Model Protocol Profile does not support reasoning mode ${enabled ? 'enabled' : 'disabled'}.`,
+      'blocked'
+    );
+  }
+  const providerOptions = cloneJson(branch.providerOptions || {});
+  if (providerOptions.reasoningEffort !== undefined) {
+    providerOptions.reasoning_effort = providerOptions.reasoningEffort;
+    delete providerOptions.reasoningEffort;
+  }
+  return providerOptions;
 }
 
 function toolChoiceControl(context, thinkingEnabled) {
   const mode = thinkingEnabled
-    ? context.modelProtocolProfile?.toolChoice?.thinking
-    : context.modelProtocolProfile?.toolChoice?.nonThinking;
-  if (mode === 'named') return { tool_choice: { type: 'function', function: { name: 'get_probe_token' } } };
+    ? context.modelProtocolProfile?.executionPolicy?.toolChoice?.thinking
+    : context.modelProtocolProfile?.executionPolicy?.toolChoice?.nonThinking;
   if (mode === 'auto') return { tool_choice: 'auto' };
+  if (mode === 'unsupported') {
+    throw capabilityError('LITELLM_CAPABILITY_TOOL_REASONING_UNSUPPORTED', 'Model Protocol Profile does not support tools in the selected reasoning mode.', 'blocked');
+  }
   return {};
 }
 
 function replayAssistantMessage(context, assistant, thinkingEnabled) {
   const message = {
     role: 'assistant',
-    content: context.modelProtocolProfile?.continuation?.assistantContent === 'non_null' && assistant.content == null ? '' : assistant.content,
+    content: context.modelProtocolProfile?.executionPolicy?.continuation?.assistantContent === 'non_null' && assistant.content == null ? '' : assistant.content,
     tool_calls: assistant.tool_calls
   };
-  if (thinkingEnabled && context.modelProtocolProfile?.continuation?.reasoningContent === 'required') {
+  if (thinkingEnabled
+    && context.modelProtocolProfile?.executionPolicy?.continuation?.reasoningContent !== 'omit'
+    && String(assistant.reasoning_content || '').trim()) {
     message.reasoning_content = assistant.reasoning_content;
   }
   return message;
@@ -486,7 +543,8 @@ function firstFinishReason(payload) {
 }
 
 function observeUsage(context, usage) {
-  if (!usage || typeof usage !== 'object') return;
+  if (!hasUsage(usage)) return;
+  context.usageResponses += 1;
   context.usage.promptTokens += finiteToken(usage.prompt_tokens);
   context.usage.completionTokens += finiteToken(usage.completion_tokens);
   context.usage.reasoningTokens += finiteToken(usage.completion_tokens_details?.reasoning_tokens ?? usage.reasoning_tokens);
@@ -520,15 +578,6 @@ async function readBoundedBody(response, limit) {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-function chatCompletionsUrl(endpoint = {}) {
-  const scheme = endpoint.scheme || 'https';
-  const defaultPort = scheme === 'https' ? 443 : 80;
-  const port = Number(endpoint.port || defaultPort);
-  const portText = port === defaultPort ? '' : `:${port}`;
-  const basePath = String(endpoint.basePath || '').replace(/\/$/, '');
-  return `${scheme}://${endpoint.host}${portText}${basePath}/chat/completions`;
-}
-
 function endpointApiBase(endpoint = {}) {
   const scheme = endpoint.scheme || 'https';
   const defaultPort = scheme === 'https' ? 443 : 80;
@@ -536,13 +585,6 @@ function endpointApiBase(endpoint = {}) {
   const portText = port === defaultPort ? '' : `:${port}`;
   const basePath = String(endpoint.basePath || '').replace(/\/$/, '');
   return `${scheme}://${endpoint.host}${portText}${basePath}`;
-}
-
-function providerHeaders(profileId, secret) {
-  if (String(profileId).startsWith('anthropic')) {
-    return { 'x-api-key': secret, 'anthropic-version': '2023-06-01', accept: 'application/json', 'content-type': 'application/json' };
-  }
-  return { authorization: `Bearer ${secret}`, accept: 'application/json', 'content-type': 'application/json' };
 }
 
 function providerStatusError(status) {
@@ -573,6 +615,10 @@ function probeInputError(code, message) {
 
 function sha256(value) {
   return crypto.createHash('sha256').update(String(value || ''), 'utf8').digest('hex');
+}
+
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value));
 }
 
 module.exports = {

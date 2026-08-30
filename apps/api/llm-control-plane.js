@@ -2,22 +2,45 @@
 
 const crypto = require('crypto');
 const { normalizeLiteLlmConfig } = require('./litellm-config');
+const { legacyAliasId } = require('./ai-teacher-model-registry');
 const { ADAPTER_PROFILE_CATALOG, findAdapterProfile, publicAdapterProfileCatalog } = require('./llm-adapter-catalog');
 const { testManagedCredentialConnection } = require('./litellm-managed-credentials');
+const {
+  BOOTSTRAP_VALUES: AGENT_RESOURCE_POLICY_BOOTSTRAP_VALUES,
+  runtimeProjection: agentResourcePolicyRuntimeProjection
+} = require('../../packages/agent-resource-policy');
 
-function assignServerControlPlaneIds(config = {}) {
+const DEFAULT_PROVIDER_PROBE_TIMEOUT_MS = agentResourcePolicyRuntimeProjection(
+  AGENT_RESOURCE_POLICY_BOOTSTRAP_VALUES
+).probe.timeoutMs;
+
+function assignServerControlPlaneIds(config = {}, baselineConfig = null) {
   if (Number(config.schemaVersion) < 2) return config;
+  const hasBaseline = Boolean(baselineConfig);
+  const baselineHasStableIds = Boolean(baselineConfig && Number(baselineConfig.schemaVersion) >= 2);
+  const baselineConnectionIds = new Set((baselineConfig?.providerConnections || []).map((item) => String(item.connectionId || '')));
+  const baselineDeploymentIds = new Set((baselineConfig?.modelDeployments || []).map((item) => String(item.deploymentId || '')));
+  const baselineAliasEntries = baselineHasStableIds
+    ? (baselineConfig?.businessModelAliases || [])
+    : (baselineConfig?.modelGroups || []).map((group) => ({
+      aliasId: legacyAliasId(group.modelName),
+      litellmAlias: group.modelName
+    }));
+  const baselineAliasIds = new Set(baselineAliasEntries.map((item) => String(item.aliasId || '')));
+  const baselineAliasByRuntimeName = new Map(
+    baselineAliasEntries.map((item) => [String(item.litellmAlias || ''), item])
+  );
   const connectionMap = new Map();
   const deploymentMap = new Map();
   const providerConnections = (config.providerConnections || []).map((connection) => {
     const previous = String(connection.connectionId || '');
-    const connectionId = previous.startsWith('draft-') ? `connection_${crypto.randomUUID()}` : previous;
+    const connectionId = serverOwnedObjectId(previous, 'connection', baselineConnectionIds, hasBaseline);
     connectionMap.set(previous, connectionId);
     return { ...connection, connectionId };
   });
   const modelDeployments = (config.modelDeployments || []).map((deployment) => {
     const previous = String(deployment.deploymentId || '');
-    const deploymentId = previous.startsWith('draft-') ? `deployment_${crypto.randomUUID()}` : previous;
+    const deploymentId = serverOwnedObjectId(previous, 'deployment', baselineDeploymentIds, hasBaseline);
     deploymentMap.set(previous, deploymentId);
     return {
       ...deployment,
@@ -25,15 +48,34 @@ function assignServerControlPlaneIds(config = {}) {
       connectionId: connectionMap.get(String(deployment.connectionId || '')) || deployment.connectionId
     };
   });
-  const businessModelAliases = (config.businessModelAliases || []).map((alias) => ({
-    ...alias,
-    aliasId: String(alias.aliasId || '').startsWith('draft-') ? `alias_${crypto.randomUUID()}` : alias.aliasId,
-    members: (alias.members || []).map((member) => ({
-      ...member,
-      deploymentId: deploymentMap.get(String(member.deploymentId || '')) || member.deploymentId
-    }))
-  }));
+  const businessModelAliases = (config.businessModelAliases || []).map((alias) => {
+    const previous = String(alias.aliasId || '');
+    const runtimeName = String(alias.litellmAlias || '');
+    const baselineAlias = baselineAliasByRuntimeName.get(runtimeName);
+    if (baselineHasStableIds && baselineAlias && previous !== String(baselineAlias.aliasId || '')) {
+      const error = new Error('Business Model Alias ID is immutable after creation.');
+      error.statusCode = 409;
+      error.code = 'LITELLM_ALIAS_ID_IMMUTABLE';
+      throw error;
+    }
+    return {
+      ...alias,
+      aliasId: baselineAlias
+        ? String(baselineAlias.aliasId || '')
+        : serverOwnedObjectId(previous, 'alias', baselineAliasIds, hasBaseline),
+      members: (alias.members || []).map((member) => ({
+        ...member,
+        deploymentId: deploymentMap.get(String(member.deploymentId || '')) || member.deploymentId
+      }))
+    };
+  });
   return { ...config, providerConnections, modelDeployments, businessModelAliases };
+}
+
+function serverOwnedObjectId(requestedId, prefix, baselineIds, hasBaseline) {
+  const requested = String(requestedId || '').trim();
+  if (!requested.startsWith('draft-') && (!hasBaseline || baselineIds.has(requested))) return requested;
+  return `${prefix}_${crypto.randomUUID()}`;
 }
 
 async function probeProviderConnection(connection = {}, options = {}) {
@@ -60,7 +102,7 @@ async function probeProviderConnection(connection = {}, options = {}) {
   checks.push({ id: 'secret_reference', label: 'Secret 引用就绪', status: 'passed' });
 
   const controller = new AbortController();
-  const timeoutMs = Math.min(Math.max(Number(normalized.requestTimeoutMs || 8000), 1000), Number(options.maxTimeoutMs || 10000));
+  const timeoutMs = positiveProbeTimeout(options.timeoutMs, DEFAULT_PROVIDER_PROBE_TIMEOUT_MS);
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const requestStartedAt = Date.now();
   try {
@@ -100,6 +142,12 @@ async function probeProviderConnection(connection = {}, options = {}) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function positiveProbeTimeout(value, fallback) {
+  const number = Number(value ?? fallback);
+  if (!Number.isInteger(number) || number <= 0) throw new RangeError('Provider probe timeout must come from the active resource policy.');
+  return number;
 }
 
 async function probeManagedCredentialConnection(connection, providerModelId, checkedAt, startedAt, checks, options) {

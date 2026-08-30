@@ -8,6 +8,17 @@ model_list:
       rpm: 60
       tpm: 120000
 
+  # The default Agent Policy routes Candidate/Repair to this stable alias.
+  # A single-provider installation may safely reuse the same deployment for
+  # both aliases; the dynamic control plane can split them later.
+  - model_name: ai-teacher-reasoning
+    litellm_params:
+      model: os.environ/PROVIDER_MODEL
+      api_base: os.environ/PROVIDER_API_BASE
+      api_key: os.environ/PROVIDER_API_KEY
+      rpm: 60
+      tpm: 120000
+
   # Business Model Alias: add another deployment with the same model_name
   # only after a second Provider Connection has been configured.
   # - model_name: ai-teacher-fast

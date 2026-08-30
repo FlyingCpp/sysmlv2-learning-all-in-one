@@ -1,0 +1,255 @@
+{
+  "schemaVersion": 1,
+  "catalogVersion": "2026-08-27.1",
+  "gatewayContract": {
+    "id": "gateway-chat.v1",
+    "implementation": "litellm",
+    "testedVersion": "1.90.0"
+  },
+  "adapterProfiles": [
+    {
+      "profileId": "deepseek-v4.v1",
+      "revision": 1,
+      "displayName": "DeepSeek 官方 Chat",
+      "gatewayProtocol": "gateway-chat.v1",
+      "providerWireProtocol": "openai-chat-completions.v1",
+      "litellmProviderPrefix": "deepseek",
+      "endpointPolicy": {"schemes": ["https"], "defaultPort": 443, "recommendedHosts": ["api.deepseek.com"]},
+      "supportedCapabilities": ["streaming", "tool_calling", "thinking", "thinking_with_tools", "structured_output", "usage"]
+    },
+    {
+      "profileId": "zai-glm.v1",
+      "revision": 1,
+      "displayName": "智谱 GLM 标准 API",
+      "gatewayProtocol": "gateway-chat.v1",
+      "providerWireProtocol": "openai-chat-completions.v1",
+      "litellmProviderPrefix": "zai",
+      "endpointPolicy": {"schemes": ["https"], "defaultPort": 443, "recommendedHosts": ["open.bigmodel.cn", "api.z.ai"]},
+      "supportedCapabilities": ["streaming", "tool_calling", "thinking", "thinking_with_tools", "structured_output", "usage"]
+    },
+    {
+      "profileId": "zai-glm-coding.v1",
+      "revision": 1,
+      "displayName": "智谱 GLM Coding API",
+      "gatewayProtocol": "gateway-chat.v1",
+      "providerWireProtocol": "openai-chat-completions.v1",
+      "litellmProviderPrefix": "zai",
+      "endpointPolicy": {"schemes": ["https"], "defaultPort": 443, "recommendedHosts": ["open.bigmodel.cn"]},
+      "supportedCapabilities": ["streaming", "tool_calling", "thinking", "thinking_with_tools", "structured_output", "usage"]
+    },
+    {
+      "profileId": "moonshot.v1",
+      "revision": 1,
+      "displayName": "Kimi / Moonshot 官方 API",
+      "gatewayProtocol": "gateway-chat.v1",
+      "providerWireProtocol": "openai-chat-completions.v1",
+      "litellmProviderPrefix": "moonshot",
+      "endpointPolicy": {"schemes": ["https"], "defaultPort": 443, "recommendedHosts": ["api.moonshot.cn"]},
+      "supportedCapabilities": ["streaming", "tool_calling", "thinking", "thinking_with_tools", "structured_output", "vision", "usage"]
+    },
+    {
+      "profileId": "openai.v1",
+      "revision": 1,
+      "displayName": "OpenAI 官方 Chat API",
+      "gatewayProtocol": "gateway-chat.v1",
+      "providerWireProtocol": "openai-chat-completions.v1",
+      "litellmProviderPrefix": "openai",
+      "endpointPolicy": {"schemes": ["https"], "defaultPort": 443, "recommendedHosts": ["api.openai.com"]},
+      "supportedCapabilities": ["streaming", "tool_calling", "thinking", "thinking_with_tools", "structured_output", "vision", "usage"]
+    },
+    {
+      "profileId": "anthropic.v1",
+      "revision": 1,
+      "displayName": "Anthropic Claude 官方 Messages API",
+      "gatewayProtocol": "gateway-chat.v1",
+      "providerWireProtocol": "anthropic-messages.v1",
+      "litellmProviderPrefix": "anthropic",
+      "endpointPolicy": {"schemes": ["https"], "defaultPort": 443, "recommendedHosts": ["api.anthropic.com"]},
+      "supportedCapabilities": ["streaming", "tool_calling", "thinking", "thinking_with_tools", "structured_output", "vision", "usage"]
+    },
+    {
+      "profileId": "openai-compatible-public.v1",
+      "revision": 1,
+      "displayName": "受控 OpenAI-compatible API",
+      "gatewayProtocol": "gateway-chat.v1",
+      "providerWireProtocol": "openai-chat-completions.v1",
+      "litellmProviderPrefix": "openai",
+      "endpointPolicy": {"schemes": ["https"], "defaultPort": 443, "recommendedHosts": []},
+      "supportedCapabilities": ["streaming", "tool_calling", "structured_output", "usage"]
+    },
+    {
+      "profileId": "azure-openai.v1",
+      "revision": 1,
+      "displayName": "Azure OpenAI",
+      "gatewayProtocol": "gateway-chat.v1",
+      "providerWireProtocol": "azure-openai.v1",
+      "litellmProviderPrefix": "azure",
+      "endpointPolicy": {"schemes": ["https"], "defaultPort": 443, "recommendedHosts": []},
+      "supportedCapabilities": ["streaming", "tool_calling", "structured_output", "vision", "usage"]
+    }
+  ],
+  "modelProtocolProfiles": [
+    {
+      "profileId": "deepseek-v4-chat.v1",
+      "revision": 3,
+      "adapterProfileIds": ["deepseek-v4.v1"],
+      "recommendedModelIds": ["deepseek-v4-pro", "deepseek-v4-flash"],
+      "compatibilityScope": "deepseek-v4-chat-completions",
+      "executionPolicy": {
+        "gatewayContract": "gateway-chat.v1",
+        "reasoning": {
+          "defaultMode": "enabled",
+          "enabled": {"supported": true, "sdkReasoning": "high", "providerOptions": {"thinking": {"type": "enabled"}, "reasoningEffort": "high", "parallel_tool_calls": false}},
+          "disabled": {"supported": true, "sdkReasoning": "none", "providerOptions": {"thinking": {"type": "disabled"}, "parallel_tool_calls": false}}
+        },
+        "toolChoice": {"nonThinking": "omit", "thinking": "omit"},
+        "continuation": {"reasoningContent": "when_present", "assistantContent": "non_null"}
+      },
+      "probePolicy": {"defaultReasoningMode": "enabled"}
+    },
+    {
+      "profileId": "glm-5.2-chat.v1",
+      "revision": 4,
+      "adapterProfileIds": ["zai-glm.v1"],
+      "recommendedModelIds": ["glm-5.2"],
+      "compatibilityScope": "glm-5.2-standard-chat",
+      "litellm": {"extraBodyParams": ["thinking"], "allowedOpenAiParams": ["reasoning_effort", "response_format"]},
+      "executionPolicy": {
+        "gatewayContract": "gateway-chat.v1",
+        "reasoning": {
+          "defaultMode": "enabled",
+          "enabled": {"supported": true, "sdkReasoning": "high", "providerOptions": {"reasoningEffort": "high", "extra_body": {"thinking": {"type": "enabled", "clear_thinking": false}}, "allowed_openai_params": ["reasoning_effort"]}},
+          "disabled": {"supported": true, "sdkReasoning": "none", "providerOptions": {"reasoningEffort": "none", "extra_body": {"thinking": {"type": "disabled"}}, "allowed_openai_params": ["reasoning_effort"]}}
+        },
+        "toolChoice": {"nonThinking": "auto", "thinking": "auto"},
+        "continuation": {"reasoningContent": "required", "assistantContent": "non_null"}
+      },
+      "probePolicy": {"defaultReasoningMode": "enabled"}
+    },
+    {
+      "profileId": "glm-5.3-standard-chat.v1",
+      "revision": 1,
+      "adapterProfileIds": ["zai-glm.v1"],
+      "recommendedModelIds": ["glm-5.3-flash"],
+      "compatibilityScope": "glm-5.3-standard-always-thinking",
+      "litellm": {"extraBodyParams": ["thinking"], "allowedOpenAiParams": ["reasoning_effort", "response_format"]},
+      "executionPolicy": {
+        "gatewayContract": "gateway-chat.v1",
+        "reasoning": {
+          "defaultMode": "enabled",
+          "enabled": {"supported": true, "sdkReasoning": "high", "providerOptions": {"reasoningEffort": "high", "extra_body": {"thinking": {"type": "enabled", "clear_thinking": false}}, "allowed_openai_params": ["reasoning_effort"]}},
+          "disabled": {"supported": false}
+        },
+        "toolChoice": {"nonThinking": "unsupported", "thinking": "auto"},
+        "continuation": {"reasoningContent": "required", "assistantContent": "non_null"}
+      },
+      "probePolicy": {"defaultReasoningMode": "enabled"}
+    },
+    {
+      "profileId": "glm-5.3-coding-chat.v1",
+      "revision": 1,
+      "adapterProfileIds": ["zai-glm-coding.v1"],
+      "recommendedModelIds": ["glm-5.3-flash"],
+      "compatibilityScope": "glm-5.3-coding-chat",
+      "litellm": {"extraBodyParams": ["thinking"], "allowedOpenAiParams": ["reasoning_effort", "response_format"]},
+      "executionPolicy": {
+        "gatewayContract": "gateway-chat.v1",
+        "reasoning": {
+          "defaultMode": "enabled",
+          "enabled": {"supported": true, "sdkReasoning": "high", "providerOptions": {"reasoningEffort": "high", "extra_body": {"thinking": {"type": "enabled", "clear_thinking": false}}, "allowed_openai_params": ["reasoning_effort"]}},
+          "disabled": {"supported": true, "sdkReasoning": "none", "providerOptions": {"reasoningEffort": "none", "extra_body": {"thinking": {"type": "disabled"}}, "allowed_openai_params": ["reasoning_effort"]}}
+        },
+        "toolChoice": {"nonThinking": "auto", "thinking": "auto"},
+        "continuation": {"reasoningContent": "required", "assistantContent": "non_null"}
+      },
+      "probePolicy": {"defaultReasoningMode": "enabled"}
+    },
+    {
+      "profileId": "kimi-k2.6-chat.v1",
+      "revision": 1,
+      "adapterProfileIds": ["moonshot.v1"],
+      "recommendedModelIds": ["kimi-k2.6", "kimi-k2.5"],
+      "compatibilityScope": "kimi-k2.5-plus-chat",
+      "litellm": {"extraBodyParams": ["thinking"], "allowedOpenAiParams": ["response_format"]},
+      "executionPolicy": {
+        "gatewayContract": "gateway-chat.v1",
+        "reasoning": {
+          "defaultMode": "enabled",
+          "enabled": {"supported": true, "sdkReasoning": "high", "providerOptions": {"extra_body": {"thinking": {"type": "enabled"}}}},
+          "disabled": {"supported": true, "sdkReasoning": "none", "providerOptions": {"extra_body": {"thinking": {"type": "disabled"}}}}
+        },
+        "toolChoice": {"nonThinking": "auto", "thinking": "auto"},
+        "continuation": {"reasoningContent": "required", "assistantContent": "non_null"}
+      },
+      "probePolicy": {"defaultReasoningMode": "enabled"}
+    },
+    {
+      "profileId": "openai-chat.v1",
+      "revision": 1,
+      "adapterProfileIds": ["openai.v1", "openai-compatible-public.v1", "azure-openai.v1"],
+      "recommendedModelIds": [],
+      "compatibilityScope": "explicit-openai-chat",
+      "executionPolicy": {
+        "gatewayContract": "gateway-chat.v1",
+        "reasoning": {"defaultMode": "disabled", "enabled": {"supported": true, "sdkReasoning": "none", "providerOptions": {}}, "disabled": {"supported": true, "sdkReasoning": "none", "providerOptions": {}}},
+        "toolChoice": {"nonThinking": "auto", "thinking": "auto"},
+        "continuation": {"reasoningContent": "omit", "assistantContent": "provider_default"}
+      },
+      "probePolicy": {"defaultReasoningMode": "disabled"}
+    },
+    {
+      "profileId": "openai-reasoning-chat.v1",
+      "revision": 1,
+      "adapterProfileIds": ["openai.v1", "azure-openai.v1"],
+      "recommendedModelIds": [],
+      "compatibilityScope": "explicit-openai-reasoning-chat",
+      "executionPolicy": {
+        "gatewayContract": "gateway-chat.v1",
+        "reasoning": {
+          "defaultMode": "enabled",
+          "enabled": {"supported": true, "sdkReasoning": "high", "providerOptions": {"reasoningEffort": "high"}},
+          "disabled": {"supported": true, "sdkReasoning": "none", "providerOptions": {"reasoningEffort": "none"}}
+        },
+        "toolChoice": {"nonThinking": "auto", "thinking": "auto"},
+        "continuation": {"reasoningContent": "provider_managed", "assistantContent": "provider_default"}
+      },
+      "probePolicy": {"defaultReasoningMode": "enabled"}
+    },
+    {
+      "profileId": "claude-manual-thinking.v1",
+      "revision": 1,
+      "adapterProfileIds": ["anthropic.v1"],
+      "recommendedModelIds": [],
+      "compatibilityScope": "explicit-claude-manual-thinking",
+      "executionPolicy": {
+        "gatewayContract": "gateway-chat.v1",
+        "reasoning": {
+          "defaultMode": "enabled",
+          "enabled": {"supported": true, "sdkReasoning": "high", "providerOptions": {"extra_body": {"thinking": {"type": "enabled", "budget_tokens": 1024}}}},
+          "disabled": {"supported": true, "sdkReasoning": "none", "providerOptions": {"extra_body": {"thinking": {"type": "disabled"}}}}
+        },
+        "toolChoice": {"nonThinking": "auto", "thinking": "auto"},
+        "continuation": {"reasoningContent": "opaque_blocks", "assistantContent": "content_blocks"}
+      },
+      "probePolicy": {"defaultReasoningMode": "enabled", "thinkingMaxOutputTokens": 1400}
+    },
+    {
+      "profileId": "claude-adaptive-thinking.v1",
+      "revision": 1,
+      "adapterProfileIds": ["anthropic.v1"],
+      "recommendedModelIds": [],
+      "compatibilityScope": "explicit-claude-adaptive-thinking",
+      "executionPolicy": {
+        "gatewayContract": "gateway-chat.v1",
+        "reasoning": {
+          "defaultMode": "enabled",
+          "enabled": {"supported": true, "sdkReasoning": "high", "providerOptions": {"extra_body": {"thinking": {"type": "adaptive"}}}},
+          "disabled": {"supported": true, "sdkReasoning": "none", "providerOptions": {"extra_body": {"thinking": {"type": "disabled"}}}}
+        },
+        "toolChoice": {"nonThinking": "auto", "thinking": "auto"},
+        "continuation": {"reasoningContent": "opaque_blocks", "assistantContent": "content_blocks"}
+      },
+      "probePolicy": {"defaultReasoningMode": "enabled"}
+    }
+  ]
+}

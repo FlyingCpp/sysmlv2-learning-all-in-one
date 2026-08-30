@@ -1,6 +1,10 @@
 'use strict';
 
-const { findAdapterProfile } = require('./llm-adapter-catalog');
+const {
+  catalogMetadata,
+  findAdapterProfile,
+  findModelProtocolProfile
+} = require('./llm-adapter-catalog');
 
 const crypto = require('crypto');
 
@@ -93,24 +97,27 @@ function validateLiteLlmConfig(input = {}) {
   }
 }
 
-function renderLiteLlmConfigYaml(input = {}) {
+function renderLiteLlmConfigYaml(input = {}, options = {}) {
   const config = normalizeLiteLlmConfig(input);
-  const lines = ['model_list:'];
-  for (const group of config.modelGroups) {
-    for (const deployment of group.deployments.filter((item) => item.enabled)) {
-      lines.push('  - model_name: ' + yamlScalar(group.modelName));
-      lines.push('    litellm_params:');
-      lines.push('      model: ' + yamlScalar(deployment.model));
-      if (deployment.apiBase) lines.push('      api_base: ' + yamlScalar(deployment.apiBase));
-      else if (deployment.apiBaseEnv) lines.push('      api_base: os.environ/' + deployment.apiBaseEnv);
-      if (deployment.litellmCredentialName) {
-        lines.push('      litellm_credential_name: ' + yamlScalar(deployment.litellmCredentialName));
-      } else {
-        lines.push('      api_key: os.environ/' + deployment.apiKeyEnv);
+  const modelOwner = normalizeRuntimeModelOwner(options.modelOwner, config.schemaVersion);
+  const lines = modelOwner === 'dynamic' ? ['model_list: []'] : ['model_list:'];
+  if (modelOwner === 'static') {
+    for (const group of config.modelGroups) {
+      for (const deployment of group.deployments.filter((item) => item.enabled)) {
+        lines.push('  - model_name: ' + yamlScalar(group.modelName));
+        lines.push('    litellm_params:');
+        lines.push('      model: ' + yamlScalar(deployment.model));
+        if (deployment.apiBase) lines.push('      api_base: ' + yamlScalar(deployment.apiBase));
+        else if (deployment.apiBaseEnv) lines.push('      api_base: os.environ/' + deployment.apiBaseEnv);
+        if (deployment.litellmCredentialName) {
+          lines.push('      litellm_credential_name: ' + yamlScalar(deployment.litellmCredentialName));
+        } else {
+          lines.push('      api_key: os.environ/' + deployment.apiKeyEnv);
+        }
+        if (deployment.rpm > 0) lines.push('      rpm: ' + deployment.rpm);
+        if (deployment.tpm > 0) lines.push('      tpm: ' + deployment.tpm);
+        if (deployment.maxParallelRequests > 0) lines.push('      max_parallel_requests: ' + deployment.maxParallelRequests);
       }
-      if (deployment.rpm > 0) lines.push('      rpm: ' + deployment.rpm);
-      if (deployment.tpm > 0) lines.push('      tpm: ' + deployment.tpm);
-      if (deployment.maxParallelRequests > 0) lines.push('      max_parallel_requests: ' + deployment.maxParallelRequests);
     }
   }
   lines.push('');
@@ -235,6 +242,41 @@ function normalizeDeployment(deployment = {}, groupIndex = 0, deploymentIndex = 
   };
 }
 
+function publicLiteLlmConfigVersionForHistory(row = {}, options = {}) {
+  try {
+    return publicLiteLlmConfigVersion(row, options);
+  } catch (error) {
+    const storedStatus = row.status || 'draft';
+    return {
+      versionId: row.versionId || row.version_id || '',
+      status: 'incompatible',
+      storedStatus,
+      checksum: row.checksum || '',
+      config: null,
+      validation: {
+        ok: false,
+        errors: [{
+          code: String(error?.code || 'LITELLM_CONFIG_HISTORY_INCOMPATIBLE'),
+          message: String(error?.message || 'Historical LiteLLM config is incompatible.')
+        }]
+      },
+      migrationRequired: true,
+      createdBy: row.createdBy || row.created_by || '',
+      publishedBy: row.publishedBy || row.published_by || '',
+      notes: row.notes || '',
+      createdAt: isoString(row.createdAt || row.created_at),
+      publishedAt: isoString(row.publishedAt || row.published_at)
+    };
+  }
+}
+
+function normalizeRuntimeModelOwner(value, schemaVersion = 1) {
+  const requested = String(value || 'static').trim().toLowerCase();
+  if (requested === 'auto') return Number(schemaVersion || 1) >= 2 ? 'dynamic' : 'static';
+  if (requested === 'static' || requested === 'dynamic') return requested;
+  throw validationError('LITELLM_RUNTIME_MODEL_OWNER_INVALID', 'LiteLLM runtime model owner must be auto, static, or dynamic.');
+}
+
 function hasControlPlaneShape(config = {}) {
   return Array.isArray(config.providerConnections)
     || Array.isArray(config.modelDeployments)
@@ -265,7 +307,9 @@ function normalizeControlPlaneConfig(config = {}) {
     if (!connectionIds.has(deployment.connectionId)) {
       throw validationError('LITELLM_DEPLOYMENT_CONNECTION_MISSING', `Deployment ${deployment.deploymentId} references missing connection ${deployment.connectionId}.`);
     }
-    validateDeclaredCapabilities(deployment, connectionsById.get(deployment.connectionId));
+    const connection = connectionsById.get(deployment.connectionId);
+    bindModelProtocolProfile(deployment, connection);
+    validateDeclaredCapabilities(deployment, connection);
   }
   for (const alias of businessModelAliases) {
     if (!alias.members.length) throw validationError('LITELLM_ALIAS_MEMBERS_REQUIRED', `Alias ${alias.aliasId} requires at least one deployment member.`);
@@ -320,7 +364,6 @@ function normalizeProviderConnection(connection = {}, index = 0) {
       referenceName: credentialReferenceName
     },
     tlsPolicy: enumValue(connection.tlsPolicy, ['verify_full', 'private_ca'], 'verify_full'),
-    requestTimeoutMs: boundedInteger(connection.requestTimeoutMs, 60000, 1000, 300000),
     metadata: {
       owner: String(connection.metadata?.owner || '').trim().slice(0, 120),
       purpose: String(connection.metadata?.purpose || '').trim().slice(0, 240)
@@ -350,6 +393,40 @@ function validateDeclaredCapabilities(deployment, connection) {
   }
 }
 
+function bindModelProtocolProfile(deployment, connection) {
+  const requestedProfileId = String(deployment.modelProtocolProfileId || '').trim();
+  const profile = findModelProtocolProfile(
+    connection?.adapterProfileId,
+    deployment.providerModelId,
+    requestedProfileId
+  );
+  if (requestedProfileId && !profile) {
+    throw validationError(
+      'LITELLM_MODEL_PROTOCOL_PROFILE_INCOMPATIBLE',
+      `Deployment ${deployment.deploymentId} references a Model Protocol Profile incompatible with its Connection.`
+    );
+  }
+  if (!profile) {
+    if (deployment.declaredCapabilities.supportsThinking
+      || deployment.declaredCapabilities.supportsThinkingWithTools) {
+      throw validationError(
+        'LITELLM_MODEL_PROTOCOL_PROFILE_REQUIRED',
+        `Deployment ${deployment.deploymentId} must bind a unique Model Protocol Profile before declaring thinking capabilities.`
+      );
+    }
+    return;
+  }
+  const requestedRevision = Number(deployment.modelProtocolProfileRevision || profile.revision);
+  if (requestedRevision !== profile.revision) {
+    throw validationError(
+      'LITELLM_MODEL_PROTOCOL_PROFILE_REVISION_UNSUPPORTED',
+      `Deployment ${deployment.deploymentId} references an unavailable Model Protocol Profile revision.`
+    );
+  }
+  deployment.modelProtocolProfileId = profile.profileId;
+  deployment.modelProtocolProfileRevision = profile.revision;
+}
+
 function normalizeControlPlaneDeployment(deployment = {}, index = 0) {
   const prefix = `modelDeployments[${index}]`;
   const capabilities = deployment.declaredCapabilities || {};
@@ -358,12 +435,13 @@ function normalizeControlPlaneDeployment(deployment = {}, index = 0) {
     connectionId: requiredObjectId(deployment.connectionId, `${prefix}.connectionId`),
     displayName: requiredString(deployment.displayName || deployment.deploymentId, `${prefix}.displayName`),
     providerModelId: requiredString(deployment.providerModelId, `${prefix}.providerModelId`),
+    modelProtocolProfileId: optionalObjectId(deployment.modelProtocolProfileId, `${prefix}.modelProtocolProfileId`),
+    modelProtocolProfileRevision: nonNegativeInteger(deployment.modelProtocolProfileRevision, 0),
     enabled: deployment.enabled !== false,
     limits: {
       rpm: nonNegativeInteger(deployment.limits?.rpm ?? deployment.rpm, 0),
       tpm: nonNegativeInteger(deployment.limits?.tpm ?? deployment.tpm, 0),
-      maxParallelRequests: nonNegativeInteger(deployment.limits?.maxParallelRequests ?? deployment.maxParallelRequests, 0),
-      requestTimeoutMs: boundedInteger(deployment.limits?.requestTimeoutMs, 0, 0, 300000)
+      maxParallelRequests: nonNegativeInteger(deployment.limits?.maxParallelRequests ?? deployment.maxParallelRequests, 0)
     },
     declaredCapabilities: {
       contextWindowTokens: nonNegativeInteger(capabilities.contextWindowTokens, 0),
@@ -508,10 +586,9 @@ function normalizeBasePath(value) {
 }
 
 function adapterProvider(profileId) {
-  if (String(profileId).startsWith('deepseek')) return 'deepseek';
-  if (String(profileId).startsWith('anthropic')) return 'anthropic';
-  if (String(profileId).startsWith('azure')) return 'azure';
-  return 'openai';
+  const profile = findAdapterProfile(profileId);
+  if (!profile) throw validationError('LITELLM_ADAPTER_PROFILE_UNKNOWN', `Adapter Profile ${profileId} is not present in the governed catalog.`);
+  return profile.litellmProviderPrefix;
 }
 
 function providerModelName(profileId, modelId) {
@@ -525,6 +602,11 @@ function requiredObjectId(value, field) {
   const id = requiredString(value, field);
   if (!/^[A-Za-z0-9][A-Za-z0-9_.:-]{2,127}$/.test(id)) throw validationError('LITELLM_CONFIG_INVALID_OBJECT_ID', `${field} is invalid.`);
   return id;
+}
+
+function optionalObjectId(value, field) {
+  const normalized = String(value || '').trim();
+  return normalized ? requiredObjectId(normalized, field) : '';
 }
 
 function assertUniqueIds(items, key, code) {
@@ -561,9 +643,30 @@ function normalizeFallback(fallback = {}) {
 }
 
 function normalizeGeneralSettings(general = {}) {
+  const catalog = catalogMetadata();
+  const gatewayRuntime = general.gatewayRuntime && typeof general.gatewayRuntime === 'object'
+    ? general.gatewayRuntime
+    : {};
+  const contract = requiredString(gatewayRuntime.contract || catalog.gatewayContract.id, 'general.gatewayRuntime.contract');
+  const implementation = requiredString(gatewayRuntime.implementation || catalog.gatewayContract.implementation, 'general.gatewayRuntime.implementation');
+  const version = requiredString(gatewayRuntime.version || catalog.gatewayContract.testedVersion, 'general.gatewayRuntime.version');
+  if (contract !== catalog.gatewayContract.id
+    || implementation !== catalog.gatewayContract.implementation
+    || version !== catalog.gatewayContract.testedVersion) {
+    throw validationError(
+      'LITELLM_GATEWAY_RUNTIME_UNTESTED',
+      'Gateway runtime must match the contract, implementation, and tested version frozen by the protocol catalog.'
+    );
+  }
   return {
     masterKeyEnv: requiredEnvName(general.masterKeyEnv || general.master_key_env || 'LITELLM_MASTER_KEY', 'general.masterKeyEnv'),
-    databaseUrlEnv: requiredEnvName(general.databaseUrlEnv || general.database_url_env || 'LITELLM_DATABASE_URL', 'general.databaseUrlEnv')
+    databaseUrlEnv: requiredEnvName(general.databaseUrlEnv || general.database_url_env || 'LITELLM_DATABASE_URL', 'general.databaseUrlEnv'),
+    gatewayRuntime: {
+      contract,
+      implementation,
+      version,
+      image: requiredString(gatewayRuntime.image || `ghcr.io/berriai/litellm:v${catalog.gatewayContract.testedVersion}`, 'general.gatewayRuntime.image')
+    }
   };
 }
 
@@ -655,5 +758,7 @@ module.exports = {
   renderLiteLlmConfigYaml,
   createLiteLlmConfigVersionDraft,
   publicLiteLlmConfigVersion,
+  publicLiteLlmConfigVersionForHistory,
+  normalizeRuntimeModelOwner,
   checksumText
 };

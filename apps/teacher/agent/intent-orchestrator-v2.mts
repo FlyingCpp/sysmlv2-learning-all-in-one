@@ -37,6 +37,8 @@ import {
   type AgentPolicy,
   type AgentRunRequest,
   type AgentRunOutcome,
+  type AgentProtocolExecutionPolicy,
+  type AgentStageId,
   type FastGateTextSignal,
   type FastGatePassThroughV2,
   type MainAgentDelegation,
@@ -232,7 +234,7 @@ export async function runIntentOrchestratorV2(
   const phaseTimings: NonNullable<TrustedTeacherResponse["phaseTimings"]> = [];
   const warnings: string[] = [];
   try {
-    const gateGenerationSettings = v2GenerationSettings(options, true);
+    const gateGenerationSettings = v2GenerationSettings(options, true, "fastGate");
     const gateStartedAt = Date.now();
     const gateDecision = request.resumeContext
       ? { gate: request.resumeContext.fastGate, calls: [] }
@@ -569,7 +571,7 @@ export async function runIntentOrchestratorV2(
     );
 
     const mainStartedAt = Date.now();
-    const mainGenerationSettings = v2GenerationSettings(options, false);
+    const mainGenerationSettings = v2GenerationSettings(options, false, "main");
     const mainResult = await generateObservedToolLoopText({
       model: mainModel,
       phase: "intent_orchestration_v2",
@@ -1631,48 +1633,84 @@ function v2ReasoningRoute(
 export function v2GenerationSettings(
   options: RunTeacherAgentOptions,
   forceDisabled: boolean,
+  stageId: AgentStageId = "main",
 ): {
   reasoning: "none" | "medium" | "high" | "xhigh";
   providerOptions: SharedV4ProviderOptions;
   explicitToolChoice: boolean;
 } {
-  const selectedMode = forceDisabled ? "disabled" : v2ReasoningRoute(options).selectedMode;
+  const explicitStageReasoningMode = options.stageReasoningModes?.[stageId];
+  const stageReasoningMode = explicitStageReasoningMode ?? options.reasoningMode;
+  const routeMode = forceDisabled && explicitStageReasoningMode !== "provider-managed"
+    ? "disabled"
+    : v2ReasoningRoute({ ...options, reasoningMode: stageReasoningMode }).selectedMode;
+  const selectedMode = routeMode === "provider-managed" ? "high" : routeMode;
   const providerKey = options.providerOptionsName?.trim() || "litellm";
-  const deepSeekV4 = options.providerCompatibility === "deepseek-v4-direct"
-    || options.providerCompatibility === "deepseek-v4-litellm";
-  const deepSeekViaLiteLlm = options.providerCompatibility === "deepseek-v4-litellm";
+  const profile = options.stageProtocolProfiles?.[stageId];
+  if (profile?.protocolMode === "gateway-chat-v1" && profile.executionPolicy) {
+    return generationSettingsFromExecutionPolicy(profile.executionPolicy, selectedMode, providerKey, stageId);
+  }
+  return legacyGenerationSettings(options, selectedMode, providerKey, stageId);
+}
+
+function generationSettingsFromExecutionPolicy(
+  policy: AgentProtocolExecutionPolicy,
+  selectedMode: "disabled" | "medium" | "high" | "max",
+  providerKey: string,
+  stageId: AgentStageId,
+): {
+  reasoning: "none" | "medium" | "high" | "xhigh";
+  providerOptions: SharedV4ProviderOptions;
+  explicitToolChoice: boolean;
+} {
+  const thinking = selectedMode !== "disabled";
+  const branch = thinking ? policy.reasoning.enabled : policy.reasoning.disabled;
+  if (!branch.supported) throw protocolPolicyError(stageId, "AI_TEACHER_REASONING_MODE_UNSUPPORTED");
+  const toolChoice = thinking ? policy.toolChoice.thinking : policy.toolChoice.nonThinking;
+  if (toolChoice === "unsupported") throw protocolPolicyError(stageId, "AI_TEACHER_TOOL_CHOICE_MODE_UNSUPPORTED");
+  const providerOptions = cloneProviderOptions(branch.providerOptions);
+  const requestedEffort = selectedMode === "max" ? "max" : selectedMode === "medium" ? "medium" : "high";
+  if (thinking && Object.hasOwn(providerOptions, "reasoningEffort")) {
+    providerOptions.reasoningEffort = requestedEffort;
+  }
+  return {
+    reasoning: branch.sdkReasoning,
+    providerOptions: Object.keys(providerOptions).length ? { [providerKey]: providerOptions } : {},
+    explicitToolChoice: toolChoice === "auto",
+  };
+}
+
+function legacyGenerationSettings(
+  options: RunTeacherAgentOptions,
+  selectedMode: "disabled" | "medium" | "high" | "max",
+  providerKey: string,
+  stageId: AgentStageId,
+): {
+  reasoning: "none" | "medium" | "high" | "xhigh";
+  providerOptions: SharedV4ProviderOptions;
+  explicitToolChoice: boolean;
+} {
+  const frozenMode = options.stageProtocolProfiles?.[stageId]?.protocolMode;
+  const protocolMode = frozenMode || options.providerCompatibility || "generic-openai";
+  const deepSeekV4 = protocolMode === "deepseek-v4-direct" || protocolMode === "deepseek-v4-litellm";
+  const glm = protocolMode === "glm-5.2-litellm";
   if (selectedMode === "disabled") {
     return {
       reasoning: "none",
       providerOptions: deepSeekV4
-        ? {
-            [providerKey]: {
-              ...(deepSeekViaLiteLlm
-                ? { extra_body: { thinking: { type: "disabled" } } }
-                : { thinking: { type: "disabled" } }),
-              parallel_tool_calls: false,
-            },
-          }
-        : {},
-      explicitToolChoice: true,
+        ? { [providerKey]: { thinking: { type: "disabled" }, parallel_tool_calls: false } }
+        : glm ? { [providerKey]: { extra_body: { thinking: { type: "disabled" } } } } : {},
+      explicitToolChoice: !deepSeekV4,
     };
   }
-  const effort = selectedMode === "max"
-    ? "max"
-    : selectedMode === "medium"
-      ? "medium"
-      : "high";
+  const effort = selectedMode === "max" ? "max" : selectedMode;
   return {
     reasoning: effort === "max" ? "xhigh" : effort,
     providerOptions: deepSeekV4
-      ? {
-          [providerKey]: {
-            reasoningEffort: effort,
-            thinking: { type: "enabled" },
-            parallel_tool_calls: false,
-          },
-        }
-      : {},
+      ? { [providerKey]: { reasoningEffort: effort, thinking: { type: "enabled" }, parallel_tool_calls: false } }
+      : glm
+        ? { [providerKey]: { reasoningEffort: effort, extra_body: { thinking: { type: "enabled", clear_thinking: false } }, allowed_openai_params: ["reasoning_effort"] } }
+        : {},
     explicitToolChoice: !deepSeekV4,
   };
 }
@@ -1688,22 +1726,21 @@ export function v2RepairGenerationSettings(
   providerOptions: SharedV4ProviderOptions;
   explicitToolChoice: boolean;
 } {
-  const providerKey = options.providerOptionsName?.trim() || "litellm";
-  const deepSeekV4 = options.providerCompatibility === "deepseek-v4-direct"
-    || options.providerCompatibility === "deepseek-v4-litellm";
-  return {
-    reasoning: "high",
-    providerOptions: deepSeekV4
-      ? {
-          [providerKey]: {
-            reasoningEffort: "high",
-            thinking: { type: "enabled" },
-            parallel_tool_calls: false,
-          },
-        }
-      : {},
-    explicitToolChoice: !deepSeekV4,
-  };
+  const settings = v2GenerationSettings({ ...options, reasoningMode: "high" }, false, "repair");
+  if (settings.reasoning === "none") {
+    throw protocolPolicyError("repair", "AI_TEACHER_REPAIR_REASONING_UNSUPPORTED");
+  }
+  return { ...settings, reasoning: "high" };
+}
+
+function cloneProviderOptions(value: Readonly<Record<string, unknown>>): Record<string, JSONValue> {
+  return JSON.parse(JSON.stringify(value)) as Record<string, JSONValue>;
+}
+
+function protocolPolicyError(stageId: AgentStageId, code: string): Error & { code: string } {
+  const error = new Error(`AI Teacher protocol policy rejected stage ${stageId}.`) as Error & { code: string };
+  error.code = code;
+  return error;
 }
 
 function isTimeoutError(error: unknown): boolean {
