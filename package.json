@@ -31,8 +31,10 @@
     "test:teacher-message-continuity": "npm run build:teacher-agent && node scripts/test-ai-teacher-message-continuity.js",
     "test:teacher-model-control-plane": "npm run build:teacher-agent && node scripts/test-litellm-config.js && node scripts/test-litellm-reconciler.js && node scripts/test-ai-teacher-model-capability-snapshot.js && node scripts/test-ai-teacher-stage-model-routing.js && node scripts/test-teacher-provider-wire-contract.js",
     "test:learning-diagnostics": "node scripts/test-learning-diagnostics.js",
-    "test:official": "npm run setup:official-validator && node scripts/test-official-validator.js",
-    "test:validator": "node scripts/test-validator-public.js && node scripts/test-validator-http-boundary.js && node scripts/test-validator-admission-queue.js",
+    "test:official": "npm run setup:official-validator && node scripts/test-official-validator.js && node scripts/test-official-plantuml-interconnection.js",
+    "test:plantuml-interconnection": "npm run setup:official-validator && node scripts/test-official-plantuml-interconnection.js",
+    "test:plantuml-runtime": "node scripts/test-plantuml-service-runtime.js && node scripts/test-plantuml-cjk-runtime.js",
+    "test:validator": "node scripts/test-validator-public.js && node scripts/test-plantuml-interconnection-layout.js && node scripts/test-validator-http-boundary.js && node scripts/test-validator-admission-queue.js",
     "test:web": "node scripts/test-web-i18n.js && node scripts/test-web-phase0.js && node scripts/test-web-phase1.js && node scripts/test-web-phase2.js && node scripts/test-web-phase3.js && node scripts/test-web-phase4.js"
   },
   "engines": {

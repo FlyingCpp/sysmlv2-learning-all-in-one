@@ -1,8 +1,17 @@
 'use strict';
 
 const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
 const { validateWorkspace } = require('../apps/validator/local-analyzer');
 const { _selectEntryFileViewName } = require('../apps/validator/validator');
+
+const validatorDockerfile = fs.readFileSync(path.join(__dirname, '..', 'apps', 'validator', 'Dockerfile'), 'utf8');
+assert(
+  validatorDockerfile.includes('fonts-noto-cjk')
+    && validatorDockerfile.includes("fc-match 'Noto Sans CJK SC'"),
+  'validator image must install and verify a CJK font for stable PlantUML text metrics'
+);
 
 const validModel = validateWorkspace({
   content: `

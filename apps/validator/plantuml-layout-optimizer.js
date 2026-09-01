@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
+const { improveInterconnectionSvg } = require('./interconnection-svg-layout');
 
 const OFFICIAL_DEFAULT_STRATEGY = { id: 'OFFICIAL_DEFAULT', styles: ['DEFAULT'] };
 const FALLBACK_STRATEGIES = Object.freeze({
@@ -97,7 +98,28 @@ async function renderAndScore({ content, viewName, renderMode, strategy, diagram
   }
 
   const effectiveDiagramKind = diagramKindFromResolvedMode(result.resolvedRenderMode) || diagramKind;
+  if (result.ok && result.svg && effectiveDiagramKind === 'interconnection') {
+    const improved = improveInterconnectionSvg(result.svg);
+    result = {
+      ...result,
+      svg: improved.svg,
+      interconnectionLayout: {
+        applied: improved.applied,
+        reason: improved.reason,
+        metrics: improved.metrics || null
+      }
+    };
+  }
   const score = result.ok && result.svg ? scoreSvgLayout(result.svg, { diagramKind: effectiveDiagramKind }) : failedScore(result);
+  if (result.interconnectionLayout?.metrics) {
+    score.metrics = { ...score.metrics, ...result.interconnectionLayout.metrics };
+    const partOverlapCount = Number(result.interconnectionLayout.metrics.partOverlapCount || 0);
+    const nonOrthogonalConnectorCount = Number(result.interconnectionLayout.metrics.nonOrthogonalConnectorCount || 0);
+    if (partOverlapCount > 0) score.issues.push('part-overlap');
+    if (nonOrthogonalConnectorCount > 0) score.issues.push('non-orthogonal-connector');
+    score.score = clamp(score.score - partOverlapCount * 12 - nonOrthogonalConnectorCount * 6, 0, 100);
+    score.severe = score.issues.length > 0;
+  }
   const summary = {
     id: strategy.id,
     styles: strategy.styles,
@@ -471,7 +493,9 @@ function detectDiagramKind(content, viewName = '', renderMode = '') {
   if (requested) {
     const requestedView = new RegExp(`view\\s+(?:'${requested}'|${requested})\\s*:\\s*StandardViewDefinitions::StateTransitionView\\b`);
     if (requestedView.test(source)) return 'state-transition';
-    const requestedNonStateView = new RegExp(`view\\s+(?:'${requested}'|${requested})\\s*:\\s*StandardViewDefinitions::(?:SequenceView|ActionFlowView|InterconnectionView|GeneralView)\\b`);
+    const requestedInterconnectionView = new RegExp(`view\\s+(?:'${requested}'|${requested})\\s*:\\s*StandardViewDefinitions::InterconnectionView\\b`);
+    if (requestedInterconnectionView.test(source)) return 'interconnection';
+    const requestedNonStateView = new RegExp(`view\\s+(?:'${requested}'|${requested})\\s*:\\s*StandardViewDefinitions::(?:SequenceView|ActionFlowView|GeneralView)\\b`);
     if (requestedNonStateView.test(source)) return 'generic';
   }
   return /view\s+(?!def\b)(?:'[^']+'|[A-Za-z_]\w*)\s*:\s*StandardViewDefinitions::StateTransitionView\b/.test(source)
@@ -480,9 +504,10 @@ function detectDiagramKind(content, viewName = '', renderMode = '') {
 }
 
 function diagramKindFromResolvedMode(renderMode) {
-  return String(renderMode || '').trim().toUpperCase() === 'STATE'
-    ? 'state-transition'
-    : '';
+  const normalized = String(renderMode || '').trim().toUpperCase();
+  if (normalized === 'STATE') return 'state-transition';
+  if (normalized === 'INTERCONNECTION') return 'interconnection';
+  return '';
 }
 
 function escapeRegExp(value) {

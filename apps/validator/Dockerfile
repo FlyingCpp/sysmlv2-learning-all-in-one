@@ -67,13 +67,17 @@ RUN set -eux; \
     fi; \
     rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/partial/*; \
     if apt-get -o Acquire::Retries=5 update \
-      && apt-get -o Acquire::Retries=5 install -y --no-install-recommends --fix-missing graphviz; then \
+      && apt-get -o Acquire::Retries=5 install -y --no-install-recommends --fix-missing \
+        fontconfig \
+        fonts-noto-cjk \
+        graphviz; then \
       installed=1; \
       break; \
     fi; \
   done; \
   test "$installed" = "1"; \
   command -v dot; \
+  fc-match 'Noto Sans CJK SC' | grep -q 'NotoSansCJK'; \
   rm -rf /var/lib/apt/lists/*
 
 ENV SYSML_RELEASE_TAG=${SYSML_RELEASE_TAG}
