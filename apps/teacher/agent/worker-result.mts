@@ -1,3 +1,4 @@
+import { canonicalWorkspaceText } from "./candidate-content.mjs";
 import { createHash } from "node:crypto";
 
 import {
@@ -15,14 +16,13 @@ import type {
   WorkerTerminalStatus,
   WorkerTaskView,
 } from "./worker-contracts.mjs";
+import { recordWorkspaceHashCompute } from "./delivery-metrics.mjs";
 
 export function validationPassed(validation: ValidationOutput): boolean {
   return validation.completeness === "complete"
     && Boolean(validation.candidateWorkspaceHash)
     && validation.official.syntax === "passed"
-    && validation.official.semantic === "passed"
-    && (validation.courseRuleApplicability !== "applicable"
-      || validation.courseRules?.status === "passed");
+    && validation.official.semantic === "passed";
 }
 
 export function validationRetryable(validation: ValidationOutput): boolean {
@@ -37,6 +37,8 @@ export function createValidatedPassedResult<TASK extends WorkerTaskView>(input: 
   candidate: CandidateArtifact;
   validation: ValidationOutput;
   attemptCount: number;
+  workPerformed?: "candidate_produced" | "candidate_repaired" | "none";
+  validatorSubject?: "baseline" | "candidate";
   repairTelemetry?: RepairTelemetry;
 }): TASK extends CandidateTaskView ? CandidateWorkerResult : RepairWorkerResult {
   const candidate = Object.freeze(validateCandidateInputSchema.parse(input.candidate));
@@ -57,6 +59,10 @@ export function createValidatedPassedResult<TASK extends WorkerTaskView>(input: 
     candidate,
     validation,
     attemptCount: boundedAttempts(input.attemptCount),
+    workPerformed: input.workPerformed ?? (input.task.workerType === "candidate"
+      ? "candidate_produced"
+      : "candidate_repaired"),
+    validatorSubject: input.validatorSubject ?? "candidate",
     ...(input.repairTelemetry ? { repairTelemetry: Object.freeze(input.repairTelemetry) } : {}),
   };
   return (input.task.workerType === "candidate"
@@ -83,6 +89,8 @@ export function createWorkerFailureResult<TASK extends WorkerTaskView>(input: {
       validation: Object.freeze(validationOutputSchema.parse(input.validation)),
     } : {}),
     attemptCount: boundedAttempts(input.attemptCount),
+    workPerformed: "none" as const,
+    validatorSubject: input.task.workerType === "repair" ? "baseline" as const : "candidate" as const,
     ...(input.repairTelemetry ? { repairTelemetry: Object.freeze(input.repairTelemetry) } : {}),
     reason: boundedReason(input.reason),
   };
@@ -107,12 +115,13 @@ export function computeCandidateWorkspaceHash(
   task: WorkerTaskView,
   candidate: CandidateArtifact,
 ): string {
+  recordWorkspaceHashCompute();
   if (candidate.mode === "standalone_model") {
     return hashContent(`standalone/${candidate.fileName}\n${hashContent(candidate.content)}`);
   }
   const files = task.model.files.map((file) => ({
     fileId: file.fileId,
-    path: file.displayName,
+    path: file.workspacePath ?? file.displayName,
     content: file.content,
   }));
   if (candidate.mode === "replace_entry") {
@@ -146,10 +155,7 @@ export function computeCandidateWorkspaceHash(
       file.content = lines.join("\n");
     }
   }
-  const canonical = files
-    .sort((left, right) => left.path.localeCompare(right.path))
-    .map((file) => `${file.path}\n${hashContent(file.content)}`)
-    .join("\n");
+  const canonical = canonicalWorkspaceText(files);
   return hashContent(canonical);
 }
 

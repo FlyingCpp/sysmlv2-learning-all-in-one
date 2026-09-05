@@ -2,8 +2,9 @@ import type { KnowledgeView, RunInputSnapshot } from "./run-resources.mjs";
 import type {
   AuthorizedTargetBinding,
   BaselineSnapshotBinding,
+  TaskIterationDirectiveBinding,
 } from "./task-working-state.mjs";
-import type { CandidateArtifact, ValidationOutput } from "./types.mjs";
+import type { CandidateArtifact, LessonContextOutput, ValidationOutput } from "./types.mjs";
 import type {
   CandidateChangeSummary,
   DiagnosticDelta,
@@ -29,11 +30,24 @@ interface WorkerTaskViewBase {
   readonly preservationPolicyRef: string;
   readonly model: RunInputSnapshot["model"];
   readonly knowledge: KnowledgeView;
+  /** 仅在Main显式读取当前课程上下文后投影；不存在时Worker不得自行套用课程规则。 */
+  readonly courseContext?: LessonContextOutput;
 }
 
 export type CandidateTaskView = Readonly<WorkerTaskViewBase & {
   readonly workerType: "candidate";
   readonly mode: CandidateMode;
+  readonly subject:
+    | "current_workspace"
+    | "previous_validated_candidate"
+    | "current_validated_candidate"
+    | "last_validated_candidate"
+      | "standalone_model";
+  readonly iterationDirective?: TaskIterationDirectiveBinding;
+  readonly validatedBaseline?: Readonly<{
+    candidate: CandidateArtifact;
+    validation: ValidationOutput;
+  }>;
 }>;
 
 export type RepairTaskView = Readonly<WorkerTaskViewBase & {
@@ -87,6 +101,10 @@ interface WorkerResultBase {
   /** Worker启动后所读取的Task revision；Dispatcher用它做CAS。 */
   readonly taskRevision: number;
   readonly attemptCount: number;
+  /** 服务端派生的实际工作事实；Validator PASS本身不代表发生过修改。 */
+  readonly workPerformed: "candidate_produced" | "candidate_repaired" | "none";
+  /** Validator本次验证的是输入基线还是Worker新产生的候选。 */
+  readonly validatorSubject: "baseline" | "candidate";
   readonly repairTelemetry?: RepairTelemetry;
 }
 

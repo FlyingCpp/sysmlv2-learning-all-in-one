@@ -7,6 +7,7 @@ ARG SYSML_KERNEL_VERSION=0.59.0
 WORKDIR /app
 COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
 COPY apps/validator ./apps/validator
+COPY packages/agent-resource-policy ./packages/agent-resource-policy
 COPY packages/teacher-contract/official-validator-artifacts.json ./packages/teacher-contract/official-validator-artifacts.json
 COPY packages/teacher-contract/official-validator-runtime-artifacts.json ./packages/teacher-contract/official-validator-runtime-artifacts.json
 
@@ -55,6 +56,7 @@ COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
 WORKDIR /app
 COPY --from=builder /app/apps/validator ./apps/validator
 COPY --from=builder /app/packages/teacher-contract ./packages/teacher-contract
+COPY --from=builder /app/packages/agent-resource-policy ./packages/agent-resource-policy
 COPY --from=builder /opt/sysml /opt/sysml
 
 RUN set -eux; \

@@ -11,6 +11,7 @@ import { ArrowDown, BookOpenText, Bot, Check, Copy, LoaderCircle, Maximize2, Mes
 import { Children, isValidElement, useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import ReactMarkdown, { type Components } from 'react-markdown';
+import { useTranslation } from 'react-i18next';
 import remarkGfm from 'remark-gfm';
 import { useCoursePackStore } from '../../app/course-pack-store';
 import { useRuntimeConfigStore } from '../../app/runtime-config-store';
@@ -29,7 +30,13 @@ import {
 import { applySingleLinePatchToContent, isAiTeacherPatchApplyReady, teacherPatchStatusLabel } from '../../lib/ai-teacher/patch';
 import { latestRecoverableTeacherRun, orderTeacherConversationMessages } from '../../lib/ai-teacher/conversation';
 import { AI_TEACHER_PANEL_EVENT, consumePendingAiTeacherPanelAction, type AiTeacherPanelAction } from '../../lib/ai-teacher/ui-events';
-import { friendlyPlantUmlError, plantUmlMetadataNotes, type PlantUmlRenderResult } from '../../lib/view/plantuml';
+import {
+  friendlyPlantUmlError,
+  plantUmlMetadataNotes,
+  plantUmlRequestBody,
+  plantUmlViewOptions,
+  type PlantUmlRenderResult
+} from '../../lib/view/plantuml';
 import { PlantUmlViewport } from '../workbench/ViewPane';
 
 interface AiTeacherPanelProps {
@@ -70,7 +77,7 @@ interface AiTeacherActivityItem {
 
 interface AiTeacherActivity {
   activityId: string;
-  kind: 'context' | 'knowledge' | 'web' | 'skill' | 'validator';
+  kind: 'context' | 'knowledge' | 'web' | 'skill' | 'validator' | 'repair';
   status: 'running' | 'complete' | 'error';
   message: string;
   count?: number;
@@ -162,15 +169,18 @@ interface TeacherRunStatusResponse {
   };
 }
 
+type AiTeacherSubmissionPhase = 'idle' | 'creating_thread' | 'starting_run' | 'running';
+
 const SCOPED_THREAD_STORAGE_PREFIX = 'sysmlv2.aiTeacher.threadId.react.';
 const DEFAULT_AI_TEACHER_STATUS = '使用当前课程、代码和诊断上下文回答。';
-const DEFAULT_DOCK_WIDTH = 380;
 const MIN_DOCK_WIDTH = 340;
 const MAX_DOCK_WIDTH = 620;
+const DEFAULT_DOCK_WIDTH = MAX_DOCK_WIDTH;
 const AI_TEACHER_CHECK_NOTICE = 'AI-Teacher 也可能会犯错。请核查重要信息。';
-const MANUAL_CONTINUATION_SOURCE_LIMIT = 8000;
+const MANUAL_CONTINUATION_SOURCE_LIMIT = 20_000;
 const MANUAL_CONTINUATION_DISPLAY_TEXT = '继续完成剩余工作';
 const AI_TEACHER_SESSION_CHANNEL = 'sysmlv2.aiTeacher.session.v1';
+const AI_TEACHER_THREAD_REQUEST_TIMEOUT_MS = 10_000;
 const aiTeacherSessions = new Map<string, AiTeacherPersistedSession>();
 const aiTeacherSessionListeners = new Set<(sessionKey: string, originId: string) => void>();
 const aiTeacherSessionBroadcastTimers = new Map<string, number>();
@@ -192,6 +202,7 @@ export function AiTeacherPanel({
   knowledgeWorkspace,
   onApplyPatch
 }: AiTeacherPanelProps) {
+  const { t, i18n } = useTranslation('workbench');
   const api = useAppApiClient();
   const config = useRuntimeConfigStore((state) => state.config);
   const activeCoursePackId = useCoursePackStore((state) => state.activeCoursePackId);
@@ -208,6 +219,7 @@ export function AiTeacherPanel({
   const [tone, setTone] = useState<'idle' | 'ok' | 'warn' | 'fail'>(initialSession.tone);
   const [messages, setMessages] = useState<AiTeacherMessage[]>(initialSession.messages);
   const [running, setRunning] = useState(initialSession.running);
+  const [submissionPhase, setSubmissionPhase] = useState<AiTeacherSubmissionPhase>(initialSession.running ? 'running' : 'idle');
   const [busyHint, setBusyHint] = useState('');
   const [threadId, setThreadId] = useState(initialSession.threadId);
   const [threads, setThreads] = useState<TeacherThreadSummary[]>([]);
@@ -221,13 +233,21 @@ export function AiTeacherPanel({
   const [confirmVersionRestore, setConfirmVersionRestore] = useState(false);
   const questionInputRef = useRef<HTMLTextAreaElement | null>(null);
   const activeRunId = useRef(initialSession.activeRunId);
+  const statusLanguageRef = useRef(i18n.resolvedLanguage);
   const panelInstanceId = useRef(`ai-teacher-panel-${globalThis.crypto?.randomUUID?.() || Math.random().toString(16).slice(2)}`);
   const panelRef = useRef<HTMLElement | null>(null);
   const conversationRef = useRef<HTMLDivElement | null>(null);
   const busyHintTimer = useRef<number | null>(null);
   const runEventTimer = useRef<number | null>(null);
-  const submissionInFlight = useRef(false);
+  const submissionPhaseRef = useRef<AiTeacherSubmissionPhase>(initialSession.running ? 'running' : 'idle');
+  const teacherSubmissionController = useRef<AbortController | null>(null);
   const activeSessionKey = useRef(sessionKey);
+
+  useEffect(() => {
+    if (statusLanguageRef.current === i18n.resolvedLanguage) return;
+    statusLanguageRef.current = i18n.resolvedLanguage;
+    setStatus(t(running ? 'aiPanel.statusRunning' : 'aiPanel.statusReady'));
+  }, [i18n.resolvedLanguage]);
   const activeScopeSessionKey = useRef(scopeSessionKey);
   const skipSessionPersist = useRef(false);
   const restoredThreadKey = useRef('');
@@ -235,6 +255,8 @@ export function AiTeacherPanel({
   const threadsRequestSequence = useRef(0);
   const canUseTeacher = Boolean(config?.aiTeacherEnabled && hasPermission('ai.teacher.use'));
   const panelOpen = presentation === 'knowledge-page' || launcherMode === 'docked' || open;
+  const submissionBusy = submissionPhase !== 'idle';
+  const interactionBusy = running || submissionBusy;
   const teacherDiagnostics = (validation?.diagnostics || validation?.findings || []);
 
   useEffect(() => {
@@ -272,6 +294,9 @@ export function AiTeacherPanel({
   useEffect(() => {
     if (activeScopeSessionKey.current === scopeSessionKey) return;
     const previousSessionKey = activeSessionKey.current;
+    teacherSubmissionController.current?.abort();
+    teacherSubmissionController.current = null;
+    setSubmissionPhaseForPanel('idle');
     aiTeacherRunControllers.get(previousSessionKey)?.abort();
     aiTeacherRunControllers.delete(previousSessionKey);
     purgeAiTeacherSessionsForOtherUsers(currentUserId);
@@ -530,6 +555,9 @@ export function AiTeacherPanel({
     return () => {
       if (busyHintTimer.current) window.clearTimeout(busyHintTimer.current);
       if (runEventTimer.current) window.clearTimeout(runEventTimer.current);
+      teacherSubmissionController.current?.abort();
+      teacherSubmissionController.current = null;
+      submissionPhaseRef.current = 'idle';
       threadsRequestController.current?.abort();
       threadsRequestController.current = null;
     };
@@ -540,7 +568,7 @@ export function AiTeacherPanel({
     manualContinuationSourceRunId?: string,
     manualContinuationKind?: 'engineering_feedback'
   ) => {
-    if (running || submissionInFlight.current) {
+    if (running || submissionPhaseRef.current !== 'idle') {
       notifyTeacherBusy();
       return;
     }
@@ -567,27 +595,46 @@ export function AiTeacherPanel({
       setTone('warn');
       return;
     }
-    submissionInFlight.current = true;
+    const submissionScopeKey = activeScopeSessionKey.current;
+    const preRunController = new AbortController();
+    teacherSubmissionController.current?.abort();
+    teacherSubmissionController.current = preRunController;
     let requestThreadId = threadId;
     if (!requestThreadId) {
+      const timeoutSignal = AbortSignal.timeout(AI_TEACHER_THREAD_REQUEST_TIMEOUT_MS);
+      const requestSignal = AbortSignal.any([preRunController.signal, timeoutSignal]);
+      setSubmissionPhaseForPanel('creating_thread');
       try {
         setStatus('正在创建新对话...');
         setTone('warn');
         const created = await api.request<{ threadId?: string }>(
           `/api/teacher/threads?${teacherContextQuery(lesson)}`,
-          { method: 'POST' }
+          { method: 'POST', signal: requestSignal }
         );
+        if (preRunController.signal.aborted || activeScopeSessionKey.current !== submissionScopeKey) return;
         requestThreadId = String(created.threadId || '');
         if (!requestThreadId) throw new Error('Teacher thread id is missing');
         rememberThreadId(requestThreadId);
         await refreshThreads();
       } catch {
-        submissionInFlight.current = false;
-        setStatus('无法创建新对话，请稍后重试。');
+        if (activeScopeSessionKey.current !== submissionScopeKey) return;
+        setStatus(timeoutSignal.aborted
+          ? '创建新对话超时，本次没有启动 AI 教师，请重试。'
+          : preRunController.signal.aborted
+            ? '已取消本次提交，没有启动 AI 教师。'
+            : '无法创建新对话，请稍后重试。');
         setTone('fail');
         return;
+      } finally {
+        if (teacherSubmissionController.current === preRunController) {
+          teacherSubmissionController.current = null;
+          setSubmissionPhaseForPanel('idle');
+        }
       }
     }
+    if (preRunController.signal.aborted || activeScopeSessionKey.current !== submissionScopeKey) return;
+    if (teacherSubmissionController.current === preRunController) teacherSubmissionController.current = null;
+    setSubmissionPhaseForPanel('starting_run');
     setOpen(true);
     setQuestionForSession(activeSessionKey.current, '');
     const controller = new AbortController();
@@ -596,6 +643,7 @@ export function AiTeacherPanel({
     aiTeacherRunControllers.set(runSessionKey, controller);
     activeRunId.current = '';
     setRunningForSession(runSessionKey, true);
+    setSubmissionPhaseForPanel('running');
     setStatusForSession(runSessionKey, 'AI 教师正在结合当前模型上下文回答...', 'warn');
     const userId = appendMessage({
       role: 'user',
@@ -764,6 +812,7 @@ export function AiTeacherPanel({
           : { kind: 'none' });
       }
       const runCompletedAtMs = Date.now();
+      const finalProcess = finalProcessPresentation(validated);
       updateAiTeacherSession(runSessionKey, (session) => ({
         ...session,
         clarificationCheckpointId: validated.clarification?.status === 'waiting'
@@ -773,8 +822,8 @@ export function AiTeacherPanel({
       updateMessage(processId, (message) => ({
         ...message,
         runId: runIdForRequest || message.runId,
-        text: '生成完成',
-        details: appendProcessDetail(message.details || message.text, '已完成回答流程。'),
+        text: finalProcess.text,
+        details: appendProcessDetail(message.details || message.text, finalProcess.detail),
         state: 'done',
         startedAtMs: message.startedAtMs || runStartedAtMs,
         completedAtMs: runCompletedAtMs
@@ -844,7 +893,7 @@ export function AiTeacherPanel({
       );
       if (!isAbortError(error)) clearActiveRun(runSessionKey);
     } finally {
-      submissionInFlight.current = false;
+      setSubmissionPhaseForPanel('idle');
       if (aiTeacherRunControllers.get(runSessionKey) === controller) aiTeacherRunControllers.delete(runSessionKey);
       const finishedSession = getAiTeacherSession(runSessionKey, defaultOpen);
       if (!finishedSession.activeRunId || !finishedSession.running) setRunningForSession(runSessionKey, false);
@@ -853,6 +902,14 @@ export function AiTeacherPanel({
   };
 
   const stopTeacher = () => {
+    if (submissionPhaseRef.current === 'creating_thread' || submissionPhaseRef.current === 'starting_run') {
+      teacherSubmissionController.current?.abort();
+      teacherSubmissionController.current = null;
+      setSubmissionPhaseForPanel('idle');
+      setStatus('已取消本次提交，没有启动 AI 教师。');
+      setTone('warn');
+      return;
+    }
     const runSessionKey = activeSessionKey.current;
     const runId = activeRunId.current || getAiTeacherSession(runSessionKey, defaultOpen).activeRunId;
     aiTeacherRunControllers.get(runSessionKey)?.abort();
@@ -950,6 +1007,10 @@ export function AiTeacherPanel({
 
   const startNewConversation = async () => {
     if (deletingThreadId) return;
+    if (running || submissionPhaseRef.current !== 'idle') {
+      notifyTeacherBusy();
+      return;
+    }
     const current = threads.find((thread) => thread.threadId === threadId);
     if (current?.messageCount === 0 && messages.length === 0) {
       setStatus('当前已经是一个新对话。');
@@ -958,18 +1019,32 @@ export function AiTeacherPanel({
     }
     setStatus('正在创建新对话...');
     setTone('warn');
+    const controller = new AbortController();
+    const timeoutSignal = AbortSignal.timeout(AI_TEACHER_THREAD_REQUEST_TIMEOUT_MS);
+    teacherSubmissionController.current = controller;
+    setSubmissionPhaseForPanel('creating_thread');
     try {
       const created = await api.request<{ threadId?: string }>(
         `/api/teacher/threads?${teacherContextQuery(lesson)}`,
-        { method: 'POST' }
+        { method: 'POST', signal: AbortSignal.any([controller.signal, timeoutSignal]) }
       );
+      if (controller.signal.aborted) return;
       const nextThreadId = String(created.threadId || '');
       if (!nextThreadId) throw new Error('Teacher thread id is missing');
       activateThread(nextThreadId, '已开始新对话，原对话保留在历史记录中。', true);
       await refreshThreads();
     } catch {
-      setStatus('无法创建新对话，请稍后重试。');
+      setStatus(timeoutSignal.aborted
+        ? '创建新对话超时，请重试。'
+        : controller.signal.aborted
+          ? '已取消创建新对话。'
+          : '无法创建新对话，请稍后重试。');
       setTone('fail');
+    } finally {
+      if (teacherSubmissionController.current === controller) {
+        teacherSubmissionController.current = null;
+        setSubmissionPhaseForPanel('idle');
+      }
     }
   };
 
@@ -1007,7 +1082,7 @@ export function AiTeacherPanel({
   };
 
   const clearConversation = async () => {
-    if (running) stopTeacher();
+    if (running || submissionPhaseRef.current !== 'idle') stopTeacher();
     const waiting = getAiTeacherSession(activeSessionKey.current, defaultOpen);
     if (waiting.clarificationCheckpointId && waiting.threadId) {
       await api.request(
@@ -1104,7 +1179,7 @@ export function AiTeacherPanel({
     const files = version?.available === true
       ? (version.files || []).slice(0, 20).flatMap((file) => {
         const filePath = sanitizeTeacherUiText(file.filePath || '').slice(0, 160);
-        const content = typeof file.content === 'string' ? file.content.slice(0, 200_000) : '';
+        const content = typeof file.content === 'string' ? file.content : '';
         return filePath && content ? [{ filePath, content }] : [];
       })
       : [];
@@ -1185,7 +1260,7 @@ export function AiTeacherPanel({
           type="button"
           className="aiTeacherFloatingLauncher"
           data-ai-teacher-launcher
-          aria-label="打开 AI 教师"
+          aria-label={t('aiPanel.open')}
           onClick={() => setOpen(true)}
         >
           <span className="aiTeacherLauncherSpiral" aria-hidden="true">
@@ -1209,8 +1284,8 @@ export function AiTeacherPanel({
           type="button"
           className="aiTeacherResizeHandle"
           data-ai-teacher-resize
-          aria-label="调整 AI 教师面板宽度，左右拖动或使用方向键"
-          title="左右拖动调整 AI 教师宽度"
+          aria-label={t('aiPanel.resizeAria')}
+          title={t('aiPanel.resizeTitle')}
           onPointerDown={startResize}
           onKeyDown={resizeWithKeyboard}
         />
@@ -1227,24 +1302,24 @@ export function AiTeacherPanel({
       >
         <header className="aiTeacherPanelHeader">
           <div>
-            <h3>AI 教师</h3>
+            <h3>{t('aiPanel.title')}</h3>
             <p data-ai-teacher-status data-ai-teacher-state={tone}>{status}</p>
           </div>
           {launcherMode !== 'docked' ? (
-            <button type="button" data-ai-teacher-toggle aria-label="关闭 AI 教师" onClick={() => setOpen(false)}>
+            <button type="button" data-ai-teacher-toggle aria-label={t('aiPanel.close')} onClick={() => setOpen(false)}>
               <X size={16} />
             </button>
           ) : null}
         </header>
-        <nav className="aiTeacherPanelTabs" role="tablist" aria-label="AI 教师面板">
-          <button type="button" role="tab" aria-selected={activePanelTab === 'teacher'} onClick={() => setActivePanelTab('teacher')}>AI 教师</button>
-          <button type="button" role="tab" aria-selected={activePanelTab === 'model'} onClick={() => setActivePanelTab('model')}>模型导航</button>
-          <button type="button" role="tab" aria-selected={activePanelTab === 'diagnostics'} onClick={() => setActivePanelTab('diagnostics')}>诊断{teacherDiagnostics.length ? ` ${teacherDiagnostics.length}` : ''}</button>
+        <nav className="aiTeacherPanelTabs" role="tablist" aria-label={t('aiPanel.tabsAria')}>
+          <button type="button" role="tab" aria-selected={activePanelTab === 'teacher'} onClick={() => setActivePanelTab('teacher')}>{t('aiPanel.teacherTab')}</button>
+          <button type="button" role="tab" aria-selected={activePanelTab === 'model'} onClick={() => setActivePanelTab('model')}>{t('aiPanel.modelTab')}</button>
+          <button type="button" role="tab" aria-selected={activePanelTab === 'diagnostics'} onClick={() => setActivePanelTab('diagnostics')}>{t('aiPanel.diagnosticsTab')}{teacherDiagnostics.length ? ` ${teacherDiagnostics.length}` : ''}</button>
         </nav>
         {!canUseTeacher ? (
           <div className="lockedFeature" data-ai-teacher-locked>
-            <strong>{config?.aiTeacherEnabled ? '当前账号暂未开放 AI 教师' : 'AI 教师已关闭'}</strong>
-            <p>当前账号或环境未开放真实 AI 教师调用。</p>
+            <strong>{t(config?.aiTeacherEnabled ? 'aiPanel.accountUnavailable' : 'aiPanel.disabled')}</strong>
+            <p>{t('aiPanel.unavailableBody')}</p>
           </div>
         ) : null}
         <div className="aiTeacherBody" data-ai-teacher-body>
@@ -1267,15 +1342,23 @@ export function AiTeacherPanel({
               />
             )) : (
               <div className="aiTeacherConversationEmpty">
-                <strong>我已读取当前任务与模型</strong>
-                <p>选择一个常用问题，或直接描述你卡住的地方。AI 建议不会替代官方校验结果。</p>
+                <strong>{submissionPhase === 'creating_thread'
+                  ? t('aiPanel.creatingThread')
+                  : submissionPhase === 'starting_run'
+                    ? t('aiPanel.startingRun')
+                    : t('aiPanel.readyTitle')}</strong>
+                <p>{submissionPhase === 'creating_thread'
+                  ? t('aiPanel.creatingBody')
+                  : submissionPhase === 'starting_run'
+                    ? t('aiPanel.startingBody')
+                    : t('aiPanel.readyBody')}</p>
               </div>
             )}
           </div>
-          <div className="aiTeacherQuickPrompts" aria-label="常用提问">
-            <button type="button" onClick={() => setQuestion('请解释当前错误，并指出它与课程任务的关系。')}>解释当前错误</button>
-            <button type="button" onClick={() => setQuestion('请只提示下一步，不要直接给出完整答案。')}>提示下一步，不直接给答案</button>
-            <button type="button" onClick={() => setQuestion('请解读整个模型的主要结构、关键关系，以及它们与当前任务的关系。')}>解读整个模型</button>
+          <div className="aiTeacherQuickPrompts" aria-label={t('aiPanel.quickAria')}>
+            <button type="button" onClick={() => setQuestion(t('aiPanel.quickExplainPrompt'))}>{t('aiPanel.quickExplain')}</button>
+            <button type="button" onClick={() => setQuestion(t('aiPanel.quickHintPrompt'))}>{t('aiPanel.quickHint')}</button>
+            <button type="button" onClick={() => setQuestion(t('aiPanel.quickModelPrompt'))}>{t('aiPanel.quickModel')}</button>
           </div>
           {busyHint ? (
             <div className="aiTeacherBusyTip" data-ai-teacher-busy-tip role="status">
@@ -1287,18 +1370,18 @@ export function AiTeacherPanel({
               <section className="aiTeacherComposerContext" data-ai-teacher-composer-context={composerContext.kind}>
                 <div>
                   <strong>{composerContext.kind === 'engineering_feedback'
-                    ? '正在基于上一版 Validator-PASS 模型继续改进'
-                    : '正在回答 AI 教师的问题'}</strong>
+                    ? t('aiPanel.engineeringContext')
+                    : t('aiPanel.clarificationContext')}</strong>
                   {composerContext.kind === 'engineering_feedback' && composerContext.suggestions?.length ? (
                     <ul>{composerContext.suggestions.map((item, index) => (
                       <li key={item.publicSuggestionId || `suggestion-${index}`}>{item.summary}</li>
                     ))}</ul>
                   ) : null}
                 </div>
-                <button type="button" onClick={() => setComposerContext({ kind: 'none' })}>取消关联</button>
+                <button type="button" onClick={() => setComposerContext({ kind: 'none' })}>{t('aiPanel.cancelContext')}</button>
               </section>
             ) : null}
-            <span className="aiTeacherComposerLabel">向 AI 教师提问</span>
+            <span className="aiTeacherComposerLabel">{t('aiPanel.askLabel')}</span>
             <label className="aiTeacherAskRow">
               <textarea
                 ref={questionInputRef}
@@ -1306,26 +1389,35 @@ export function AiTeacherPanel({
                 rows={3}
                 value={question}
                 placeholder={composerContext.kind === 'engineering_feedback'
-                  ? '补充优先级、约束、希望保留或不要修改的内容…'
+                  ? t('aiPanel.engineeringPlaceholder')
                   : composerContext.kind === 'clarification_answer'
-                    ? '回答 AI 教师的问题…'
-                    : '描述你的问题，或让 AI 教师解释当前模型…'}
+                    ? t('aiPanel.clarificationPlaceholder')
+                    : t('aiPanel.placeholder')}
                 onChange={(event) => setQuestion(event.currentTarget.value)}
                 onKeyDown={(event) => {
                   if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
                   event.preventDefault();
-                  if (!running) void runTeacher();
+                  if (!interactionBusy) void runTeacher();
                 }}
               />
             </label>
             <div className="aiTeacherComposerFooter">
-              <small>Enter 发送 · Shift + Enter 换行</small>
+              <small>{t('aiPanel.keyboardHint')}</small>
               <span className="aiTeacherAskActions">
-                <button type="button" data-ai-teacher-clear aria-label="清空对话" title="清空对话" onClick={() => void clearConversation()}>
+                <button type="button" data-ai-teacher-clear aria-label={t('aiPanel.clear')} title={t('aiPanel.clear')} onClick={() => void clearConversation()}>
                   <Trash2 size={15} />
                 </button>
-                <button type="button" className="primary aiTeacherSendButton" data-ai-teacher-ask data-ai-teacher-running={running} aria-label={running ? '停止生成' : '发送'} title={running ? '停止生成' : '发送'} onClick={() => running ? stopTeacher() : void runTeacher()}>
-                  {running ? <Square size={14} /> : <Send size={14} />}
+                <button
+                  type="button"
+                  className="primary aiTeacherSendButton"
+                  data-ai-teacher-ask
+                  data-ai-teacher-running={running}
+                  data-ai-teacher-submission-phase={submissionPhase}
+                  aria-label={t(running ? 'aiPanel.stop' : submissionBusy ? 'aiPanel.cancelSubmit' : 'aiPanel.send')}
+                  title={t(running ? 'aiPanel.stop' : submissionBusy ? 'aiPanel.cancelSubmit' : 'aiPanel.send')}
+                  onClick={() => interactionBusy ? stopTeacher() : void runTeacher()}
+                >
+                  {interactionBusy ? <Square size={14} /> : <Send size={14} />}
                 </button>
               </span>
             </div>
@@ -1335,12 +1427,12 @@ export function AiTeacherPanel({
             <div className="aiTeacherUtilityPanel aiTeacherModelNavigationPanel" data-ai-teacher-model-navigation>
               {modelNavigation || (
                 <div className="aiTeacherUtilityPanel" data-ai-teacher-model-summary>
-                  <header><strong>当前工作区</strong><span>{workspace.files.length} 个文件</span></header>
+                  <header><strong>{t('aiPanel.workspace')}</strong><span>{t('aiPanel.fileCount', { count: workspace.files.length })}</span></header>
                   {workspace.files.map((file) => (
                     <article key={file.path} data-severity={file.editable === false ? 'readonly' : 'editable'}>
                       <strong>{file.path}</strong>
-                      <p>{file.editable === false ? '参考模型 / 上游基线' : '可编辑模型文件'}</p>
-                      <span>{String(file.content || '').split(/\r?\n/).length} 行</span>
+                      <p>{t(file.editable === false ? 'aiPanel.referenceFile' : 'aiPanel.editableFile')}</p>
+                      <span>{t('aiPanel.lineCount', { count: String(file.content || '').split(/\r?\n/).length })}</span>
                     </article>
                   ))}
                 </div>
@@ -1348,14 +1440,14 @@ export function AiTeacherPanel({
             </div>
           ) : (
             <div className="aiTeacherUtilityPanel" data-ai-teacher-diagnostics>
-              <header><strong>当前诊断</strong><span>{teacherDiagnostics.length} 项</span></header>
+              <header><strong>{t('aiPanel.currentDiagnostics')}</strong><span>{t('aiPanel.itemCount', { count: teacherDiagnostics.length })}</span></header>
               {teacherDiagnostics.length ? teacherDiagnostics.slice(0, 12).map((diagnostic, index) => (
                 <article key={`${diagnostic.file || activeFilePath}-${diagnostic.line || 1}-${index}`} data-severity={diagnostic.severity || 'error'}>
-                  <strong>{diagnostic.source === 'course-rule' ? '课程任务' : diagnostic.severity || 'error'}</strong>
-                  <p>{String(diagnostic.message || '未提供诊断说明')}</p>
+                  <strong>{diagnostic.source === 'course-rule' ? t('aiPanel.courseTask') : diagnostic.severity || 'error'}</strong>
+                  <p>{String(diagnostic.message || t('aiPanel.diagnosticFallback'))}</p>
                   <span>{String(diagnostic.file || activeFilePath || 'main.sysml')}:{String(diagnostic.line || 1)}</span>
                 </article>
-              )) : <div className="aiTeacherUtilityEmpty"><strong>暂无诊断</strong><p>点击“生成视图”后，系统会先完成官方语法、语义与课程规则校验，并在这里显示诊断。</p></div>}
+              )) : <div className="aiTeacherUtilityEmpty"><strong>{t('aiPanel.noDiagnostics')}</strong><p>{t('aiPanel.noDiagnosticsBody')}</p></div>}
             </div>
           )}
         </div>
@@ -1405,9 +1497,18 @@ export function AiTeacherPanel({
 
   function notifyTeacherBusy() {
     setOpen(true);
-    setBusyHint('AI 教师正在生成，请先停止或等待完成。');
+    setBusyHint(submissionPhaseRef.current === 'creating_thread'
+      ? '正在创建新对话，请取消或等待完成。'
+      : submissionPhaseRef.current === 'starting_run'
+        ? '正在启动 AI 教师，请取消或等待完成。'
+        : 'AI 教师正在生成，请先停止或等待完成。');
     if (busyHintTimer.current) window.clearTimeout(busyHintTimer.current);
     busyHintTimer.current = window.setTimeout(() => setBusyHint(''), 2200);
+  }
+
+  function setSubmissionPhaseForPanel(value: AiTeacherSubmissionPhase) {
+    submissionPhaseRef.current = value;
+    setSubmissionPhase(value);
   }
 
   function setQuestionForSession(targetSessionKey: string, value: string) {
@@ -1562,11 +1663,12 @@ export function AiTeacherPanel({
       }));
     }
     if (processId) {
+      const finalProcess = finalResponse ? finalProcessPresentation(finalResponse) : null;
       updateMessage(processId, (message) => ({
         ...message,
         runId,
-        text: finalResponse ? '生成完成' : errorMessage || processText,
-        details: finalResponse ? appendProcessDetail(processDetails, '已完成回答。') : processDetails,
+        text: finalProcess?.text || errorMessage || processText,
+        details: finalProcess ? appendProcessDetail(processDetails, finalProcess.detail) : processDetails,
         activities: processActivities,
         state: finalResponse ? 'done' : errorMessage ? 'error' : 'working',
         startedAtMs: message.startedAtMs || runStartedAtMs,
@@ -1665,12 +1767,7 @@ export function AiTeacherPanel({
   }
 }
 
-const KNOWLEDGE_ASSISTANT_SUGGESTIONS = [
-  'SysML v2 与 SysML v1 有哪些核心区别？',
-  '如何从需求追溯到验证证据？',
-  '请解释官方 Simple Vehicle 模型的结构',
-  'SysML v2 + LLM 可以支持哪些工程任务？'
-];
+const KNOWLEDGE_ASSISTANT_SUGGESTION_KEYS = ['sysmlComparison', 'traceability', 'simpleVehicle', 'aiEngineering'] as const;
 
 function convertKnowledgeAssistantMessage(message: AiTeacherMessage): ThreadMessageLike {
   return {
@@ -1812,6 +1909,7 @@ function KnowledgeAssistantSurface({
   onCancelComposerContext: () => void;
   knowledgeWorkspace?: { spaceCount: number; spaces: ReactNode };
 }) {
+  const { t, i18n } = useTranslation('knowledge');
   const [deleteTarget, setDeleteTarget] = useState<TeacherThreadSummary | null>(null);
   const [activeSection, setActiveSection] = useState<'assistant' | 'spaces'>('assistant');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 720px)').matches);
@@ -1824,13 +1922,13 @@ function KnowledgeAssistantSurface({
       .map((part) => part.type === 'text' ? part.text : '')
       .join('\n')
       .trim();
-    if (!input) throw new Error('请输入要提问的文字内容。');
+    if (!input) throw new Error(t('assistant.inputRequired'));
     await onSubmit(
       input,
       composerContext.kind === 'engineering_feedback' ? composerContext.sourceRunId : undefined,
       composerContext.kind === 'engineering_feedback' ? 'engineering_feedback' : undefined
     );
-  }, [composerContext, onSubmit]);
+  }, [composerContext, onSubmit, t]);
   const runtime = useExternalStoreRuntime({
     messages: visibleMessages,
     convertMessage: convertKnowledgeAssistantMessage,
@@ -1862,34 +1960,34 @@ function KnowledgeAssistantSurface({
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <section className={`knowledgeWorkspace${sidebarCollapsed ? ' isSidebarCollapsed' : ''}`} data-knowledge-workspace data-knowledge-section={activeSection}>
-        <aside className="knowledgeWorkspaceSidebar" aria-label="工程知识库工作区导航">
+        <aside className="knowledgeWorkspaceSidebar" aria-label={t('assistant.sidebarAria')}>
           <header className="knowledgeWorkspaceSidebarHeader">
             <span className="knowledgeWorkspaceBrand"><Network size={20} /></span>
-            <strong>工程知识库</strong>
-            <button type="button" onClick={() => setSidebarCollapsed((value) => !value)} aria-label={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}>
+            <strong>{t('assistant.library')}</strong>
+            <button type="button" onClick={() => setSidebarCollapsed((value) => !value)} aria-label={t(sidebarCollapsed ? 'assistant.expandSidebar' : 'assistant.collapseSidebar')}>
               {sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
             </button>
           </header>
-          <nav className="knowledgeWorkspaceSections" aria-label="工程知识库栏目">
-            <button type="button" title="AI 问答" className={activeSection === 'assistant' ? 'isActive' : ''} aria-current={activeSection === 'assistant' ? 'page' : undefined} onClick={() => setActiveSection('assistant')}>
-              <MessageCircle size={19} /><span>AI 问答</span>
+          <nav className="knowledgeWorkspaceSections" aria-label={t('assistant.sectionsAria')}>
+            <button type="button" title={t('assistant.aiQa')} className={activeSection === 'assistant' ? 'isActive' : ''} aria-current={activeSection === 'assistant' ? 'page' : undefined} onClick={() => setActiveSection('assistant')}>
+              <MessageCircle size={19} /><span>{t('assistant.aiQa')}</span>
             </button>
-            <button type="button" title="知识空间" className={activeSection === 'spaces' ? 'isActive' : ''} aria-current={activeSection === 'spaces' ? 'page' : undefined} onClick={() => setActiveSection('spaces')}>
-              <BookOpenText size={19} /><span>知识空间</span><small>{knowledgeWorkspace?.spaceCount || 0}</small>
+            <button type="button" title={t('assistant.spaces')} className={activeSection === 'spaces' ? 'isActive' : ''} aria-current={activeSection === 'spaces' ? 'page' : undefined} onClick={() => setActiveSection('spaces')}>
+              <BookOpenText size={19} /><span>{t('assistant.spaces')}</span><small>{knowledgeWorkspace?.spaceCount || 0}</small>
             </button>
           </nav>
           <div className="knowledgeWorkspaceSidebarDivider" />
           <button className="knowledgeWorkspaceNewConversation" type="button" onClick={() => {
             setActiveSection('assistant');
             void onStartNew();
-          }} disabled={Boolean(deletingThreadId)} title="新对话">
-            <Plus size={18} /><span>新对话</span>
+          }} disabled={Boolean(deletingThreadId)} title={t('assistant.newConversation')}>
+            <Plus size={18} /><span>{t('assistant.newConversation')}</span>
           </button>
-          <section className="knowledgeWorkspaceHistory" aria-label="历史对话">
-            <header><span>历史对话</span><small>{threads.length}</small></header>
-            {threadsLoading ? <p>正在加载...</p> : null}
+          <section className="knowledgeWorkspaceHistory" aria-label={t('assistant.history')}>
+            <header><span>{t('assistant.history')}</span><small>{threads.length}</small></header>
+            {threadsLoading ? <p>{t('assistant.loading')}</p> : null}
             {threadsError ? <p role="status">{threadsError}</p> : null}
-            {!threadsLoading && !threadsError && !threads.length ? <p>暂无历史对话</p> : null}
+            {!threadsLoading && !threadsError && !threads.length ? <p>{t('assistant.noHistory')}</p> : null}
             <div className="knowledgeWorkspaceHistoryList">
               {threads.map((thread) => (
                 <div className="knowledgeWorkspaceHistoryItem" key={thread.threadId}>
@@ -1905,17 +2003,17 @@ function KnowledgeAssistantSurface({
                   >
                     <span>{thread.title}</span>
                     {activeExecutionThreadId === thread.threadId ? (
-                      <LoaderCircle size={12} className="spin" aria-label="正在后台回答" />
+                      <LoaderCircle size={12} className="spin" aria-label={t('assistant.backgroundAnswer')} />
                     ) : null}
-                    <small>{formatThreadUpdatedAt(thread.updatedAt)}</small>
+                    <small>{formatThreadUpdatedAt(thread.updatedAt, i18n.resolvedLanguage || 'zh-CN')}</small>
                   </button>
                   <button
                     type="button"
                     className="knowledgeWorkspaceHistoryDelete"
                     onClick={() => setDeleteTarget(thread)}
                     disabled={activeExecutionThreadId === thread.threadId || Boolean(deletingThreadId)}
-                    aria-label={`删除对话：${thread.title}`}
-                    title="删除对话"
+                    aria-label={t('assistant.deleteNamed', { title: thread.title })}
+                    title={t('assistant.delete')}
                   >
                     {deletingThreadId === thread.threadId ? <LoaderCircle size={14} className="spin" /> : <Trash2 size={14} />}
                   </button>
@@ -1944,8 +2042,8 @@ function KnowledgeAssistantSurface({
             {!hasConversation ? (
               <div className="knowledgeAssistantWelcome">
                 <span className="knowledgeAssistantWelcomeMark"><Bot size={28} /></span>
-                <h1>今天想了解什么工程问题？</h1>
-                <p>可以询问 SysML v2、系统工程方法或当前知识空间</p>
+                <h1>{t('assistant.welcomeTitle')}</h1>
+                <p>{t('assistant.welcomeBody')}</p>
               </div>
             ) : (
               <ThreadPrimitive.Messages>
@@ -1976,20 +2074,23 @@ function KnowledgeAssistantSurface({
             )}
 
             {!hasConversation ? (
-              <div className="knowledgeAssistantSuggestions" aria-label="建议问题">
-                {KNOWLEDGE_ASSISTANT_SUGGESTIONS.map((prompt) => (
+              <div className="knowledgeAssistantSuggestions" aria-label={t('assistant.suggestionsAria')}>
+                {KNOWLEDGE_ASSISTANT_SUGGESTION_KEYS.map((key) => {
+                  const prompt = t(`assistant.suggestions.${key}`);
+                  return (
                   <ThreadPrimitive.Suggestion key={prompt} prompt={prompt} send disabled={!canUseTeacher}>
                     {prompt}
                   </ThreadPrimitive.Suggestion>
-                ))}
+                  );
+                })}
               </div>
             ) : null}
 
             {hasConversation && scrollButtonHost ? createPortal(
               <ThreadPrimitive.ScrollToBottom
                 className="workbenchViewJumpButton knowledgeAssistantScrollButton"
-                aria-label="滚动到最新回答"
-                title="滚动到最新回答"
+                aria-label={t('assistant.scrollLatest')}
+                title={t('assistant.scrollLatest')}
               >
                 <ArrowDown size={24} strokeWidth={1.8} aria-hidden="true" />
               </ThreadPrimitive.ScrollToBottom>,
@@ -2009,15 +2110,15 @@ function KnowledgeAssistantSurface({
                 <section className="aiTeacherComposerContext" data-ai-teacher-composer-context={composerContext.kind}>
                   <div>
                     <strong>{composerContext.kind === 'engineering_feedback'
-                      ? '正在基于上一版 Validator-PASS 模型继续改进'
-                      : '正在回答 AI 教师的问题'}</strong>
+                      ? t('assistant.engineeringContext')
+                      : t('assistant.clarificationContext')}</strong>
                     {composerContext.kind === 'engineering_feedback' && composerContext.suggestions?.length ? (
                       <ul>{composerContext.suggestions.map((item, index) => (
                         <li key={item.publicSuggestionId || `knowledge-suggestion-${index}`}>{item.summary}</li>
                       ))}</ul>
                     ) : null}
                   </div>
-                  <button type="button" onClick={onCancelComposerContext}>取消关联</button>
+                  <button type="button" onClick={onCancelComposerContext}>{t('assistant.cancelContext')}</button>
                 </section>
               ) : null}
               {activeThread && activeThread.contextUsage.state !== 'normal' ? (
@@ -2027,20 +2128,20 @@ function KnowledgeAssistantSurface({
                   role="status"
                 >
                   <span>{activeThread.contextUsage.state === 'critical'
-                    ? '本对话上下文已接近上限，较早内容可能不再进入后续回答。'
-                    : '本对话内容较多，建议在完成当前主题后新开对话。'}</span>
-                  <button type="button" onClick={() => void onStartNew()} disabled={Boolean(deletingThreadId)}>新开对话</button>
+                    ? t('assistant.contextCritical')
+                    : t('assistant.contextWarning')}</span>
+                  <button type="button" onClick={() => void onStartNew()} disabled={Boolean(deletingThreadId)}>{t('assistant.startAnother')}</button>
                 </div>
               ) : null}
               {hasBackgroundExecution ? (
                 <div className="knowledgeAssistantBackgroundRunNotice" role="status">
-                  <span>另一条对话正在后台回答，当前历史可以正常查看。</span>
-                  <button type="button" onClick={() => onSelectThread(activeExecutionThreadId)}>返回运行中的对话</button>
+                  <span>{t('assistant.backgroundNotice')}</span>
+                  <button type="button" onClick={() => onSelectThread(activeExecutionThreadId)}>{t('assistant.returnRunning')}</button>
                 </div>
               ) : null}
               {!canUseTeacher ? (
                 <div className="knowledgeAssistantNotice" data-state="fail" role="status">
-                  当前账号或环境未开放 AI Teacher，知识空间仍可正常浏览。
+                  {t('assistant.teacherUnavailable')}
                 </div>
               ) : hasConversation && tone !== 'idle' ? (
                 <div className="knowledgeAssistantNotice" data-state={tone} role="status">{status}</div>
@@ -2048,25 +2149,25 @@ function KnowledgeAssistantSurface({
               <ComposerPrimitive.Root className="knowledgeAssistantComposer">
                 <ComposerPrimitive.Input
                   className="knowledgeAssistantInput"
-                  placeholder="询问 SysML v2、系统工程方法或当前知识空间…"
+                  placeholder={t('assistant.placeholder')}
                   submitMode="enter"
                   unstable_insertNewlineOnTouchEnter
                   disabled={!canUseTeacher || hasBackgroundExecution}
-                  aria-label="向 AI Teacher 提问"
+                  aria-label={t('assistant.askAria')}
                 />
                 {running ? (
-                  <ComposerPrimitive.Cancel className="knowledgeAssistantSend" aria-label="停止生成" title="停止生成">
+                  <ComposerPrimitive.Cancel className="knowledgeAssistantSend" aria-label={t('assistant.stop')} title={t('assistant.stop')}>
                     <Square size={15} />
                   </ComposerPrimitive.Cancel>
                 ) : (
-                  <ComposerPrimitive.Send className="knowledgeAssistantSend" disabled={!canUseTeacher || hasBackgroundExecution} aria-label="发送" title="发送">
+                  <ComposerPrimitive.Send className="knowledgeAssistantSend" disabled={!canUseTeacher || hasBackgroundExecution} aria-label={t('assistant.send')} title={t('assistant.send')}>
                     <Send size={17} />
                   </ComposerPrimitive.Send>
                 )}
               </ComposerPrimitive.Root>
               <div className="knowledgeAssistantComposerMeta">
-                <small>AI Teacher 也可能会犯错，请核查重要信息。</small>
-                <button type="button" data-browse-knowledge-spaces onClick={() => setActiveSection('spaces')}><BookOpenText size={14} aria-hidden="true" />浏览知识空间</button>
+                <small>{t('assistant.notice')}</small>
+                <button type="button" data-browse-knowledge-spaces onClick={() => setActiveSection('spaces')}><BookOpenText size={14} aria-hidden="true" />{t('assistant.browseSpaces')}</button>
               </div>
             </div>
           </div>
@@ -2087,12 +2188,12 @@ function KnowledgeAssistantSurface({
             >
               <span className="knowledgeAssistantDialogMark"><Trash2 size={18} /></span>
               <div>
-                <h2 id="knowledge-assistant-delete-title">删除历史对话？</h2>
-                <p id="knowledge-assistant-delete-description">“{deleteTarget.title}”及其消息将被永久删除，此操作无法撤销。</p>
+                <h2 id="knowledge-assistant-delete-title">{t('assistant.deleteTitle')}</h2>
+                <p id="knowledge-assistant-delete-description">{t('assistant.deleteDescription', { title: deleteTarget.title })}</p>
               </div>
               <footer>
-                <button type="button" onClick={() => setDeleteTarget(null)}>取消</button>
-                <button type="button" className="isDanger" onClick={() => void confirmDelete()}>删除对话</button>
+                <button type="button" onClick={() => setDeleteTarget(null)}>{t('assistant.cancel')}</button>
+                <button type="button" className="isDanger" onClick={() => void confirmDelete()}>{t('assistant.delete')}</button>
               </footer>
             </section>
           </div>
@@ -2343,7 +2444,7 @@ function ProcessMessageBody({ message }: { message: AiTeacherMessage }) {
                 <span className="aiTeacherActivityState" aria-hidden="true">
                   {activity.status === 'running'
                     ? <LoaderCircle className="aiTeacherStepSpinner" size={13} />
-                    : <Check size={12} />}
+                    : activity.status === 'error' ? <X size={12} /> : <Check size={12} />}
                 </span>
                 <span className="aiTeacherActivityContent">
                   <strong>{activity.message}</strong>
@@ -2500,7 +2601,7 @@ function appendProcessDetail(current: string, next: unknown): string {
 }
 
 function normalizeTeacherActivity(event: AiTeacherStreamEvent): AiTeacherActivity | null {
-  const allowedKinds = new Set<AiTeacherActivity['kind']>(['context', 'knowledge', 'web', 'skill', 'validator']);
+  const allowedKinds = new Set<AiTeacherActivity['kind']>(['context', 'knowledge', 'web', 'skill', 'validator', 'repair']);
   const allowedStatuses = new Set<AiTeacherActivity['status']>(['running', 'complete', 'error']);
   const kind = allowedKinds.has(event.kind as AiTeacherActivity['kind'])
     ? event.kind as AiTeacherActivity['kind']
@@ -2530,6 +2631,22 @@ function normalizeTeacherActivity(event: AiTeacherStreamEvent): AiTeacherActivit
     ...(Number.isFinite(count) ? { count: Math.max(0, Math.min(999, Math.floor(count))) } : {}),
     ...(items.length ? { items } : {})
   };
+}
+
+function finalProcessPresentation(response: AiTeacherResponse): { text: string; detail: string } {
+  if (response.clarification?.status === 'waiting') {
+    return { text: '等待补充信息', detail: 'AI 教师正在等待你的补充信息。' };
+  }
+  if (response.validatorStatus === 'validated_failed') {
+    return {
+      text: '验证未通过，本轮已结束',
+      detail: '本轮在修复预算内未形成通过官方 Validator 的候选。'
+    };
+  }
+  if (response.answerCompletionStatus === 'incomplete') {
+    return { text: '本轮未完成', detail: '本轮运行已结束，交付尚未完成。' };
+  }
+  return { text: '生成完成', detail: '已完成回答流程。' };
 }
 
 function upsertTeacherActivity(current: AiTeacherActivity[] | undefined, next: AiTeacherActivity): AiTeacherActivity[] {
@@ -2814,51 +2931,96 @@ function mermaidSandboxDocument(svg: string): string {
 
 function TeacherCodeBlock({ code, language, validation }: { code: string; language?: string; validation?: AiTeacherCodeBlockValidation }) {
   const api = useAppApiClient();
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const [renderOpen, setRenderOpen] = useState(false);
   const [isRenderMaximized, setIsRenderMaximized] = useState(false);
   const [renderState, setRenderState] = useState<'idle' | 'working' | 'ok' | 'fail'>('idle');
   const [renderResult, setRenderResult] = useState<PlantUmlRenderResult | null>(null);
   const [renderError, setRenderError] = useState('');
+  const [selectedPlantUmlView, setSelectedPlantUmlView] = useState('');
+  const plantUmlCacheRef = useRef(new Map<string, PlantUmlRenderResult>());
+  const displayedPlantUmlViewRef = useRef('');
+  const requestedPlantUmlViewRef = useRef('');
+  const renderRequestRevisionRef = useRef(0);
   const dialogTitleId = useId();
+  const viewCountId = useId();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const cleanLanguage = sanitizeTeacherUiText(language || '').replace(/[^a-zA-Z0-9_+.-]/g, '').slice(0, 24);
   const showValidation = Boolean(validation) || /sysml/i.test(cleanLanguage) || /\bpackage\s+[A-Za-z_][\w]*\s*\{/.test(code);
   const canRenderPlantUml = /sysml/i.test(cleanLanguage) || /\b(?:package|part|port|interface|view)\b/.test(code);
+  const plantUmlWorkspace = useMemo<WorkspaceSnapshot>(() => ({
+    files: [{ path: 'main.sysml', content: code, loadPolicy: 'always' }],
+    entryFile: 'main.sysml',
+    activeFilePath: 'main.sysml'
+  }), [code]);
+  const plantUmlViews = useMemo(() => plantUmlViewOptions(plantUmlWorkspace), [plantUmlWorkspace]);
   const validationStatus = teacherCodeBlockValidationStatus(validation);
   const validationLabel = teacherCodeBlockValidationLabel(validation);
   const validationTitle = teacherCodeBlockValidationTitle(validation);
   const handleCopy = async () => {
-    await copyText(code);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1400);
+    try {
+      await copyText(code);
+      setCopyState('copied');
+    } catch {
+      setCopyState('failed');
+    }
+    window.setTimeout(() => setCopyState('idle'), 1800);
   };
-  const renderPlantUml = async () => {
+  const renderPlantUml = async (requestedViewName = selectedPlantUmlView) => {
     setRenderOpen(true);
-    if (renderResult?.ok && renderResult.svg) return;
+    requestedPlantUmlViewRef.current = requestedViewName;
+    const cached = plantUmlCacheRef.current.get(requestedViewName);
+    if (cached?.ok && cached.svg) {
+      displayedPlantUmlViewRef.current = requestedViewName;
+      setRenderResult(cached);
+      setRenderError('');
+      setRenderState('ok');
+      return;
+    }
+    const requestRevision = ++renderRequestRevisionRef.current;
     setRenderState('working');
     setRenderError('');
     try {
       const result = await api.request<PlantUmlRenderResult>('/api/plantuml', {
         method: 'POST',
-        body: {
-          files: [{ path: 'main.sysml', content: code, loadPolicy: 'always' }],
-          entryFile: 'main.sysml',
-          layoutOptimization: { mode: 'auto' }
-        }
+        body: plantUmlRequestBody(plantUmlWorkspace, requestedViewName)
       });
       if (!result.ok || !result.svg) throw new Error(friendlyPlantUmlError(null, result));
+      if (requestRevision !== renderRequestRevisionRef.current) return;
+      plantUmlCacheRef.current.set(requestedViewName, result);
+      if (plantUmlCacheRef.current.size > 12) {
+        const oldest = plantUmlCacheRef.current.keys().next().value;
+        if (oldest !== undefined) plantUmlCacheRef.current.delete(oldest);
+      }
+      displayedPlantUmlViewRef.current = requestedViewName;
       setRenderResult(result);
       setRenderState('ok');
     } catch (error) {
+      if (requestRevision !== renderRequestRevisionRef.current) return;
       setRenderError(friendlyPlantUmlError(error));
+      if (renderResult?.svg) setSelectedPlantUmlView(displayedPlantUmlViewRef.current);
       setRenderState('fail');
     }
+  };
+  const selectPlantUmlView = (viewName: string) => {
+    setSelectedPlantUmlView(viewName);
+    void renderPlantUml(viewName);
   };
   const closeRenderView = () => {
     setRenderOpen(false);
     setIsRenderMaximized(false);
   };
+
+  useEffect(() => {
+    renderRequestRevisionRef.current += 1;
+    plantUmlCacheRef.current.clear();
+    displayedPlantUmlViewRef.current = '';
+    requestedPlantUmlViewRef.current = '';
+    setSelectedPlantUmlView('');
+    setRenderResult(null);
+    setRenderError('');
+    setRenderState('idle');
+  }, [code]);
 
   useEffect(() => {
     if (!renderOpen) return undefined;
@@ -2914,29 +3076,65 @@ function TeacherCodeBlock({ code, language, validation }: { code: string; langua
               <X size={18} aria-hidden="true" />
             </button>
           </div>
+          {plantUmlViews.length > 1 ? (
+            <div
+              className="viewToolbar plantUmlViewSelectorToolbar aiTeacherPlantUmlViewSelectorToolbar"
+              data-ai-teacher-plantuml-view-selector
+            >
+              <label className="plantUmlViewSelector">
+                <span>模型 view</span>
+                <select
+                  data-ai-teacher-plantuml-view-select
+                  aria-label="选择回答代码中的 PlantUML 模型 view"
+                  aria-describedby={viewCountId}
+                  value={selectedPlantUmlView}
+                  disabled={renderState === 'working'}
+                  onChange={(event) => selectPlantUmlView(event.currentTarget.value)}
+                >
+                  <option value="">自动选择</option>
+                  {plantUmlViews.map((view) => (
+                    <option key={view.qualifiedName} value={view.qualifiedName}>{view.name}</option>
+                  ))}
+                </select>
+              </label>
+              <span id={viewCountId} data-ai-teacher-plantuml-view-count>
+                检测到 {plantUmlViews.length} 个显式 view；切换不会修改代码。
+              </span>
+            </div>
+          ) : null}
         </header>
         <div className="aiTeacherPlantUmlBody" data-state={renderState}>
-          {renderState === 'working' ? (
+          {renderState === 'working' && !renderResult?.svg ? (
             <div className="aiTeacherPlantUmlStatus" role="status">
               <LoaderCircle className="aiTeacherStepSpinner" size={22} aria-hidden="true" />
               <strong>正在生成 PlantUML 视图…</strong>
               <span>官方渲染器会先检查当前代码，再返回 SVG。</span>
             </div>
           ) : null}
-          {renderState === 'fail' ? (
+          {renderState === 'fail' && !renderResult?.svg ? (
             <div className="aiTeacherPlantUmlStatus isError" role="alert">
               <strong>视图生成失败</strong>
               <span>{renderError}</span>
-              <button type="button" onClick={() => void renderPlantUml()}>重新生成</button>
+              <button type="button" onClick={() => void renderPlantUml(requestedPlantUmlViewRef.current)}>重新生成</button>
             </div>
           ) : null}
-          {renderState === 'ok' && renderResult?.svg ? (
+          {renderResult?.svg ? (
             <div className="aiTeacherPlantUmlCanvas">
               <PlantUmlViewport svgMarkup={renderResult.svg} />
             </div>
           ) : null}
+          {renderState === 'working' && renderResult?.svg ? (
+            <div className="plantUmlSwitchingNotice" data-ai-teacher-plantuml-switching role="status">
+              正在切换模型 view，当前图形会保留到新视图生成完成。
+            </div>
+          ) : null}
+          {renderState === 'fail' && renderResult?.svg ? (
+            <div className="plantUmlSwitchingNotice isError" data-ai-teacher-plantuml-switch-error role="alert">
+              切换失败，已保留原视图：{renderError}
+            </div>
+          ) : null}
         </div>
-        {renderState === 'ok' && renderResult ? (
+        {renderResult ? (
           <footer>
             <strong>{renderResult.viewName || '当前模型'} 已生成</strong>
             {plantUmlMetadataNotes(renderResult).map((note) => <span key={note}>{note}</span>)}
@@ -2969,9 +3167,24 @@ function TeacherCodeBlock({ code, language, validation }: { code: string; langua
                 <Network size={14} aria-hidden="true" />
               </button>
             ) : null}
-            <button type="button" aria-label="复制代码块" title={validationStatus === 'failed' ? '复制代码块：该代码未通过验证，需人工复查' : '复制代码块'} onClick={() => void handleCopy()}>
-              {copied ? <Check size={14} /> : <Copy size={14} />}
+            <button
+              type="button"
+              data-copy-state={copyState}
+              aria-label={copyState === 'copied' ? '代码块已复制' : copyState === 'failed' ? '代码块复制失败' : '复制代码块'}
+              title={copyState === 'copied'
+                ? '已复制代码块'
+                : copyState === 'failed'
+                  ? '复制失败，请检查浏览器剪贴板权限'
+                  : validationStatus === 'failed'
+                    ? '复制代码块：该代码未通过验证，需人工复查'
+                    : '复制代码块'}
+              onClick={() => void handleCopy()}
+            >
+              {copyState === 'copied' ? <Check size={14} aria-hidden="true" /> : copyState === 'failed' ? <X size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
             </button>
+            <span className="srOnly" role="status" aria-live="polite">
+              {copyState === 'copied' ? '代码块已复制。' : copyState === 'failed' ? '代码块复制失败，请检查浏览器剪贴板权限。' : ''}
+            </span>
           </span>
         </figcaption>
         <pre><code>{code}</code></pre>
@@ -3051,8 +3264,37 @@ function isAbortError(error: unknown): boolean {
 }
 
 async function copyText(value: string): Promise<void> {
+  const text = String(value || '');
   if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(String(value || ''));
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch {
+      // Clipboard API 可能因权限、焦点或安全上下文被拒绝，继续使用同步复制降级路径。
+    }
+  }
+
+  const selection = window.getSelection();
+  const previousRange = selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
+  const previousActiveElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const buffer = document.createElement('textarea');
+  buffer.value = text;
+  buffer.setAttribute('readonly', 'true');
+  buffer.style.position = 'fixed';
+  buffer.style.left = '-9999px';
+  buffer.style.top = '0';
+  document.body.appendChild(buffer);
+  try {
+    buffer.focus({ preventScroll: true });
+    buffer.select();
+    if (!document.execCommand('copy')) throw new Error('Clipboard copy was rejected.');
+  } finally {
+    document.body.removeChild(buffer);
+    if (selection && previousRange) {
+      selection.removeAllRanges();
+      selection.addRange(previousRange);
+    }
+    previousActiveElement?.focus({ preventScroll: true });
   }
 }
 
@@ -3269,15 +3511,15 @@ function latestWaitingClarificationCheckpoint(messages: TeacherThreadMessage[]):
   return String(latest?.response?.clarification?.checkpointId || '');
 }
 
-function formatThreadUpdatedAt(value: string): string {
+function formatThreadUpdatedAt(value: string, locale: string): string {
   const timestamp = Date.parse(value);
   if (!Number.isFinite(timestamp)) return '';
   const date = new Date(timestamp);
   const now = new Date();
   if (date.toDateString() === now.toDateString()) {
-    return new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit' }).format(date);
+    return new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit' }).format(date);
   }
-  return new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric' }).format(date);
+  return new Intl.DateTimeFormat(locale, { month: 'numeric', day: 'numeric' }).format(date);
 }
 
 function forgetAiTeacherSessionThread(sessionKey: string, originId = '') {

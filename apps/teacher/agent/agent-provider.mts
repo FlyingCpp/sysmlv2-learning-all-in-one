@@ -1,7 +1,25 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { LanguageModel } from "ai";
 import type { FetchFunction } from "@ai-sdk/provider-utils";
+import { Agent } from "undici";
 import { z } from "zod";
+
+const BUSINESS_DEADLINE_TRANSPORT_OPTIONS = Object.freeze({
+  connectTimeout: 0,
+  headersTimeout: 0,
+  bodyTimeout: 0,
+});
+
+const businessDeadlineDispatcher = new Agent(BUSINESS_DEADLINE_TRANSPORT_OPTIONS);
+
+/**
+ * Provider传输层不拥有独立的connect/headers/body计时器。AI SDK传入的
+ * Stage/Run AbortSignal是唯一主动截止；底层HTTP错误仍作为异常兜底上报。
+ */
+const businessDeadlineFetch: FetchFunction = (input, init) => globalThis.fetch(input, {
+  ...init,
+  dispatcher: businessDeadlineDispatcher,
+} as RequestInit & { dispatcher: Agent });
 
 const providerConfigSchema = z
   .object({
@@ -37,7 +55,7 @@ export function createOpenAICompatibleAgentModel(
     apiKey: parsed.apiKey,
     headers: parsed.headers,
     includeUsage: parsed.includeUsage,
-    fetch: runtime.fetch,
+    fetch: runtime.fetch ?? businessDeadlineFetch,
     transformRequestBody: parsed.compatibilityMode === "gateway-thinking-tools-non-null-content"
       ? normalizeThinkingToolRequest
       : undefined,
@@ -77,5 +95,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export const agentProviderTesting = {
+  businessDeadlineFetch,
+  businessDeadlineTransportOptions: BUSINESS_DEADLINE_TRANSPORT_OPTIONS,
   normalizeThinkingToolRequest,
 };

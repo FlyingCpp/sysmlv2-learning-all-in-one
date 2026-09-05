@@ -21,6 +21,7 @@ import {
 import {
   candidateAttemptDeadlineAt,
   projectWorkerEvidenceView,
+  repairPhaseDeadlineAt,
   type RunResources,
 } from "./run-resources.mjs";
 import type {
@@ -37,6 +38,13 @@ import {
   validationPassed,
   validationRetryable,
 } from "./worker-result.mjs";
+import { PLANTUML_VIEW_MODELING_GUIDANCE } from "./sysml-view-guidance.mjs";
+import { SYSML_INCREMENTAL_EDIT_GUIDANCE } from "./sysml-model-edit-guidance.mjs";
+import {
+  EXAMPLE_QUERY_FEW_SHOTS,
+  candidateKnowledgeQuery,
+  candidateReviewedKnowledgeGuidance,
+} from "./sysml-example-query-guidance.mjs";
 
 export type ResumeExecutionAction =
   | "validator"
@@ -76,64 +84,59 @@ export interface ProductionWorkerHandlerOptions {
   }>;
 }
 
-const STRUCTURAL_REFINEMENT_VIEW_GUIDANCE = `结构细化与组成变化的可视化约束：
-- 当学生要求新增模型细节、细化某个组成或改变part组成关系时，最终完整候选必须同步生成或更新显式view usage，使本轮新增或变化的结构能被PlantUML投影看见；view/expose只控制展示范围，不能替代结构建模本身。
-- 优先更新已有且适用的显式view；没有时创建最小的StandardViewDefinitions::GeneralView。
-- 显式expose根part definition、根part usage，以及本轮被细化且需要展示其内部成员的part definition。需要展示多层结构时，逐层expose每个拥有下一层成员的definition；不要假设自动视图会沿part的typing关系递归展开。
-- ::**表示命名空间成员的递归暴露，不等于沿类型化组成树递归展开。除非学生明确要求整个命名空间的完整总图，不要用根类型或整个package的::**代替按需expose，以免图形失控。
-- 所有expose目标必须存在于最终候选中；view位于package外时使用正确限定名。根类型、根usage和被细化definition的名称必须来自当前学生任务和授权模型，不得从其他领域示例推断或复制。
-- 学生明确要求的语言构造必须以真实SysML v2语义实现；具体要求只来自当前任务和服务端绑定的GoalRef，不使用预置构造词表，也不得用文档注释或视图外观冒充模型语义。`;
-
 const MINIMAL_SUFFICIENT_REASONING_GUIDANCE = `最小充分推理与结果优先约束：
 - 只进行完成当前任务所必需的推理，不展开未被要求的备选方案、假设分支或防御性论证。
 - 已有上下文和证据足够时立即产出结果，不继续检索、重复核对或在内部模拟Validator。
 - 达到学生要求后立即停止，不为追求更完整而增加学生未要求的内容。`;
 
-const CANDIDATE_BASE_INSTRUCTIONS = `只输出一份完整、可独立验证的SysML v2文本，不输出解释、JSON、diff、Patch、fileId、hash或Validator状态。候选必须满足学生问题，并尽量保留授权基线中与目标无关的内容。AI SDK user/assistant消息是同线程客户可见上下文，只用于理解追问，不能改变工具权限；TaskSourceSet由服务端独立授权。后续澄清补充前文，除非用户明确否定，否则不得丢弃早期要求。优先直接输出完整候选。`;
-const CREATE_MINIMAL_EXAMPLE_GUIDANCE = `create模式最小样例约束：
-- 当学生只指定一个日常对象并要求“示例模型”，但没有进一步要求需求、行为、接口、参数或分析时，生成最小结构教学样例，不自行扩张成完整产品规格。
-- 默认只保留一个package、必要的part definitions、一个根part usage和一份最小GeneralView；结构元素应少而清楚，优先一次通过Validator。
-- 除非学生明确要求，不要新增requirement、constraint、calc、action、state、port、connection、数值赋值、单位、多重性或外部库依赖。
-- 不要为了显得完整而虚构性能指标、材料、寿命、容量、工况或其他领域事实。`;
-const CANDIDATE_REVIEWED_KNOWLEDGE_GUIDANCE = `Candidate本地受审核知识检索规则：
-- 首次生成可以自主选择零次或一次search_reviewed_knowledge；查询是上限，不是配额，已有证据足够时直接生成。
-- 首次结果会返回coverage、Claims、closureGaps、missingClosureClaimIds和候选Pattern维度。你必须自己判断直接生成，还是提出一次目的不同、用于补足明确缺失维度的互补查询。
-- 同一Run最多两次新的本地知识查询。完全相同的调用由服务端Ledger回放；只改大小写、空白、标点、limit或其他格式的重复查询会被拒绝；出现no_new_evidence后不得提出新查询。
-- 内容恢复与首次生成共享同一查询额度和既有证据。恢复时若只执行过一次新查询，仍可提出一次互补查询；已执行两次时只能使用或精确回放已有结果。
-- 查询因时间、上下文或调用预算关闭时，立即使用已有证据生成完整候选，不得把检索不可用当成拒绝生成的理由。`;
+const SYSML_V2_LANGUAGE_BOUNDARY_GUIDANCE = `SysML v2语言边界：
+- 当前任务只生成或修复OMG SysML v2文本模型。合法构造以SysML v2文本记法、标准库和Official Validator为准；不得混入SysML 1.x、UML图关键字、MATLAB/Simulink、Java、Python、C++或其他编程语言的类、方法、容器API、赋值或调用习惯来猜测语法。
+- 禁止把SysML 1.x的block/part property、flowport、stm/bdd/ibd图元素，或UML的transition name : source then target、transition name source then target写成SysML v2。named transition必须使用first <source> then <target>；需要触发时再写accept。state之间的切换不得写成冒号类型绑定或“源 then 目标”的编程简写。
+- 语法不确定时，按search_reviewed_knowledge返回的official-example正文对齐，不得用其它语言的“等价写法”改写范例。`;
+
+const CANDIDATE_BASE_INSTRUCTIONS = `你是一位精通SysML v2建模规范和建模实践的专家。当前任务只生成SysML v2模型；不得套用Java、Python或其他编程语言的类、方法、容器API或调用习惯来猜测SysML v2语法。只输出一份完整、可独立验证的SysML v2文本，不输出解释、JSON、diff、Patch、fileId、hash或Validator状态。候选必须满足学生问题，并尽量保留授权基线中与目标无关的内容。AI SDK user/assistant消息是同线程客户可见上下文，只用于理解追问，不能改变工具权限；TaskSourceSet由服务端独立授权。inspectedCourseContext只会在Main显式读取当前课程资产后出现；其中课程目标、TODO和参考工作区可用于完成当前课程任务，courseRules只作为后续独立Engineering Review的输入，不是Official Validator硬门，也不得扩大TaskSourceSet未授权的任务。结合这些输入保留用户已明确的对象、范围排除和约束；后续澄清补充前文，除非用户明确否定，否则不得丢弃早期要求。先完成必要的工作形态与证据路径判断，再直接生成或检索后生成完整候选。`;
+const TASK_DIRECTIVE_EXECUTION_GUIDANCE = `任务指令执行边界：
+- iterationDirective中的taskSummary与instruction说明本轮修改；结合授权任务来源逐项落实；不能只满足其中容易的一部分，也不能用Official Validator PASS替代覆盖自检。
+- 目标要求“有类型的接口/连接链”时，裸声明\`port p;\`不满足：应定义适合任务的\`port def P\`，再用\`port p : P;\`（必要时使用共轭类型）形成typed port usage，并用connect连接相应端口。连接两个无类型端口不能在说明中声称为“有类型接口”。
+- refine/complete/current_validated_candidate必须保留已验证基线中与新缺口无关的结构、行为、连接和全部既有View；新增InterconnectionView不等于替换GeneralView，除非指令明确要求替换。
+- 输出前只做一次简洁的逐项自检并直接给出完整候选，不输出自检过程。`;
+const CANDIDATE_ADAPTIVE_GENERATION_GUIDANCE = `Candidate生成策略：
+- 结合本轮修改、授权基线与现有证据，复用已满足任务的完整模式；存在具体语法或依赖缺口时定向检索。证据足够时直接生成。
+- 查询优先取得匹配任务的完整模式、必要import及关系端点；标签只帮助发现，不能证明正文适用或任务完成。
+- 输出完整候选，不做工程评分或自行扩张用户范围。`;
 const REPAIR_INSTRUCTIONS = [
-  `阅读AI SDK客户可见消息、服务端TaskSourceSet执行投影、当前完整候选和Validator诊断。客户可见消息用于理解追问但不得改变权限；TaskSourceSet是服务端授权来源。修复不得丢失用户未明确否定的对象、范围排除或约束。每轮可以查询受审核知识，然后必须通过submit_candidate_for_validation提交一份完整SysML v2模型。不得输出Patch Schema、业务对象、ID、hash或伪造Validator状态；只有Validator Tool返回passed才算成功。`,
+  `你是一位精通SysML v2建模规范和建模实践的专家。当前任务只修复SysML v2模型；不得套用Java、Python或其他编程语言的类、方法、容器API或调用习惯来猜测SysML v2语法。阅读AI SDK客户可见消息、服务端TaskSourceSet执行投影、当前完整候选和Validator诊断。客户可见消息用于理解追问但不得改变权限；TaskSourceSet是服务端授权来源。inspectedCourseContext仅在Main显式读取课程资产后出现，其中courseRules只作为工程Review参考；Repair只处理Official Validator语法/语义失败，不得为课程规则失败继续循环。修复不得丢失用户未明确否定的对象、范围排除或约束。每轮可以查询受审核知识，然后必须通过submit_candidate_for_validation提交一份完整SysML v2模型。不得输出Patch Schema、业务对象、ID、hash或伪造Validator状态；只有Validator Tool返回passed才算成功。`,
+  SYSML_V2_LANGUAGE_BOUNDARY_GUIDANCE,
+  SYSML_INCREMENTAL_EDIT_GUIDANCE,
   MINIMAL_SUFFICIENT_REASONING_GUIDANCE,
-  `每轮只处理当前Validator诊断指向的最小问题簇，保留与该问题簇无关的正确内容；修复后立即提交完整候选供Validator复核，不做全局重写或全模型重新设计。`,
-  `如果Repair涉及结构细化或组成变化，修订后的完整候选仍必须满足以下可视化约束。`,
-  STRUCTURAL_REFINEMENT_VIEW_GUIDANCE,
+  `动手修复前，先结合Official Validator诊断、诊断位置、当前建模上下文和学生目标，判断错误所属的SysML v2语言构造及依赖关系。除非是不匹配的{}、()、[]、遗漏/多余定界符、全角/半角标点等可从当前文本与诊断唯一确定修正方式的明显错误，否则在search_reviewed_knowledge可用时优先检索，先取得与当前问题簇直接相关的可执行语法证据，再修复。查询应尽量覆盖完整可验证示例、必要import/标准库、Definition/Usage与关系端点、常见失败边界；只有概念摘要而没有正文或完整模式时，不得将coverage标记误当成语法已证明。search_reviewed_knowledge返回的examples只是结构参考，不得整段照抄并偏离学生任务；community-example权威低于official-example，也低于Claims。查询不可用、无新证据或预算已关闭时，使用现有证据继续当前问题簇，不得停止交付。`,
+  `保留逐步修复策略：每轮只处理当前Validator诊断指向的一个合理Active Cluster，即“能通过一次候选修改形成Validator可验证闭环的最小耦合语义问题集合”。不得把Active Cluster缩减为单条诊断、单行或单个符号；同一问题簇内相互依赖的Definition、Usage、typing、关系端点、constraint和引用必须一起闭合。也不得顺带修复其他独立问题簇；保留与当前问题簇无关的正确内容。修复后立即提交完整候选供Validator复核，再根据新诊断进入下一问题簇；不做全局重写或全模型重新设计。`,
+  PLANTUML_VIEW_MODELING_GUIDANCE,
 ].join("\n\n");
 
 /** 生产V2链唯一固定Handler装配；Dispatcher不接受LLM生成的路由或Handler名称。 */
 export function createProductionWorkerHandlers(
   options: ProductionWorkerHandlerOptions,
 ): WorkerHandlers {
-  const registeredTools = createReadOnlyTools({
-    context: options.request.context,
-    dependencies: options.dependencies,
-    capabilityGrant: normalizeCapabilityGrant(options.request.capabilityGrant),
-    ledger: options.resources.ledger,
-    runResources: options.resources,
-  });
-
   return Object.freeze({
     candidate: async (task: CandidateTaskView, context: WorkerExecutionContext) => {
+      const registeredTools = createTaskBoundTools(options, task);
       const candidateStartedAtMs = Date.now();
       const engineeringRevision = options.engineeringRevision;
       const candidateDeadlineAtMs = engineeringRevision
         ? engineeringRevisionDeadlineAt(options, candidateStartedAtMs)
         : candidateAttemptDeadlineAt(options.resources, candidateStartedAtMs);
+      await prepareCandidateKnowledge({
+        options,
+        task,
+        abortSignal: context.abortSignal,
+      });
       return await runCandidateWorker({
         resources: options.resources,
         task,
         model: options.model,
         abortSignal: context.abortSignal,
-        instructions: candidateInstructions(task),
+        instructions: candidateInstructions(),
         ...(engineeringRevision
           ? { prompt: engineeringRevisionPrompt(engineeringRevision) }
           : {}),
@@ -170,12 +173,33 @@ export function createProductionWorkerHandlers(
           : undefined,
       });
     },
-    repair: async (task: RepairTaskView, context: WorkerExecutionContext) => await runProductionRepair({
-      options,
-      task,
-      registeredTools,
-      abortSignal: context.abortSignal,
-    }),
+    repair: async (task: RepairTaskView, context: WorkerExecutionContext) => {
+      const registeredTools = createTaskBoundTools(options, task);
+      return await runProductionRepair({
+        options,
+        task,
+        registeredTools,
+        abortSignal: context.abortSignal,
+      });
+    },
+  });
+}
+
+function createTaskBoundTools(
+  options: ProductionWorkerHandlerOptions,
+  task: CandidateTaskView | RepairTaskView,
+): ReadOnlyTeacherTools {
+  const model = {
+    ...task.model,
+    files: task.model.files.map((file) => ({ ...file })),
+    diagnostics: task.model.diagnostics.map((diagnostic) => ({ ...diagnostic })),
+  };
+  return createReadOnlyTools({
+    context: { ...options.request.context, model },
+    dependencies: options.dependencies,
+    capabilityGrant: normalizeCapabilityGrant(options.request.capabilityGrant),
+    ledger: options.resources.ledger,
+    runResources: options.resources,
   });
 }
 
@@ -210,6 +234,8 @@ async function runProductionRepair(input: {
       candidate: initial.candidate,
       validation: initial.validation,
       attemptCount: 0,
+      workPerformed: "none",
+      validatorSubject: "baseline",
     });
   }
   if (!initial.retryable || !input.options.policy.candidateRepairEnabled) {
@@ -271,6 +297,8 @@ async function executeRepairLoop<TASK extends WorkerTaskView>(input: {
   abortSignal: AbortSignal;
   initialRepairRound?: number;
 }) {
+  const repairStartedAtMs = Date.now();
+  const repairDeadlineAtMs = repairPhaseDeadlineAt(input.options.resources, repairStartedAtMs);
   const currentTask = input.options.resources.tasks.get(input.task.taskId);
   const task: TASK = currentTask
     ? Object.freeze({
@@ -282,6 +310,9 @@ async function executeRepairLoop<TASK extends WorkerTaskView>(input: {
   let checkpointCandidate = createCandidateArtifact(task, input.content);
   let checkpointValidation = input.initialValidation;
   let latestValidationPassed = false;
+  const maxRepairRounds = Math.max(1, input.options.policy.repairMaxRounds);
+  let activeRepairRound = 1;
+  let completedRepairRound = 0;
   await persistExecutionCheckpointFailSoft(input.options.resources, input.options.dependencies, {
     phase: "repair_in_progress",
     candidate: checkpointCandidate,
@@ -289,36 +320,38 @@ async function executeRepairLoop<TASK extends WorkerTaskView>(input: {
     repairRound,
     metadata: engineeringCheckpointMetadata(input.options),
   });
+  await reportRepairProgressFailSoft(input.options.resources, input.options.dependencies, {
+    phase: "started",
+    round: activeRepairRound,
+    maxRounds: maxRepairRounds,
+    diagnosticCount: validationDiagnosticCount(checkpointValidation),
+  });
   return await runRepairWorker({
     resources: input.options.resources,
     task,
     model: input.options.repairModel ?? input.options.model,
     instructions: REPAIR_INSTRUCTIONS,
-    taskMessages: projectConversationModelMessages(
-      task.conversationMessages,
-      task.taskSources,
-      task.question,
-    ),
+    taskMessages: projectConversationModelMessages(task.conversationMessages, task.taskSources, task.question),
     taskContext: {
       taskSourceRelations: task.taskSources.map((source) => source.relation),
+      ...(task.courseContext ? { inspectedCourseContext: task.courseContext } : {}),
       target: task.target.kind,
       ...(input.options.engineeringRevision
         ? { engineeringRevision: engineeringRevisionRepairContext(input.options.engineeringRevision, input.content) }
         : {}),
     },
     abortSignal: input.abortSignal,
-    timeoutMs: Math.min(
-      input.options.policy.maxDurationMs,
-      Math.max(1, input.options.resources.budget.view().workRemainingMs
-        - (input.options.engineeringRevision
-          ? input.options.policy.semanticReviewVerificationTimeoutMs
-          : 0)),
-    ),
+    // Repair ToolLoop共享一个阶段窗口；其中任一Provider step都不得把Candidate
+    // 之后的全部Run余额当作自己的超时预算。
+    timeoutMs: Math.max(1, repairDeadlineAtMs - repairStartedAtMs),
     toolTimeoutMs: input.options.policy.toolTimeoutMs,
     contextWindowTokens: input.options.policy.contextWindowTokens,
-    maxCandidateAttempts: input.options.policy.repairMaxRounds,
+    maxCandidateAttempts: Math.max(
+      1,
+      input.options.resources.resourcePolicy.maxUniqueCandidateValidationsPerWorker - 1,
+    ),
     maxRepairRounds: input.options.policy.repairMaxRounds,
-    maxKnowledgeQueries: input.options.policy.reviewedKnowledgeMaxNewQueriesPerRun,
+    maxKnowledgeQueries: input.options.policy.maxSteps,
     maxCandidateArtifactBytes: input.options.policy.candidateMaxArtifactBytes,
     maxValidatorCalls: input.options.resources.resourcePolicy.maxUniqueCandidateValidationsPerWorker,
     initialValidatorCalls: 1,
@@ -350,11 +383,44 @@ async function executeRepairLoop<TASK extends WorkerTaskView>(input: {
         repairState: progress.repairState,
         metadata: engineeringCheckpointMetadata(input.options),
       });
+      if (progress.boundary === "validator_completed" && repairRound > 0) {
+        completedRepairRound = repairRound;
+        await reportRepairProgressFailSoft(input.options.resources, input.options.dependencies, {
+          phase: latestValidationPassed ? "validation_passed" : "validation_failed",
+          round: repairRound,
+          maxRounds: maxRepairRounds,
+          diagnosticCount: validationDiagnosticCount(checkpointValidation),
+        });
+        const canContinue = !latestValidationPassed
+          && validationRetryable(checkpointValidation)
+          && progress.repairState.metrics.noProgress !== true
+          && repairRound < maxRepairRounds;
+        if (canContinue) {
+          activeRepairRound = repairRound + 1;
+          await reportRepairProgressFailSoft(input.options.resources, input.options.dependencies, {
+            phase: "started",
+            round: activeRepairRound,
+            maxRounds: maxRepairRounds,
+            diagnosticCount: validationDiagnosticCount(checkpointValidation),
+          });
+        }
+      }
+      if (progress.boundary === "terminal"
+        && !latestValidationPassed
+        && activeRepairRound > completedRepairRound) {
+        await reportRepairProgressFailSoft(input.options.resources, input.options.dependencies, {
+          phase: "stopped",
+          round: activeRepairRound,
+          maxRounds: maxRepairRounds,
+          diagnosticCount: validationDiagnosticCount(checkpointValidation),
+        });
+        completedRepairRound = activeRepairRound;
+      }
     },
-    searchReviewedKnowledge: async ({ query, toolCallId, abortSignal }) => await executeRegisteredTool(
+    searchReviewedKnowledge: async ({ query, offset, exampleIds, claimIds, evidenceIds, toolCallId, abortSignal }) => await executeRegisteredTool(
       input.registeredTools,
       "search_reviewed_knowledge",
-      { query, limit: 5 },
+      { query, limit: 5, offset, exampleIds, claimIds, evidenceIds },
       toolCallId,
       abortSignal ?? input.abortSignal,
     ),
@@ -379,6 +445,28 @@ async function executeRepairLoop<TASK extends WorkerTaskView>(input: {
     validationPassed,
     validationRetryable,
   });
+}
+
+async function reportRepairProgressFailSoft(
+  resources: RunResources,
+  dependencies: RunTeacherAgentOptions["dependencies"],
+  progress: Parameters<NonNullable<RunTeacherAgentOptions["dependencies"]["reportRepairProgress"]>>[0],
+): Promise<void> {
+  if (!dependencies.reportRepairProgress) return;
+  try {
+    await dependencies.reportRepairProgress(progress);
+  } catch {
+    resources.recordOperationalWarning("public_repair_progress_failed");
+  }
+}
+
+function validationDiagnosticCount(validation: ValidationOutput): number {
+  const declared = Number(validation.diagnosticSummary?.total);
+  if (Number.isInteger(declared) && declared >= 0) return Math.min(999, declared);
+  return Math.min(
+    999,
+    validation.official.diagnostics.length + (validation.courseRules?.diagnostics.length ?? 0),
+  );
 }
 
 async function validateCandidate(input: {
@@ -414,6 +502,11 @@ async function validatePersistedCandidate(input: {
   input.resources.assertAdmitted("candidate_validate");
   markValidationStarted(input.resources, input.task.taskId);
   const candidate = Object.freeze(validateCandidateInputSchema.parse(input.candidate));
+  const contents = candidate.mode === "replace_entry" || candidate.mode === "standalone_model" ? [candidate.content]
+    : candidate.mode === "workspace_files" ? candidate.files.map(file => file.content) : candidate.edits.map(edit => edit.replacement);
+  if (contents.reduce((bytes, content) => bytes + Buffer.byteLength(content, "utf8"), 0) > input.resources.candidateMaxArtifactBytes) {
+    throw new Error("candidate_artifact_budget_exceeded");
+  }
   const candidateWorkspaceHash = computeCandidateWorkspaceHash(input.task, candidate);
   const dependencies = input.dependencies;
   if (dependencies) {
@@ -440,7 +533,7 @@ async function validatePersistedCandidate(input: {
   const passed = validationPassed(validation);
   if (dependencies) {
     await persistExecutionCheckpointFailSoft(input.resources, dependencies, {
-      phase: passed ? "validated_passed" : "validation_failed",
+      phase: passed ? "main_review_pending" : "validation_failed",
       candidate,
       validation,
       repairRound: input.repairRound ?? 0,
@@ -468,7 +561,11 @@ function createCandidateArtifact(
       content,
     };
   }
-  return { mode: "standalone_model", fileName: "generated_architecture.sysml", content };
+  return {
+    mode: "standalone_model",
+    fileName: task.target.fileName ?? "generated_architecture.sysml",
+    content,
+  };
 }
 
 function markValidationStarted(resources: RunResources, taskId: string): void {
@@ -576,14 +673,38 @@ function validatorReason(validation: ValidationOutput): string {
   return "validator_failed";
 }
 
-function candidateInstructions(task: CandidateTaskView): string {
+function candidateInstructions(): string {
   return [
     CANDIDATE_BASE_INSTRUCTIONS,
+    SYSML_V2_LANGUAGE_BOUNDARY_GUIDANCE,
+    CANDIDATE_ADAPTIVE_GENERATION_GUIDANCE,
+    SYSML_INCREMENTAL_EDIT_GUIDANCE,
+    TASK_DIRECTIVE_EXECUTION_GUIDANCE,
     MINIMAL_SUFFICIENT_REASONING_GUIDANCE,
-    CANDIDATE_REVIEWED_KNOWLEDGE_GUIDANCE,
-    ...(task.mode === "create" ? [CREATE_MINIMAL_EXAMPLE_GUIDANCE] : []),
-    STRUCTURAL_REFINEMENT_VIEW_GUIDANCE,
-  ].join("\n\n");
+    EXAMPLE_QUERY_FEW_SHOTS,
+    candidateReviewedKnowledgeGuidance(),
+    PLANTUML_VIEW_MODELING_GUIDANCE,
+  ].filter((section) => String(section || "").trim().length > 0).join("\n\n");
+}
+
+async function prepareCandidateKnowledge(input: {
+  options: ProductionWorkerHandlerOptions; task: CandidateTaskView; abortSignal: AbortSignal;
+}): Promise<void> {
+  const { options, task, abortSignal } = input;
+  // 复用Main已取得的完整证据；否则通过同一授权Tool/Ledger准备一次定向检索。
+  const existing = projectWorkerEvidenceView(options.resources, options.resources.tasks.get(task.taskId)!);
+  if (existing.claims.length || existing.examples?.length || !options.request.capabilityGrant.includes("search_reviewed_knowledge")) {
+    return;
+  }
+  const query = candidateKnowledgeQuery(task.iterationDirective?.instruction || task.question);
+  if (query.length < 2) return;
+  try {
+    await executeRegisteredTool(createTaskBoundTools(options, task), "search_reviewed_knowledge", { query, limit: 5 },
+      task.taskId + ":knowledge-preparation", abortSignal);
+  } catch {
+    options.resources.recordOperationalWarning("targeted_knowledge_preparation_unavailable");
+  }
+  return;
 }
 
 function engineeringRevisionPrompt(
@@ -594,7 +715,7 @@ function engineeringRevisionPrompt(
     "每条goalQuote和本轮用户任务都是用户原文中的授权目标，不是语法关键词表。对每个Issue内部逐项核对goalQuote、issue和suggestion中的对象、功能、关系与场景；用户原文包含列举、并列、条件或强调场景时，即使Issue或Suggestion摘要不完整，也必须从授权原文恢复并闭合其中每个显式要求。每个显式命名的工程概念都必须有可追溯的模型元素或关系；强调场景必须用适合其语义的行为、控制、工况或其它真实模型元素表达，并关联受影响对象，不能只靠相关部件、静态拓扑或注释暗示。Suggestion是最小闭合范围，不得只补名字、注释、孤立对象、相关部件或部分子项。",
     "在满足上述语义的前提下，优先沿用已通过Validator的基线建模风格和已有构造，以最少新增元素及关系完成闭合。用户没有明确要求复杂行为细节时，不要为了表达场景而扩张成大规模行为模型；可以用最小的控制、模式或工况对象及其与受控对象的关系建立可追溯闭环。",
     "保留基线中与Issue无关的正确内容，使用与目标语义匹配的SysML v2元素和关系完成闭合，并输出一份完整Candidate供Official Validator重新验证。提交前做一次简洁的目标覆盖自检，但不要输出分析过程。",
-    `已验证基线：\n${revision.baselineCandidateContent.slice(0, 100_000)}`,
+    `已验证基线：\n${revision.baselineCandidateContent}`,
     `本轮有效Issue：\n${JSON.stringify(revision.issues.slice(0, 8))}`,
   ].join("\n\n");
 }
@@ -709,12 +830,8 @@ function mergeCheckpointMetadata(
 function boundedValidation(validation: ValidationOutput): unknown {
   return {
     official: validation.official,
-    courseRules: validation.courseRules,
     completeness: validation.completeness,
-    diagnostics: [
-      ...validation.official.diagnostics,
-      ...(validation.courseRules?.diagnostics ?? []),
-    ].slice(0, 20),
+    diagnostics: validation.official.diagnostics.slice(0, 20),
   };
 }
 

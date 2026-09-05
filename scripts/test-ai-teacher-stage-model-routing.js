@@ -79,10 +79,12 @@ assert.throws(
 
 const executionSource = fs.readFileSync(path.join(__dirname, '..', 'apps', 'teacher', 'agent', 'intent-v2-execution.mts'), 'utf8');
 const orchestratorSource = fs.readFileSync(path.join(__dirname, '..', 'apps', 'teacher', 'agent', 'intent-orchestrator-v2.mts'), 'utf8');
+const localComposeSource = fs.readFileSync(path.join(__dirname, '..', 'docker-compose.full.yml'), 'utf8');
+assert(localComposeSource.includes('AI_TEACHER_PROVIDER: ${AI_TEACHER_PROVIDER:-litellm-compatible}'),
+  '公开 Full 部署通过 LiteLLM 接入，具体协议必须来自已验证的模型路由。');
 assert(executionSource.includes('options.candidateModel ?? options.thinkingModel ?? options.model'));
 assert(executionSource.includes('options.repairModel ?? options.thinkingModel ?? options.model'));
-assert(executionSource.includes('options.semanticReviewModel ?? options.thinkingModel ?? options.model'));
-assert(executionSource.includes('options.mainModel ?? options.model'));
+// Main结果检查的模型选择由下方orchestrator断言覆盖，生产执行器不再创建工程Main复评。
 assert(executionSource.includes('options.finalizerModel ?? options.nonThinkingModel ?? options.model'));
 assert(executionSource.includes('const finalizerGeneration = v2GenerationSettings(options, true, "finalizer")'));
 assert(executionSource.includes('providerOptions: finalizerGeneration.providerOptions'));
@@ -90,3 +92,5 @@ assert(orchestratorSource.includes('options.fastGateModel ?? options.nonThinking
 assert(orchestratorSource.includes('const mainModel = options.mainModel'));
 
 console.log('AI Teacher stage model routing tests passed.');
+
+assert.equal(models.mainReview, undefined);

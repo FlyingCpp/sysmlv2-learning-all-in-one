@@ -443,3 +443,24 @@ docker compose -f docker-compose.yml -f docker-compose.full.yml --profile full d
 ```
 
 Do not run `down -v` unless deletion of all local persistent data is intentional and verified backups exist.
+# AI Teacher 管理能力升级说明
+
+Full 部署中 API、Teacher、Validator 必须共享同一非空 `AI_TEACHER_INTERNAL_TOKEN`；
+API 与 Teacher 另外共享不同的 `AI_TEACHER_TOOL_TOKEN`。不要将凭据写入版本控制。
+管理页发布资源策略时先应用并回读各 Owner，再保存 Active；失败会尝试恢复上一版本。
+升级后核对管理页 `inSync` 与各 Owner 状态，不能只看健康检查。
+
+Conversation Store 初始化会增加任务生命周期与事件表，保留已有会话和 Run。
+升级前备份持久化数据库；本次代码回退不会自动删除新增表或回滚已有策略数据。
+账户额度改为对话开始时准入、实际消耗结算，单轮可能超过剩余余额，下一轮在余额为零时拒绝。
+`AI_TEACHER_REQUIRE_ACTIVE_BUNDLE=false` 的公开 Full 契约继续保留。
+
+升级时旧策略的 `model.mainReasoningPolicy` 与 `model.finalizerReasoningPolicy`
+会迁移到对应的 `stage.*.reasoningPolicy`；已有新字段优先，旧版本保留用于追溯。
+
+同机运行多个环境时，核对 API 的 `LITELLM_BASE_URL`、`LITELLM_ADMIN_BASE_URL`
+和 Teacher 的 `AI_TEACHER_BASE_URL` 是否指向同一环境的 LiteLLM。
+Full Compose 内应使用服务名 `litellm:4000`，Teacher 地址包含 `/v1`。
+复制模型配置数据库只保留凭据引用，不代表目标 LiteLLM 已具备对应托管凭据。
+在目标管理页核对凭据配置，完成各启用部署的真实能力验证，再发布并回读模型别名。
+不要把宿主机上另一环境的管理地址当作目标环境的运行地址。

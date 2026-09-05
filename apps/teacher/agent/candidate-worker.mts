@@ -1,3 +1,7 @@
+import { extractCandidateContent, type CandidateContentFailure, type CandidateContentExtraction } from "./candidate-content.mjs";
+export { extractCandidateContent } from "./candidate-content.mjs";
+export type { CandidateContentFailure, CandidateContentExtraction } from "./candidate-content.mjs";
+import { isTimeoutError } from "./runtime-error.mjs";
 import { stepCountIs, type Instructions, type LanguageModel, type ToolSet } from "ai";
 import type { SharedV4ProviderOptions } from "@ai-sdk/provider";
 
@@ -21,12 +25,6 @@ import {
   createValidatedPassedResult,
   createWorkerFailureResult,
 } from "./worker-result.mjs";
-
-export type CandidateContentFailure = "empty" | "truncated" | "ambiguous";
-
-export type CandidateContentExtraction =
-  | { success: true; content: string }
-  | { success: false; reason: CandidateContentFailure };
 
 export interface CandidateWorkerOptions {
   readonly resources: RunResources;
@@ -106,8 +104,10 @@ export async function runCandidateWorker(
     const reason = error instanceof Error ? error.message : "candidate_generation_failed";
     return terminalResult(
       options.task,
-      reason.includes("Run budget exceeded") ? "exhausted" : "worker_error",
-      boundedReason(reason),
+      reason.includes("Run budget exceeded") || isTimeoutError(error)
+        ? "exhausted"
+        : "worker_error",
+      isTimeoutError(error) ? "candidate_generation_timeout" : boundedReason(reason),
       attempts,
     );
   }
@@ -119,6 +119,12 @@ export async function runCandidateWorker(
       `candidate_content_${extractionFailure ?? "empty"}`,
       attempts,
     );
+  }
+
+  const noOpResult = reuseValidatedBaselineForNoOp(options.task, content, attempts);
+  if (noOpResult) {
+    options.resources.recordOperationalWarning("candidate_noop_reused_validated_baseline");
+    return noOpResult;
   }
 
   let validation: CandidateValidationOutcome;
@@ -155,61 +161,16 @@ export async function runCandidateWorker(
         options.task,
         options.abortSignal.aborted
           ? "cancelled"
-          : error instanceof Error && isResourceExhaustionReason(error.message)
+          : (isTimeoutError(error) || error instanceof Error && isResourceExhaustionReason(error.message))
             ? "exhausted"
             : "worker_error",
-        options.abortSignal.aborted ? "caller_cancelled" : boundedReason(error),
+        options.abortSignal.aborted ? "caller_cancelled" : isTimeoutError(error) ? "repair_step_timeout" : boundedReason(error),
         attempts,
       );
     }
   }
 
   return resultFromValidation(options.task, validation, attempts);
-}
-
-export function extractCandidateContent(result: {
-  text: string;
-  finishReason?: string;
-}): CandidateContentExtraction {
-  const rawText = String(result.text || "");
-  const text = rawText.trim();
-  if (String(result.finishReason || "").toLowerCase() === "length") {
-    return { success: false, reason: "truncated" };
-  }
-  if (!text) return { success: false, reason: "empty" };
-
-  const supportedFences = [...text.matchAll(
-    /```(?:sysml|sysmlv2)[ \t]*\r?\n([\s\S]*?)\r?\n```/giu,
-  )];
-  const unlabeledFences = [...text.matchAll(
-    /```[ \t]*\r?\n([\s\S]*?)\r?\n```/gu,
-  )];
-  const supportedOpenings = [...text.matchAll(
-    /(?:^|\r?\n)[ \t]*```(?:sysml|sysmlv2)(?:[ \t]*\r?\n|\s*$)/giu,
-  )];
-  const fenceLines = [...text.matchAll(/(?:^|\r?\n)[ \t]*```/gu)];
-  if (supportedFences.length === 1 && supportedOpenings.length === 1) {
-    const content = String(supportedFences[0]?.[1] || "").trim();
-    return content
-      ? { success: true, content }
-      : { success: false, reason: "empty" };
-  }
-  if (unlabeledFences.length === 1 && supportedFences.length === 0 && fenceLines.length === 2) {
-    const content = String(unlabeledFences[0]?.[1] || "").trim();
-    return content
-      ? { success: true, content }
-      : { success: false, reason: "empty" };
-  }
-  if (fenceLines.length > 0) {
-    return {
-      success: false,
-      reason: (supportedOpenings.length === 1 && supportedFences.length === 0)
-        || (supportedOpenings.length === 0 && fenceLines.length === 1)
-        ? "truncated"
-        : "ambiguous",
-    };
-  }
-  return { success: true, content: rawText };
 }
 
 async function generateCandidate(
@@ -245,12 +206,26 @@ async function generateCandidate(
       runtimeContext: createRunExecutionView(options.resources, "candidate"),
     };
     const toolNames = Object.keys(options.tools ?? {});
+    if (toolNames.length > 0 && (!Number.isInteger(options.maxSteps) || Number(options.maxSteps) <= 0)) {
+      throw new RangeError("Candidate Tool loop requires maxSteps from the immutable Run policy snapshot.");
+    }
     const generated = toolNames.length > 0 && options.tools
       ? await generateObservedToolLoopText({
         ...commonOptions,
         tools: options.tools,
         toolsContext: createRunToolsContext(options.resources, "candidate", toolNames),
-        stopWhen: stepCountIs(Math.max(1, options.maxSteps ?? 4)),
+        stopWhen: stepCountIs(Number(options.maxSteps)),
+        prepareStep: () => {
+          const refreshed = candidateModelInput(options.task, options.resources, options.prompt);
+          return {
+          messages: refreshed.messages,
+          instructions: candidateInstructions(options.instructions, refreshed.projection, recovery ? priorFailure ?? "invalid" : undefined),
+          activeTools: toolNames.filter((toolName) => (
+            toolName !== "search_reviewed_knowledge"
+            || options.resources.isNewReviewedKnowledgeQueryAllowed()
+          )) as Array<keyof typeof options.tools>,
+          };
+        },
         onToolExecutionStart: (event) => options.resources.recordToolLifecycle({
           toolCallId: event.toolCall.toolCallId,
           toolName: event.toolCall.toolName,
@@ -285,21 +260,36 @@ function candidateModelInput(
   task: CandidateTaskView,
   resources: RunResources,
   overridePrompt?: string,
-): Readonly<{
-  messages: ReturnType<typeof projectConversationModelMessages>;
-  projection: unknown;
-}> {
+): Readonly<{ messages: ReturnType<typeof projectConversationModelMessages>; projection: unknown }> {
   const currentTask = resources.tasks.get(task.taskId);
   const knowledgeEvidence = currentTask
     ? projectWorkerEvidenceView(resources, currentTask)
     : task.knowledge;
-  const projection = overridePrompt ? { specializedTask: overridePrompt } : {
+  const reviewedKnowledgeBudget = resources.knowledge.reviewedKnowledgeQueryBudget();
+  const projection = overridePrompt ? { specializedTask: overridePrompt, knowledgeEvidence, reviewedKnowledgeSearchState: { budget: reviewedKnowledgeBudget, results: reviewedKnowledgeSearchResults(resources) } } : {
     candidateMode: task.mode,
+    workSubject: task.subject,
     target: task.target.kind,
     preservationPolicy: task.preservationPolicyRef,
+    ...(task.iterationDirective ? { iterationDirective: task.iterationDirective } : {}),
+    ...(task.courseContext ? { inspectedCourseContext: task.courseContext } : {}),
+    candidateGenerationControl: {
+      version: "candidate-generation-control-v1",
+      deliveryMode: task.mode,
+      deliveryIntent: candidateModeIntent(task.mode),
+      evidenceState: {
+        sharedReviewedEvidencePresent: knowledgeEvidence.claims.length > 0
+          || knowledgeEvidence.evidenceBlocks.length > 0
+          || (knowledgeEvidence.examples?.length ?? 0) > 0,
+        reviewedKnowledgeSearchAvailable: reviewedKnowledgeBudget.remainingNewQueries > 0,
+        remainingNewQueries: reviewedKnowledgeBudget.remainingNewQueries,
+      },
+      allowedPaths: ["direct_generate", "reviewed_knowledge_then_generate"],
+      boundary: "只判断生成工作形态与证据路径；不执行工程质量评估或Engineering Review。",
+    },
     knowledgeEvidence,
     reviewedKnowledgeSearchState: {
-      budget: resources.knowledge.reviewedKnowledgeQueryBudget(),
+      budget: reviewedKnowledgeBudget,
       results: reviewedKnowledgeSearchResults(resources),
     },
     visibleFiles: task.model.files.map((file) => ({
@@ -309,12 +299,41 @@ function candidateModelInput(
     })),
   };
   return Object.freeze({
-    messages: projectConversationModelMessages(
-      task.conversationMessages,
-      task.taskSources,
-      task.question,
-    ),
+    messages: projectConversationModelMessages(task.conversationMessages, task.taskSources, task.question),
     projection,
+  });
+}
+
+
+
+function reuseValidatedBaselineForNoOp(
+  task: CandidateTaskView,
+  generatedContent: string,
+  attempts: number,
+): CandidateWorkerResult | undefined {
+  if (!task.validatedBaseline) return undefined;
+  const activeFile = task.model.files.find((file) => file.fileId === task.model.activeFileId)
+    ?? (task.model.files.length === 1 ? task.model.files[0] : undefined);
+  if (!activeFile || generatedContent.trim() !== activeFile.content.trim()) return undefined;
+  const candidate = task.target.kind === "active_file"
+    ? {
+      mode: "replace_entry" as const,
+      fileId: activeFile.fileId,
+      baseHash: activeFile.contentHash,
+      content: activeFile.content,
+    }
+    : {
+      mode: "standalone_model" as const,
+      fileName: activeFile.displayName,
+      content: activeFile.content,
+    };
+  return createValidatedPassedResult({
+    task,
+    candidate,
+    validation: task.validatedBaseline.validation,
+    attemptCount: attempts,
+    workPerformed: "none",
+    validatorSubject: "baseline",
   });
 }
 
@@ -329,8 +348,22 @@ function candidateInstructions(
   return systemInstructions(instructions, "服务端可信Candidate执行投影", projection);
 }
 
+function candidateModeIntent(mode: CandidateTaskView["mode"]): string {
+  switch (mode) {
+    case "create":
+      return "从授权输入建立新的独立模型，规模可以从最小样例到跨package模型。";
+    case "complete":
+      return "补齐授权基线中的TODO、缺失片段或尚未闭合的既有语义链。";
+    case "refine":
+      return "保留授权基线，在其上执行单点增补、联动修改、新模式引入或有界重构。";
+    case "milestone":
+      return "把多个已授权目标整合为一个完整里程碑候选，必要时处理跨层和跨文件集成。";
+  }
+}
+
 function reviewedKnowledgeSearchResults(resources: RunResources): readonly unknown[] {
   const entries = [
+    ...resources.serverInjectedKnowledgeEntries().map((entry) => ({ output: entry.output })),
     ...resources.priorKnowledgeEntries.map((entry) => ({ output: entry.output })),
     ...resources.ledger.snapshot(),
   ];
@@ -370,6 +403,9 @@ function reviewedKnowledgeSearchResults(resources: RunResources): readonly unkno
         ...missingClosureClaimIds.map((claimId) => `missing_claim:${claimId}`),
         ...patternDimensions,
       ])]),
+      hasMore: result.hasMore === true,
+      nextOffset: result.nextOffset,
+      exampleIds: Array.isArray(result.examples) ? result.examples.map((row: any) => row.exampleId) : [],
       noNewEvidence: result.no_new_evidence === true,
     })];
   }));

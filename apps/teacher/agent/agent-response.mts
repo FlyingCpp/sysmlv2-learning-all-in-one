@@ -33,10 +33,12 @@ export interface EvidenceCitationVisibility {
 
 export interface TrustedResponseOptions {
   grounding?: EditorGrounding;
-  courseRulesRequired?: boolean;
   evidenceCitationVisibility?: EvidenceCitationVisibility;
   suppressGroundingDisclosure?: boolean;
   stripInternalProcessNarration?: boolean;
+  /** Main已请求终末生成，但Final Answer Worker尚未执行；此时允许临时响应没有公开正文。 */
+  pendingFinalization?: boolean;
+  validatedCandidateDelivery?: import("./validated-candidate-delivery.mjs").ValidatedCandidateDelivery;
 }
 
 export function stripInternalSourceMarkers(value: string): string {
@@ -90,6 +92,7 @@ const INTERNAL_ORCHESTRATION_PATTERNS = Object.freeze([
   /(?:Tool(?:[-_\s]+)calls?|arguments?|args?|hash(?:es)?)[\s\S]{0,300}(?:Internal[-_\s]*Ledger)/iu,
   /\bruntimeAssignment(?:Id)?\b/u,
   /\b(?:inspect_current_model|search_reviewed_knowledge|search_skill_guidance|resolve_scope_hints)\b/iu,
+  /\b(?:delegate_candidate|delegate_repair|request_clarification|resume_checkpoint)\b/iu,
   /Fast[-_\s]*Gate[\s\S]{0,220}Reviewed[-_\s]*Knowledge/iu,
   /本(?:次)?对话路径/iu,
   /(?:其他|内部|当前)\s*Workers?\s*路径/iu,
@@ -97,6 +100,69 @@ const INTERNAL_ORCHESTRATION_PATTERNS = Object.freeze([
   /\b(?:argsHash|requestPlanHash|promptHash|toolTrace)\b/iu,
   /\bworkflowVersion\s*[:=]/iu,
 ]);
+
+export type InternalOrchestrationAction = "candidate" | "repair" | "clarification" | "resume";
+
+const INTERNAL_ACTION_NARRATION_PATTERNS: Readonly<Record<
+  InternalOrchestrationAction,
+  readonly RegExp[]
+>> = Object.freeze({
+  candidate: Object.freeze([
+    /\bdelegate_candidate\b/iu,
+    /Candidate[-_\s]*Worker/iu,
+    /(?:调用|委派|使用)[^\n]{0,100}(?:candidate|候选(?:生成)?(?:工具|\s*Worker)?)/iu,
+    /候选(?:生成)?(?:工具|\s*Worker)[^\n]{0,100}(?:调用|委派|使用|mode)/iu,
+  ]),
+  repair: Object.freeze([
+    /\bdelegate_repair\b/iu,
+    /Repair[-_\s]*Worker/iu,
+    /(?:调用|委派|使用)[^\n]{0,100}(?:repair|修复(?:工具|\s*Worker)?)/iu,
+    /修复(?:工具|\s*Worker)[^\n]{0,100}(?:调用|委派|使用|scope)/iu,
+  ]),
+  clarification: Object.freeze([
+    /\brequest_clarification\b/iu,
+    /(?:调用|使用)[^\n]{0,100}澄清(?:工具|\s*Tool)?/iu,
+  ]),
+  resume: Object.freeze([
+    /\bresume_checkpoint\b/iu,
+    /(?:调用|使用)[^\n]{0,100}(?:恢复|续跑)(?:检查点)?(?:工具|\s*Tool)?/iu,
+  ]),
+});
+
+const INTERNAL_PLANNING_NARRATION_PATTERNS = Object.freeze([
+  /(?:学生|用户)(?:说|回复|确认)[\s\S]{0,800}(?:让我(?:理解|考虑|重新考虑|委派)|(?:我(?:认为[^\n]{0,100})?)?(?:不需要|无需)(?:新的)?委派|我应该(?:直接)?(?:确认|回答|委派)|(?:我)?直接(?:确认|回答)(?:即可)?)/iu,
+  /让我(?:理解当前状态|考虑是否需要委派|重新考虑)[\s\S]{0,260}(?:我应该|我直接|不需要|无需)/iu,
+  /我(?:认为[^\n]{0,100})?(?:不需要|无需)(?:新的)?委派[\s\S]{0,260}(?:我应该|我直接)/iu,
+]);
+
+export interface InternalOrchestrationNarrationDetection {
+  readonly actions: readonly InternalOrchestrationAction[];
+  readonly hasGenericPlanningNarration: boolean;
+}
+
+/**
+ * 统一识别Main正文中的动作伪调用和内部规划叙述。
+ * 返回动作类型是为了让编排器核对“说的动作”与“真实Tool Call”，
+ * 而不是把任意只读Tool Call误当成动作已执行。
+ */
+export function detectInternalOrchestrationNarration(
+  value: string,
+): InternalOrchestrationNarrationDetection {
+  const text = String(value || "").replace(/\s+/gu, " ").trim();
+  if (!text) return { actions: [], hasGenericPlanningNarration: false };
+  const actions = (Object.entries(INTERNAL_ACTION_NARRATION_PATTERNS) as Array<[
+    InternalOrchestrationAction,
+    readonly RegExp[],
+  ]>)
+    .filter(([, patterns]) => patterns.some((pattern) => pattern.test(text)))
+    .map(([action]) => action);
+  return {
+    actions,
+    hasGenericPlanningNarration: INTERNAL_PLANNING_NARRATION_PATTERNS.some((pattern) => (
+      pattern.test(text)
+    )),
+  };
+}
 const CAPABILITY_BOUNDARY_NARRATION = /(?:无法|不能|不具备|没有|仅|只)[^\n]{0,200}(?:生成|修复|改写|写入|替换|验证|Validator|候选)/su;
 const SAFE_CAPABILITY_BOUNDARY_ANSWER = "我这次只能解释，不能替你生成、改写或验证模型；本次没有生成候选、替换文件或执行 Validator，因此不能声称 Validator 已通过。";
 const SAFE_INTERNAL_NARRATION_FALLBACK = "当前回答混入了不能向学生展示的内部处理信息，因此没有作为正式说明返回。";
@@ -169,6 +235,7 @@ function hasBoundedSignalGroup(
 export function sanitizeInternalOrchestrationNarration(value: string): string {
   const text = String(value || "");
   const scanText = text.replace(/\s+/gu, " ");
+  const narration = detectInternalOrchestrationNarration(text);
   const hasStaticPattern = INTERNAL_ORCHESTRATION_PATTERNS.some((pattern) => pattern.test(scanText));
   const scanParagraphs = text
     .split(/\r?\n[\t ]*\r?\n/u)
@@ -193,7 +260,11 @@ export function sanitizeInternalOrchestrationNarration(value: string): string {
       ));
     })
   ));
-  if (!hasStaticPattern && !hasContextualPattern && !hasAdjacentContextualPattern) return text;
+  if (narration.actions.length === 0
+    && !narration.hasGenericPlanningNarration
+    && !hasStaticPattern
+    && !hasContextualPattern
+    && !hasAdjacentContextualPattern) return text;
   return CAPABILITY_BOUNDARY_NARRATION.test(scanText)
     ? SAFE_CAPABILITY_BOUNDARY_ANSWER
     : SAFE_INTERNAL_NARRATION_FALLBACK;
@@ -211,25 +282,18 @@ function terminalValidation(entries: readonly ToolLedgerEntry[]): ValidationOutp
 
 function deriveValidatorStatus(
   validation: ValidationOutput | undefined,
-  courseRulesRequired = true,
 ): TrustedValidatorStatus {
   if (!validation) {
     return "not_validated";
   }
   const officialFailed =
     validation.official.syntax === "failed" || validation.official.semantic === "failed";
-  const courseFailed = courseRulesRequired && validation.courseRules?.status === "failed";
-  if (officialFailed || courseFailed) {
+  if (officialFailed) {
     return "validated_failed";
   }
   const officialPassed =
     validation.official.syntax === "passed" && validation.official.semantic === "passed";
-  const coursePassed = !courseRulesRequired
-    || validation.courseRuleApplicability === "not_applicable"
-    || (validation.courseRuleApplicability === "applicable"
-      && validation.courseRules?.status === "passed");
   return officialPassed &&
-    coursePassed &&
     validation.completeness === "complete" &&
     Boolean(validation.candidateWorkspaceHash)
     ? "validated_passed"
@@ -418,19 +482,24 @@ function discloseGroundingScope(
   return { answer: `${disclosure}\n\n${answer}`, disclosed: true };
 }
 
-const OFFICIAL_VALIDATION_SCOPE_NOTICE = "服务端验证状态：仅终末候选工作区已在官方 SysML v2 Validator 中通过语法/语义检查；这不证明原始草稿、自然语言概念结论、数值结果或工程系统已经验证。";
+const OFFICIAL_VALIDATION_SCOPE_NOTICE = "Official Validator 的 PASS 仅说明本轮终末候选通过语法与语义检查，不证明原始草稿、自然语言概念结论、数值结果或工程系统已经验证。";
+
+function overstatesOfficialValidationScope(answer: string): boolean {
+  return /(?:原模型|当前模型|原始草稿|自然语言概念结论|工程系统|校验器确认无误|校验结果是成功|model is valid)/iu.test(answer);
+}
 
 export function assembleTrustedResponse(
   facts: ModelRunFacts,
   ledger: readonly ToolLedgerEntry[],
   options: TrustedResponseOptions = {},
 ): TrustedTeacherResponse {
-  const validation = terminalValidation(ledger);
-  const validatorStatus = deriveValidatorStatus(
-    validation,
-    options.courseRulesRequired ?? true,
-  );
-  const modelText = facts.modelText.trim() || fallbackAnswer(facts.stopReason);
+  if (options.pendingFinalization && facts.stopReason !== "completed") {
+    throw new Error("Pending finalization requires completed Main orchestration");
+  }
+  const validation = options.validatedCandidateDelivery?.validation ?? terminalValidation(ledger);
+  const validatorStatus = deriveValidatorStatus(validation);
+  const modelText = facts.modelText.trim()
+    || (options.pendingFinalization ? "" : fallbackAnswer(facts.stopReason));
   const markerFreeAnswer = stripInternalSourceMarkers(modelText);
   const preambleFreeAnswer = options.stripInternalProcessNarration
     ? stripInternalProcessPreamble(markerFreeAnswer)
@@ -443,7 +512,11 @@ export function assembleTrustedResponse(
   const grounded = options.suppressGroundingDisclosure
     ? { answer: narrationFreeAnswer, disclosed: false }
     : discloseGroundingScope(narrationFreeAnswer, options.grounding, facts.stopReason);
-  const visibleAnswer = validatorStatus === "validated_passed" && facts.stopReason === "completed"
+  // 精确Validator状态继续由可信响应字段承载，学生正文不展示内部状态标题；
+  // 但必须保留证明范围，避免把候选语法/语义PASS扩大成概念或工程验证。
+  const visibleAnswer = validatorStatus === "validated_passed"
+    && facts.stopReason === "completed"
+    && overstatesOfficialValidationScope(grounded.answer)
     ? `${grounded.answer}\n\n${OFFICIAL_VALIDATION_SCOPE_NOTICE}`
     : grounded.answer;
   const collectedEvidence = collectEvidence(

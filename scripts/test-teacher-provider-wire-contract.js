@@ -1,10 +1,12 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const http = require('node:http');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { generateText, stepCountIs, tool } = require('ai');
 const { z } = require('zod');
+const apiBusinessDeadlineTransport = require('../apps/api/business-deadline-fetch');
 const { findModelProtocolProfile } = require('../apps/api/llm-adapter-catalog');
 
 function jsonResponse(payload) {
@@ -43,6 +45,59 @@ async function main() {
     __dirname,
     '../apps/teacher/dist/agent/intent-orchestrator-v2.mjs'
   )).href);
+
+  assert.deepEqual(agentProviderTesting.businessDeadlineTransportOptions, {
+    connectTimeout: 0,
+    headersTimeout: 0,
+    bodyTimeout: 0
+  }, 'Provider transport must leave all active timing to the AI SDK business AbortSignal');
+  assert.deepEqual(apiBusinessDeadlineTransport.businessDeadlineTransportOptions, {
+    connectTimeout: 0,
+    headersTimeout: 0,
+    bodyTimeout: 0
+  }, 'API-to-Teacher transport must leave all active timing to the Run/API AbortSignal');
+
+  const delayedServer = http.createServer((_req, res) => {
+    setTimeout(() => {
+      if (res.destroyed) return;
+      res.writeHead(200, { 'content-type': 'application/json', connection: 'close' });
+      res.end('{"ok":true}');
+    }, 80);
+  });
+  await new Promise((resolve, reject) => {
+    delayedServer.once('error', reject);
+    delayedServer.listen(0, '127.0.0.1', resolve);
+  });
+  try {
+    const address = delayedServer.address();
+    assert(address && typeof address === 'object');
+    await assert.rejects(
+      agentProviderTesting.businessDeadlineFetch(`http://127.0.0.1:${address.port}/delayed`, {
+        signal: AbortSignal.timeout(20)
+      }),
+      (error) => error?.name === 'TimeoutError' || error?.name === 'AbortError',
+      'The explicit business AbortSignal must terminate Provider transport'
+    );
+    const delayedResponse = await agentProviderTesting.businessDeadlineFetch(
+      `http://127.0.0.1:${address.port}/delayed`
+    );
+    assert.equal(delayedResponse.status, 200,
+      'Provider transport must not invent a shorter timer when no business AbortSignal fires');
+    await assert.rejects(
+      apiBusinessDeadlineTransport.businessDeadlineFetch(`http://127.0.0.1:${address.port}/delayed`, {
+        signal: AbortSignal.timeout(20)
+      }),
+      (error) => error?.name === 'TimeoutError' || error?.name === 'AbortError',
+      'The explicit API business AbortSignal must terminate API-to-Teacher transport'
+    );
+    const apiDelayedResponse = await apiBusinessDeadlineTransport.businessDeadlineFetch(
+      `http://127.0.0.1:${address.port}/delayed`
+    );
+    assert.equal(apiDelayedResponse.status, 200,
+      'API-to-Teacher transport must not invent a shorter timer when no business AbortSignal fires');
+  } finally {
+    await new Promise((resolve, reject) => delayedServer.close((error) => error ? reject(error) : resolve()));
+  }
 
   const thinkingBodies = [];
   let thinkingCall = 0;

@@ -4,10 +4,14 @@ import authEnUs from './resources/en-US/auth.json';
 import commonEnUs from './resources/en-US/common.json';
 import errorsEnUs from './resources/en-US/errors.json';
 import shellEnUs from './resources/en-US/shell.json';
+import workbenchEnUs from './resources/en-US/workbench.json';
+import knowledgeEnUs from './resources/en-US/knowledge.json';
 import authZhCn from './resources/zh-CN/auth.json';
 import commonZhCn from './resources/zh-CN/common.json';
 import errorsZhCn from './resources/zh-CN/errors.json';
 import shellZhCn from './resources/zh-CN/shell.json';
+import workbenchZhCn from './resources/zh-CN/workbench.json';
+import knowledgeZhCn from './resources/zh-CN/knowledge.json';
 import {
   FALLBACK_LOCALE,
   SUPPORTED_LOCALES,
@@ -22,13 +26,17 @@ export const platformResources = {
     common: commonZhCn,
     shell: shellZhCn,
     auth: authZhCn,
-    errors: errorsZhCn
+    errors: errorsZhCn,
+    workbench: workbenchZhCn,
+    knowledge: knowledgeZhCn
   },
   'en-US': {
     common: commonEnUs,
     shell: shellEnUs,
     auth: authEnUs,
-    errors: errorsEnUs
+    errors: errorsEnUs,
+    workbench: workbenchEnUs,
+    knowledge: knowledgeEnUs
   }
 } as const;
 
@@ -60,7 +68,7 @@ function optionsForLocale(locale: SupportedLocale): InitOptions {
     supportedLngs: [...SUPPORTED_LOCALES],
     fallbackLng: FALLBACK_LOCALE,
     defaultNS: 'common',
-    ns: ['common', 'shell', 'auth', 'errors'],
+    ns: ['common', 'shell', 'auth', 'errors', 'workbench', 'knowledge'],
     resources: platformResources,
     returnNull: false,
     interpolation: {

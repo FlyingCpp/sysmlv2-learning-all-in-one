@@ -20,11 +20,6 @@ export {
   generateObservedText,
   generateObservedToolLoopText,
 } from "./observed-generation.mjs";
-export {
-  projectConversationModelMessages,
-  projectFinalAnswerModelMessages,
-  systemInstructions,
-} from "./model-message-projection.mjs";
 export type {
   OpenAICompatibleAgentProviderConfig,
   OpenAICompatibleAgentRuntimeOptions,
@@ -52,6 +47,7 @@ export {
   createRunResourcePolicy,
   createRunTiming,
   candidateAttemptDeadlineAt,
+  repairPhaseDeadlineAt,
   evaluateRunPhaseAdmission,
   assertRunToolContext,
   createRunExecutionView,
@@ -87,6 +83,18 @@ export {
   extractCandidateContent,
   runCandidateWorker,
 } from "./candidate-worker.mjs";
+export { buildExampleTopicCatalog } from "./example-topic-catalog.mjs";
+export {
+  EXAMPLE_QUERY_FEW_SHOTS,
+  candidateReviewedKnowledgeGuidance,
+} from "./sysml-example-query-guidance.mjs";
+export {
+  F4_TRIGGER_GROUPS,
+  buildServerInjectedKnowledgeEntry,
+  extractInjectableExamples,
+  scanExampleInjectionTriggers,
+  selectExampleInjectionGroup,
+} from "./example-injection.mjs";
 export {
   runRepairWorker,
 } from "./repair-worker.mjs";
@@ -124,6 +132,7 @@ export type {
 export {
   TaskStateConflictError,
   TaskWorkingStateStore,
+  createCurrentValidatedCandidateBinding,
   transitionTask,
 } from "./task-working-state.mjs";
 export type {
@@ -132,7 +141,21 @@ export type {
   TaskTransitionEvent,
   TaskWorkingState,
   TaskWorkerType,
+  ValidatedCandidateModelBinding,
+  TaskIterationDirectiveBinding,
 } from "./task-working-state.mjs";
+export {
+  bindValidatedCandidateTaskContract,
+  markTaskContractDeliveryPending,
+  prepareCandidateTaskContract,
+  prepareClarificationTaskContract,
+  sealCandidateTaskContract,
+  sealDirectTaskContract,
+} from "./task-contract-runtime.mjs";
+export type {
+  FinalizerTaskContractView,
+  PreparedTaskContractDirective,
+} from "./task-contract-runtime.mjs";
 export { AnswerObligationStore } from "./answer-obligation.mjs";
 export type { AnswerObligation } from "./answer-obligation.mjs";
 export {
@@ -144,9 +167,25 @@ export type {
   WorkerTerminalBinding,
 } from "./result-binding.mjs";
 export {
-  deterministicFinalizerFallback,
-  finalizeDelegatedAnswer,
-} from "./main-finalizer.mjs";
+  dispatchFinalAnswerWorker,
+  createProductionFinalAnswerWorker,
+  deterministicFinalAnswerFallback,
+  projectFinalAnswerTaskView,
+  FINAL_ANSWER_WORKER_PROMPT_VERSION,
+} from "./final-answer-worker.mjs";
+export type {
+  FinalAnswerEngineeringAdvisory,
+  FinalAnswerDispatcherInput,
+  FinalAnswerOutcome,
+  FinalAnswerSource,
+  FinalAnswerTaskView,
+  FinalAnswerViewCapability,
+  FinalAnswerWorkerExecutionContext,
+  FinalAnswerWorkerHandler,
+  FinalAnswerModelCall,
+  FinalAnswerWorkerOptions,
+  FinalAnswerWorkerResult,
+} from "./final-answer-worker.mjs";
 export {
   bindAssessmentAdvice,
   bindUniqueGoalQuote,
@@ -169,6 +208,21 @@ export {
   v2RepairGenerationSettings,
 } from "./intent-orchestrator-v2.mjs";
 export {
+  createValidatedCandidateDelivery,
+  restoreValidatedCandidateDelivery,
+  candidateBody,
+  renderDeliverySysmlBlock,
+  getDeliveryTelemetry,
+  resetDeliveryTelemetry,
+} from "./validated-candidate-delivery.mjs";
+export type {
+  ValidatedCandidateDelivery,
+  DeliveryFactoryResult,
+  DeliveryRejectReason,
+  DeliveryTarget,
+} from "./validated-candidate-delivery.mjs";
+export {
+  computeCandidateWorkspaceHash,
   createValidatedPassedResult,
   createWorkerFailureResult,
   validationPassed,
@@ -213,3 +267,8 @@ export type {
   FastGateTextSignal,
   MainAgentDelegation,
 } from "./types.mjs";
+export {
+  projectConversationModelMessages,
+  projectFinalAnswerModelMessages,
+  systemInstructions,
+} from "./model-message-projection.mjs";

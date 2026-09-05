@@ -168,7 +168,7 @@ async function main() {
     questionHash: resources.input.questionHash,
     outcome: {
       type: 'delegate_candidate',
-      mode: 'create',
+      subject: 'standalone_model',
       acceptedToolCallId: 'delegate-message-test'
     },
     context: request.context
