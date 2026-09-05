@@ -171,6 +171,8 @@ const DEPRECATED_KEYS = Object.freeze({
   'provider.queueTimeoutMs': { replacement: 'removed:run-abort-signal' },
   'model.fastRoute': { replacement: 'scope.modelRoute' },
   'model.mainRoute': { replacement: 'stage.main.modelRoute' },
+  'model.mainReasoningPolicy': { replacement: 'stage.main.reasoningPolicy' },
+  'model.finalizerReasoningPolicy': { replacement: 'stage.finalizer.reasoningPolicy' },
   'model.candidateRoute': { replacement: 'stage.candidate.modelRoute' },
   'model.repairRoute': { replacement: 'stage.repair.modelRoute' },
   'model.semanticReviewRoute': { replacement: 'semanticReview.modelRoute' },
@@ -309,6 +311,8 @@ function migratePolicyValues(sourceValues = {}, options = {}) {
   map('stage.candidate.modelRoute', 'model.candidateRoute');
   map('stage.repair.modelRoute', 'model.repairRoute');
   map('stage.finalizer.modelRoute', 'model.finalizerRoute');
+  mapIfTargetAbsent('stage.main.reasoningPolicy', 'model.mainReasoningPolicy');
+  mapIfTargetAbsent('stage.finalizer.reasoningPolicy', 'model.finalizerReasoningPolicy');
   map('tool.maxRetriesPerOperation', 'tool.maxFailuresPerRun', (value) => Math.min(2, Math.max(0, (Number(value) || 1) - 1)));
   map('tool.defaultTimeoutMs', 'tool.readOnlyTimeoutMs');
   map('domainEvidence.maxQueriesPerRun', 'tool.domainEvidenceMaxCallsPerRun');

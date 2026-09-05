@@ -16,9 +16,9 @@ const DEFAULT_PROVIDER_PROBE_TIMEOUT_MS = agentResourcePolicyRuntimeProjection(
 const CAPABILITY_PROBE_LIMITS = Object.freeze({
   maxProviderCalls: 8,
   baseGenerationMaxOutputTokens: 160,
-  structuredOutputMaxOutputTokens: 160,
+  structuredOutputMaxOutputTokens: 512,
   maxOutputTokensPerCall: 96,
-  maxTotalOutputTokens: 832,
+  maxTotalOutputTokens: 1184,
   maxDurationMs: 90000,
   maxInputBytes: 8192,
   maxResponseBytes: 262144

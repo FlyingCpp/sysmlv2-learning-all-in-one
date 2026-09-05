@@ -8,6 +8,19 @@ const { defaultLiteLlmConfig } = require('../apps/api/litellm-config');
 const MIGRATION_NOW = '2026-08-12T00:00:00.000Z';
 
 async function main() {
+  const legacyReasoning = { ...BOOTSTRAP_VALUES,
+    'model.mainReasoningPolicy': 'provider-managed',
+    'model.finalizerReasoningPolicy': 'provider-managed' };
+  delete legacyReasoning['stage.main.reasoningPolicy'];
+  delete legacyReasoning['stage.finalizer.reasoningPolicy'];
+  const migratedReasoning = migratePolicyValues(legacyReasoning);
+  assert.deepEqual(migratedReasoning.unknownKeys, []);
+  assert.equal(migratedReasoning.values['stage.main.reasoningPolicy'], 'provider-managed');
+  assert.equal(migratedReasoning.values['stage.finalizer.reasoningPolicy'], 'provider-managed');
+  const currentReasoningWins = migratePolicyValues({ ...legacyReasoning,
+    'stage.main.reasoningPolicy': 'disabled', 'stage.finalizer.reasoningPolicy': 'disabled' });
+  assert.equal(currentReasoningWins.values['stage.main.reasoningPolicy'], 'disabled');
+  assert.equal(currentReasoningWins.values['stage.finalizer.reasoningPolicy'], 'disabled');
   const emptyMemory = createAccountStore({ agentResourcePolicyVersions: [] });
   const [seed] = await emptyMemory.listAgentResourcePolicyVersions();
   assert.equal(seed.versionId, 'arp_bootstrap_v24');

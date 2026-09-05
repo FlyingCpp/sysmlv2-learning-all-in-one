@@ -282,7 +282,8 @@ export function AiTeacherModelAccessWorkbench({ onOpenResourcePolicy }: { onOpen
   const dirty = Boolean(draft && baseline && JSON.stringify(draft) !== JSON.stringify(baseline));
   const activeConfig = useMemo(() => activeQuery.data?.version ? controlPlaneFromVersion(activeQuery.data.version, healthQuery.data) : null, [activeQuery.data?.version?.versionId, activeQuery.data?.version?.checksum]);
   const releaseChangeCount = draft && (dirty || desiredVersion?.status === 'draft') ? draftChangeCount(activeConfig, draft) : 0;
-  const hasPublishCandidate = releaseChangeCount > 0 && (dirty || desiredVersion?.status === 'draft');
+  const hasPublishCandidate = (releaseChangeCount > 0 && (dirty || desiredVersion?.status === 'draft'))
+    || (!dirty && desiredVersion?.status === 'active' && healthQuery.data?.status === 'drift');
   const validation = useMemo(() => validateDraft(draft, adapterProfiles), [draft, adapterProfiles]);
   const selectedConnection = selection?.domain === 'connections'
     ? draft?.providerConnections.find((item) => item.connectionId === selection.id)
@@ -397,12 +398,13 @@ export function AiTeacherModelAccessWorkbench({ onOpenResourcePolicy }: { onOpen
   const capabilityProbeMutation = useMutation({
     mutationFn: async (deployment: ModelDeployment) => {
       if (!desiredVersion?.versionId || dirty) throw new Error('请先保存当前草稿，再执行能力验证。');
+      if (!capabilityEvidence?.budget) throw new Error('能力验证预算尚未加载，请稍后重试。');
       return api.request<{ evidence: CapabilityEvidenceResponse }>('/api/admin/ai-teacher/llm-control-plane/capability-probes', {
         method: 'POST',
         body: {
           versionId: desiredVersion.versionId,
           deploymentId: deployment.deploymentId,
-          confirmation: { confirmed: true, maxProviderCalls: 8, maxTotalOutputTokens: 832, maxDurationMs: 90_000 }
+          confirmation: { confirmed: true, ...capabilityEvidence.budget }
         }
       });
     },
@@ -446,7 +448,9 @@ export function AiTeacherModelAccessWorkbench({ onOpenResourcePolicy }: { onOpen
   };
   const confirmCapabilityProbe = () => {
     if (!selectedDeployment || dirty || capabilityProbeMutation.isPending) return;
-    const confirmed = window.confirm('将调用真实模型执行能力验证。上限：8 次 Provider 请求、832 个输出 Token、90 秒；会产生 Provider 费用。固定测试不包含课程或学生数据。确认继续？');
+    const budget = capabilityEvidence?.budget;
+    if (!budget) return;
+    const confirmed = window.confirm(`将调用真实模型执行能力验证。上限：${budget.maxProviderCalls} 次 Provider 请求、${budget.maxTotalOutputTokens} 个输出 Token、${budget.maxDurationMs / 1000} 秒；会产生 Provider 费用。固定测试不包含课程或学生数据。确认继续？`);
     if (confirmed) capabilityProbeMutation.mutate(selectedDeployment);
   };
   const confirmPublish = () => {
@@ -573,7 +577,7 @@ export function AiTeacherModelAccessWorkbench({ onOpenResourcePolicy }: { onOpen
         />
       </div>
 
-      <LifecycleBar health={healthQuery.data} dirty={dirty} capabilityReady={Boolean(capabilityEvidence?.ready)} publishing={publishMutation.isPending} published={Boolean(publishResult)} />
+      <LifecycleBar health={healthQuery.data} dirty={dirty} capabilityReady={Boolean(capabilityEvidence?.ready)} publishing={publishMutation.isPending} published={Boolean(publishResult) || (!dirty && desiredVersion?.status === 'active' && healthQuery.data?.status === 'healthy' && healthQuery.data.activeVersion?.checksum === desiredVersion.checksum)} />
 
       {releaseOpen ? (
         <ReleaseWorkspace
@@ -876,7 +880,7 @@ function LifecycleBar({ health, dirty, capabilityReady, publishing, published }:
     { label: 'Draft', detail: dirty ? '存在变更' : '已保存', done: true },
     { label: 'Validate', detail: '确定性校验', done: true },
     { label: 'Probe', detail: capabilityReady ? '能力已验证' : '能力待验证', done: capabilityReady },
-    { label: 'Stage', detail: publishing ? '正在暂存' : '待发布', done: publishing || published },
+    { label: 'Stage', detail: publishing ? '正在暂存' : published ? '已暂存' : '待发布', done: publishing || published },
     { label: 'Applied', detail: published ? '已应用' : '待发布', done: published },
     { label: 'Observed', detail: published && health?.status === 'healthy' ? '已观测' : '待回读', done: published && health?.status === 'healthy' }
   ];
