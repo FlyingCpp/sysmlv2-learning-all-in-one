@@ -15,7 +15,7 @@ type PolicyDefinition = {
   key: string;
   group: string;
   label: string;
-  valueType: 'integer' | 'boolean' | 'model-ref';
+  valueType: 'integer' | 'boolean' | 'model-ref' | 'enum';
   defaultValue: PolicyValue;
   minimum?: number;
   maximum?: number;
@@ -27,6 +27,7 @@ type PolicyDefinition = {
   description: string;
   state?: 'active' | 'reserved';
   choiceSource?: string;
+  allowedValues?: PolicyValue[];
 };
 
 type PolicyValue = number | boolean | string;
@@ -35,9 +36,11 @@ type ModelRegistry = {
   registryRevision: string;
   registryChecksum: string;
   source: string;
+  aliasIds: string[];
   aliases: string[];
   profiles: Array<{
     profileId: string;
+    aliasId: string;
     litellmAlias: string;
     displayName: string;
     status: string;
@@ -93,7 +96,14 @@ type PolicyActiveResponse = {
     values?: Record<string, PolicyValue>;
     observedAt?: string;
     errorCode?: string;
-    owners?: Record<string, string>;
+    owners?: Record<string, string | {
+      status: 'applied' | 'not_applied' | 'unavailable';
+      desired?: unknown;
+      applied?: unknown;
+      observed?: unknown;
+      applyMode?: string;
+      reasonCode?: string;
+    }>;
   } | null;
   inSync: boolean;
   diff: Array<{ key: string; before: PolicyValue; after: PolicyValue }>;
@@ -142,11 +152,11 @@ export function AgentResourcePolicyTab() {
     return Object.keys(draftValues).filter((key) => draftValues[key] !== baseline[key]);
   }, [activeValues, draftValues, workingVersion]);
   const selectedDefinitions = (catalogQuery.data?.definitions || []).filter((item) => item.group === selectedGroupId);
-  const registeredModelAliases = new Set(catalogQuery.data?.modelRegistry.aliases || []);
+  const registeredModelAliasIds = new Set(catalogQuery.data?.modelRegistry.aliasIds || []);
   const unregisteredModelReferences = (catalogQuery.data?.definitions || [])
     .filter((definition) => definition.valueType === 'model-ref')
-    .map((definition) => ({ key: definition.key, alias: String(draftValues[definition.key] ?? definition.defaultValue) }))
-    .filter((reference) => reference.alias && !registeredModelAliases.has(reference.alias));
+    .map((definition) => ({ key: definition.key, aliasId: String(draftValues[definition.key] ?? definition.defaultValue) }))
+    .filter((reference) => reference.aliasId && !registeredModelAliasIds.has(reference.aliasId));
   const versions = versionsQuery.data?.versions || [];
   const isUnsaved = unsavedKeys.length > 0;
 
@@ -265,7 +275,17 @@ export function AgentResourcePolicyTab() {
         <span><strong>{activeQuery.data?.observed?.versionId || '-'}</strong>运行时版本</span>
         <span><strong>{activeQuery.data?.inSync ? '已同步' : '未同步'}</strong>控制面状态</span>
         <span><strong>{dirtyKeys.length}</strong>待发布变更</span>
-        <span><strong>{catalogQuery.data?.modelRegistry.aliases.length || 0}</strong>已注册模型 Alias</span>
+        <span><strong>{catalogQuery.data?.modelRegistry.aliasIds.length || 0}</strong>已注册模型 Alias</span>
+      </div>
+
+      <div className="agentResourcePolicyOwnerStates" aria-label="Owner 应用状态">
+        {Object.entries(activeQuery.data?.observed?.owners || {}).map(([ownerName, ownerState]) => {
+          const status = typeof ownerState === 'string' ? ownerState : ownerState.status;
+          const reasonCode = typeof ownerState === 'string' ? '' : ownerState.reasonCode || '';
+          return <span key={ownerName} data-owner-status={status}>
+            <strong>{ownerName}</strong>{status}{reasonCode ? <small>{reasonCode}</small> : null}
+          </span>;
+        })}
       </div>
 
       {actionMessage ? <p className="agentResourcePolicyNotice" role="status">{actionMessage}</p> : null}
@@ -310,10 +330,10 @@ export function AgentResourcePolicyTab() {
           </div>
           <div className="agentResourcePolicyFields">
             {selectedDefinitions.map((definition) => {
-              const currentModelAlias = definition.valueType === 'model-ref'
+              const currentModelAliasId = definition.valueType === 'model-ref'
                 ? String(draftValues[definition.key] ?? definition.defaultValue)
                 : '';
-              const modelAliasRegistered = !currentModelAlias || registeredModelAliases.has(currentModelAlias);
+              const modelAliasRegistered = !currentModelAliasId || registeredModelAliasIds.has(currentModelAliasId);
               return <label key={definition.key} className="agentResourcePolicyField">
                 <span className="agentResourcePolicyFieldHead">
                   <span><strong>{definition.label}</strong><code>{definition.key}</code></span>
@@ -331,16 +351,26 @@ export function AgentResourcePolicyTab() {
                     <select
                       data-policy-key={definition.key}
                       data-alias-status={modelAliasRegistered ? 'registered' : 'unregistered'}
-                      value={currentModelAlias}
+                      value={currentModelAliasId}
                       onChange={(event) => updateDraftValue(definition.key, event.target.value)}
                     >
                       {!modelAliasRegistered ? (
-                        <option value={currentModelAlias}>{currentModelAlias}（未注册，需要迁移）</option>
+                        <option value={currentModelAliasId}>{currentModelAliasId}（未注册，需要迁移）</option>
                       ) : null}
                       {(catalogQuery.data?.modelRegistry.profiles || []).map((profile) => (
-                        <option key={profile.profileId} value={profile.litellmAlias}>
-                          {profile.displayName} · {profile.deploymentCount} deployment
+                        <option key={profile.aliasId} value={profile.aliasId}>
+                          {profile.displayName} · {profile.litellmAlias} · {profile.deploymentCount} deployment
                         </option>
+                      ))}
+                    </select>
+                  ) : definition.valueType === 'enum' ? (
+                    <select
+                      data-policy-key={definition.key}
+                      value={String(draftValues[definition.key] ?? definition.defaultValue)}
+                      onChange={(event) => updateDraftValue(definition.key, event.target.value)}
+                    >
+                      {(definition.allowedValues || []).map((value) => (
+                        <option key={String(value)} value={String(value)}>{String(value)}</option>
                       ))}
                     </select>
                   ) : (

@@ -1,3 +1,5 @@
+import { bootstrapAgentPolicy } from "./policy-defaults.mjs";
+import { MAX_CANDIDATE_ARTIFACT_BYTES } from "./candidate-content.mjs";
 import type { LanguageModel } from "ai";
 import { z } from "zod";
 
@@ -39,7 +41,8 @@ const modelFileSchema = z
   .object({
     fileId: opaqueIdSchema,
     displayName: z.string().min(1).max(160),
-    content: z.string().max(200_000),
+    workspacePath: z.string().min(1).optional(),
+    content: z.string().max(MAX_CANDIDATE_ARTIFACT_BYTES * 2),
     contentHash: contentHashSchema,
     editable: z.boolean(),
   })
@@ -54,6 +57,32 @@ const diagnosticSchema = z
     message: z.string().min(1).max(2_000),
     from: z.number().int().nonnegative().optional(),
     to: z.number().int().nonnegative().optional(),
+  })
+  .strict();
+
+const courseRuleReferenceSchema = z
+  .object({
+    id: z.string().min(1).max(160),
+    type: z.string().min(1).max(120),
+    severity: z.enum(["error", "warning", "info"]),
+    message: z.string().min(1).max(2_000),
+    selector: z.record(z.string(), z.unknown()).optional(),
+  })
+  .strict();
+
+const courseReferenceFileSchema = z
+  .object({
+    displayName: z.string().min(1).max(240),
+    content: z.string().max(MAX_CANDIDATE_ARTIFACT_BYTES * 2),
+    contentHash: contentHashSchema,
+    editable: z.boolean(),
+  })
+  .strict();
+
+const courseReferenceModelSchema = z
+  .object({
+    entryFile: z.string().min(1).max(240),
+    files: z.array(courseReferenceFileSchema).max(20),
   })
   .strict();
 
@@ -96,6 +125,8 @@ export const teacherAgentContextSchema = z
         title: z.string().min(1).max(240),
         objectives: z.array(z.string().min(1).max(1_000)).max(20),
         taskHints: z.array(z.string().min(1).max(1_000)).max(20),
+        courseRules: z.array(courseRuleReferenceSchema).max(100).default([]),
+        referenceModel: courseReferenceModelSchema.optional(),
       })
       .strict(),
     model: z
@@ -109,6 +140,23 @@ export const teacherAgentContextSchema = z
         activeDiagnosticId: z.string().min(1).max(160).optional(),
       })
       .strict(),
+    conversationSubjects: z
+      .object({
+        lastValidatedCandidate: z
+          .object({
+            sourceRunId: opaqueIdSchema,
+            candidateWorkspaceHash: contentHashSchema,
+            fileId: opaqueIdSchema,
+            displayName: z.string().min(1).max(160),
+            content: z.string().min(1).max(MAX_CANDIDATE_ARTIFACT_BYTES),
+            contentHash: contentHashSchema,
+            currentWorkspaceMatches: z.boolean(),
+          })
+          .strict()
+          .optional(),
+      })
+      .strict()
+      .optional(),
   })
   .strict()
   .superRefine((context, issueContext) => {
@@ -170,7 +218,7 @@ export const editorGroundingSchema = z.discriminatedUnion("kind", [
       startColumn: z.number().int().positive(),
       endLine: z.number().int().positive(),
       endColumn: z.number().int().positive(),
-      text: z.string().max(200_000),
+      text: z.string().max(MAX_CANDIDATE_ARTIFACT_BYTES * 2),
     })
     .strict(),
   z
@@ -231,6 +279,7 @@ export const fastGatePassThroughV2Schema = z.object({
   mixedScopeRisk: z.boolean(),
   firstSignal: fastGateTextSignalSchema,
   reviewSignal: fastGateTextSignalSchema.optional(),
+  courseTaskIntentHint: z.enum(["course_task", "general_task", "unknown"]).default("unknown"),
 }).strict().superRefine((gate, context) => {
   if ((gate.outcome === "mixed_scope_risk") !== gate.mixedScopeRisk) {
     context.addIssue({
@@ -248,7 +297,16 @@ export const mainAgentDelegationSchema = z.discriminatedUnion("action", [
     version: z.literal("main-agent-delegation-v1"),
     action: z.literal("candidate"),
     mode: z.enum(["create", "complete", "refine", "milestone"]),
+    subject: z.enum([
+      "current_workspace",
+      "previous_validated_candidate",
+      "current_validated_candidate",
+      "last_validated_candidate",
+      "standalone_model",
+    ]),
     questionHash: contentHashSchema,
+    taskSummary: z.string().trim().min(1).max(4_000),
+    instruction: z.string().trim().min(1).max(4_000),
     status: z.literal("accepted"),
   }).strict(),
   z.object({
@@ -264,7 +322,17 @@ export type MainAgentDelegation = z.infer<typeof mainAgentDelegationSchema>;
 
 /** Main Agent的业务终态；委派终态由SDK Tool Result中的已接受调用ID绑定。 */
 export type MainAgentOutcome =
-  | { type: "direct_answer"; text: string }
+  | {
+    type: "finalize_requested";
+    finalizationRequestId: string;
+    requestSource: "tool_call" | "visible_text";
+    mainDraft: string;
+    finalizerEvidence: Array<{
+      toolName: string;
+      input?: unknown;
+      output: unknown;
+    }>;
+  }
   | { type: "scope_rejected"; text: string }
   | {
     type: "clarification_requested";
@@ -275,7 +343,15 @@ export type MainAgentOutcome =
   | {
     type: "delegate_candidate";
     mode: "create" | "complete" | "refine" | "milestone";
+    subject:
+      | "current_workspace"
+      | "previous_validated_candidate"
+      | "current_validated_candidate"
+      | "last_validated_candidate"
+      | "standalone_model";
     acceptedToolCallId: string;
+    taskSummary: string;
+    instruction: string;
   }
   | {
     type: "delegate_repair";
@@ -295,6 +371,7 @@ export const executionCheckpointPhaseSchema = z.enum([
   "validation_failed",
   "repair_in_progress",
   "validated_passed",
+  "main_review_pending",
   "engineering_assessment_started",
   "engineering_assessment_completed",
   "engineering_improvement_pending",
@@ -369,9 +446,26 @@ export const executionResumeSchema = z.object({
     mainReentryCount: z.number().int().nonnegative().max(1).optional(),
     revisionCount: z.number().int().nonnegative().max(1),
     verificationCount: z.number().int().nonnegative().max(1),
+    selectionCount: z.number().int().nonnegative().max(1).optional(),
     verification: z.enum(["not_run", "resolved", "unresolved", "unavailable"]).optional(),
     revisionDelivered: z.boolean().optional(),
     revisionAdopted: z.boolean().optional(),
+    scorecard: z.object({
+      userGoalCoverage: z.number().int().min(0).max(40),
+      engineeringClosure: z.number().int().min(0).max(25),
+      consistencyAndPreservation: z.number().int().min(0).max(20),
+      evidenceAndUncertainty: z.number().int().min(0).max(15),
+      total: z.number().int().min(0).max(100),
+      reviewerRecommendation: z.enum(["deliver", "deliver_with_advisory", "optimize"]),
+    }).strict().optional(),
+    revisionScorecard: z.object({
+      userGoalCoverage: z.number().int().min(0).max(40),
+      engineeringClosure: z.number().int().min(0).max(25),
+      consistencyAndPreservation: z.number().int().min(0).max(20),
+      evidenceAndUncertainty: z.number().int().min(0).max(15),
+      total: z.number().int().min(0).max(100),
+      reviewerRecommendation: z.enum(["deliver", "deliver_with_advisory", "optimize"]),
+    }).strict().optional(),
     openSuggestions: z.array(z.object({
       publicSuggestionId: z.string().trim().min(1).max(200),
       sourceIssueId: z.string().trim().min(1).max(200),
@@ -387,25 +481,64 @@ export const executionResumeSchema = z.object({
     baselineCandidate: z.unknown().optional(),
     baselineValidation: z.unknown().optional(),
   }).strict().optional(),
-  persistedAnswer: z.string().max(200_000).optional(),
+  persistedAnswer: z.string().max(MAX_CANDIDATE_ARTIFACT_BYTES * 2).optional(),
+}).strict();
+
+const taskContractContextSchema = z.object({
+  relation: z.enum(["same_lineage", "prior_dialogue"]),
+  contract: z.object({
+    contractId: z.string().trim().min(1).max(200),
+    revision: z.number().int().nonnegative(),
+    status: z.enum([
+      "provisional",
+      "active",
+      "waiting_user",
+      "executing",
+      "sealed_for_finalization",
+      "finalizing",
+      "delivery_pending",
+      "delivered",
+      "cancelled",
+      "superseded",
+    ]),
+    taskProfile: z.enum(["direct_answer", "model_authoring", "model_refinement", "validation_repair", "analysis"]),
+    predecessorContractId: z.string().trim().max(200),
+    taskRelation: z.enum(["new_task", "contextual_reference", "continue", "amend", "supersede"]),
+    objectiveSummary: z.string().trim().max(4_000),
+    goals: z.array(z.object({
+      goalId: z.string().trim().min(1).max(200),
+      statement: z.string().trim().min(1).max(4_000),
+      required: z.boolean(),
+      status: z.enum(["open", "in_progress", "covered", "blocked", "waived"]),
+    }).strict()).min(1).max(64),
+    assumptions: z.array(z.string().trim().min(1).max(1_000)).max(32),
+    exclusions: z.array(z.string().trim().min(1).max(1_000)).max(32),
+    openQuestions: z.array(z.string().trim().min(1).max(1_000)).max(32),
+    preservationConstraints: z.array(z.string().trim().min(1).max(1_000)).max(32),
+    deliveryStatus: z.enum(["not_started", "sealed", "pending", "delivered", "cancelled", "superseded"]),
+    selectedDeliveryKind: z.enum(["direct_answer", "validated_candidate"]).optional(),
+  }).strict(),
 }).strict();
 
 export const agentRunRequestSchema = z
   .object({
     runId: opaqueIdSchema,
-    question: z.string().trim().min(1).max(20_000),
-    currentStudentQuestion: z.string().trim().min(1).max(8_000).optional(),
+    // 完整Thread历史由Conversation Store保留并在prepareStep按实际模型窗口投影；
+    // HTTP请求包络仍由Model Deployment的contextWindowTokens确定性限制。
+    question: z.string().trim().min(1),
+    currentStudentQuestion: z.string().trim().min(1).max(20_000).optional(),
     conversationMessages: z.array(z.discriminatedUnion("role", [
       z.object({
         role: z.literal("user"),
-        content: z.string().trim().min(1).max(8_000),
+        content: z.string().trim().min(1),
       }).strict(),
       z.object({
         role: z.literal("assistant"),
-        content: z.string().trim().min(1).max(8_000),
+        content: z.string().trim().min(1),
       }).strict(),
-    ])).max(8).default([]),
-    taskSources: z.array(taskSourceSchema).max(8).default([]),
+    ])).default([]),
+    taskSources: z.array(taskSourceSchema).default([]),
+    taskContractContext: taskContractContextSchema.optional(),
     operation: z.enum(["repair"]).optional(),
     evaluationMode: z.enum(["local_benchmark"]).optional(),
     capabilityGrant: z
@@ -416,7 +549,7 @@ export const agentRunRequestSchema = z
       }),
     resumeContext: z.object({
       sourceRunId: opaqueIdSchema,
-      taskSources: z.array(taskSourceSchema).max(8).optional(),
+      taskSources: z.array(taskSourceSchema).optional(),
       continuationKind: z.enum(["execution_completion", "engineering_improvement"]).optional(),
       continuationBudget: z.object({
         kind: z.enum(["execution_completion", "engineering_improvement"]).optional(),
@@ -428,7 +561,7 @@ export const agentRunRequestSchema = z
         lineageDeadlineAt: z.string().datetime().optional(),
       }).strict().optional(),
       fastGate: fastGatePassThroughV2Schema,
-      sourceStudentQuestion: z.string().trim().min(1).max(8_000).optional(),
+      sourceStudentQuestion: z.string().trim().min(1).max(20_000).optional(),
       execution: executionResumeSchema.optional(),
       priorToolLedger: z.array(z.object({
         toolCallId: z.string().trim().min(1).max(256),
@@ -445,47 +578,56 @@ export type AgentRunRequest = z.infer<typeof agentRunRequestSchema>;
 
 export const agentPolicySchema = z
   .object({
-    maxSteps: z.number().int().min(1).max(8),
-    maxDurationMs: z.number().int().positive().max(900_000),
-    terminalReserveMs: z.number().int().min(5_000).max(60_000),
-    convergeLeadMs: z.number().int().positive().max(75_000),
-    toolTimeoutMs: z.number().int().positive().max(120_000),
-    maxOutputTokens: z.number().int().positive().max(16_000),
-    contextWindowTokens: z.number().int().min(16_000).max(200_000),
+    maxSteps: z.number().int().positive(),
+    maxDurationMs: z.number().int().positive(),
+    terminalReserveMs: z.number().int().positive(),
+    convergeLeadMs: z.number().int().positive(),
+    toolTimeoutMs: z.number().int().positive(),
+    contextWindowTokens: z.number().int().positive(),
     scopeGateEnabled: z.boolean(),
     scopeGateInitialTimeoutMs: z.number().int().positive().max(30_000),
     scopeGateReviewTimeoutMs: z.number().int().positive().max(30_000),
-    scopeGateMaxOutputTokens: z.number().int().min(100).max(1_000),
-    candidateRecoveryMaxAttempts: z.number().int().min(0).max(1),
-    candidateMaxAttemptMs: z.number().int().min(30_000).max(600_000),
+    scopeGateHardInputTokenBudget: z.number().int().positive(),
+    scopeGateMaxOutputTokens: z.number().int().positive(),
+    inspectLessonContextMaxCallsPerRun: z.number().int().positive(),
+    inspectCurrentModelMaxCallsPerRun: z.number().int().positive(),
+    skillGuidanceMaxCallsPerRun: z.number().int().positive(),
+    reviewedKnowledgeMaxCallsPerRun: z.number().int().positive(),
+    domainEvidenceMaxCallsPerRun: z.number().int().nonnegative(),
+    readOnlyToolMaxRetriesPerOperation: z.number().int().min(0).max(2),
+    readOnlyToolInputMaxBytes: z.number().int().positive(),
+    readOnlyToolTimeoutMs: z.number().int().positive(),
+    domainEvidenceToolTimeoutMs: z.number().int().positive(),
+    candidateRecoveryMaxAttempts: z.number().int().nonnegative(),
+    candidateMaxAttemptMs: z.number().int().positive(),
     candidateRepairEnabled: z.boolean(),
     repairPhaseReserveMs: z.number().int().min(30_000).max(300_000),
-    repairMaxRounds: z.number().int().min(0).max(12),
-    candidateMaxArtifactBytes: z.number().int().min(16_384).max(2_097_152),
+    repairMaxRounds: z.number().int().nonnegative(),
+    candidateMaxArtifactBytes: z.number().int().positive(),
     semanticReviewEnabled: z.boolean(),
     semanticReviewShadowOnly: z.boolean(),
-    semanticReviewAssessmentMaxCalls: z.literal(1),
+    semanticReviewAssessmentMaxCalls: z.union([z.literal(0), z.literal(1)]),
     semanticReviewAssessmentTimeoutMs: z.number().int().min(5_000).max(120_000),
     semanticReviewMainDecisionTimeoutMs: z.number().int().min(3_000).max(60_000),
     semanticReviewVerificationMaxCalls: z.literal(1),
     semanticReviewVerificationTimeoutMs: z.number().int().min(5_000).max(120_000),
-    semanticReviewMaxOutputTokens: z.number().int().min(512).max(16_000),
-    semanticReviewMaxIssues: z.number().int().min(1).max(8),
+    // 这是Reviewer文本协议的固定安全上限，不是资源策略或评分阈值。
+    // Policy v18删除了semanticReview.maxIssues后，缺省值必须在协议边界补齐。
+    semanticReviewMaxIssues: z.literal(8).default(8),
     semanticReviewMinimumCompleteChainMs: z.number().int().min(60_000).max(600_000),
     semanticReviewDomainSearchReserveMs: z.number().int().min(0).max(120_000),
     engineeringRevisionMaxCycles: z.literal(1),
     engineeringRevisionMaxDurationMs: z.number().int().min(60_000).max(600_000),
-    engineeringRevisionValidationRepairReserveMs: z.number().int().min(60_000).max(420_000),
-    engineeringImprovementRunMaxDurationMs: z.number().int().min(300_000).max(900_000),
-    engineeringImprovementApiOuterTimeoutMs: z.number().int().min(330_000).max(1_200_000),
-    engineeringImprovementLineageMaxDurationMs: z.number().int().min(900_000).max(1_800_000),
+    // 该值由统一 Run 策略中的 Validator 排队、执行与传输余量派生，
+    // 这里只校验投影形状，不能再叠加一个独立的阶段最小时间门禁。
+    engineeringRevisionValidationRepairReserveMs: z.number().int().positive().max(420_000),
+    engineeringImprovementRunMaxDurationMs: z.number().int().min(300_000).max(1_200_000),
+    engineeringImprovementApiOuterTimeoutMs: z.number().int().min(330_000).max(1_240_000),
+    engineeringImprovementLineageMaxDurationMs: z.number().int().min(900_000).max(2_400_000),
     engineeringImprovementOrchestrationReserveMs: z.number().int().min(5_000).max(60_000),
-    engineeringImprovementMinimumCompleteChainMs: z.number().int().min(300_000).max(900_000),
-    validatorToolTimeoutMs: z.number().int().min(10_000).max(60_000),
-    reviewedKnowledgeMaxNewQueriesPerRun: z.number().int().min(0).max(12),
-    lowAnswerMaxOutputTokens: z.number().int().min(512).max(8_000),
-    mediumAnswerMaxOutputTokens: z.number().int().min(512).max(8_000),
-    highAnswerMaxOutputTokens: z.number().int().min(512).max(8_000),
+    engineeringImprovementMinimumCompleteChainMs: z.number().int().positive(),
+    validatorToolTimeoutMs: z.number().int().positive(),
+    mainContextExecutionReserveTokens: z.number().int().positive(),
     temperature: z.number().min(0).max(2),
   })
   .strict();
@@ -494,59 +636,18 @@ export const agentPolicyOverrideSchema = agentPolicySchema.partial().strict();
 
 export type AgentPolicy = z.infer<typeof agentPolicySchema>;
 
-export const DEFAULT_AGENT_POLICY: AgentPolicy = {
-  maxSteps: 8,
-  maxDurationMs: 600_000,
-  terminalReserveMs: 30_000,
-  convergeLeadMs: 75_000,
-  toolTimeoutMs: 75_000,
-  maxOutputTokens: 16_000,
-  contextWindowTokens: 64_000,
-  scopeGateEnabled: true,
-  scopeGateInitialTimeoutMs: 10_000,
-  scopeGateReviewTimeoutMs: 18_000,
-  scopeGateMaxOutputTokens: 500,
-  candidateRecoveryMaxAttempts: 1,
-  candidateMaxAttemptMs: 420_000,
-  candidateRepairEnabled: true,
-  repairPhaseReserveMs: 120_000,
-  repairMaxRounds: 3,
-  candidateMaxArtifactBytes: 262_144,
-  semanticReviewEnabled: false,
-  semanticReviewShadowOnly: false,
-  semanticReviewAssessmentMaxCalls: 1,
-  semanticReviewAssessmentTimeoutMs: 120_000,
-  semanticReviewMainDecisionTimeoutMs: 20_000,
-  semanticReviewVerificationMaxCalls: 1,
-  semanticReviewVerificationTimeoutMs: 30_000,
-  semanticReviewMaxOutputTokens: 12_000,
-  semanticReviewMaxIssues: 8,
-  semanticReviewMinimumCompleteChainMs: 180_000,
-  semanticReviewDomainSearchReserveMs: 0,
-  engineeringRevisionMaxCycles: 1,
-  engineeringRevisionMaxDurationMs: 330_000,
-  engineeringRevisionValidationRepairReserveMs: 255_000,
-  engineeringImprovementRunMaxDurationMs: 900_000,
-  engineeringImprovementApiOuterTimeoutMs: 930_000,
-  engineeringImprovementLineageMaxDurationMs: 1_500_000,
-  engineeringImprovementOrchestrationReserveMs: 20_000,
-  engineeringImprovementMinimumCompleteChainMs: 720_000,
-  validatorToolTimeoutMs: 45_000,
-  reviewedKnowledgeMaxNewQueriesPerRun: 4,
-  lowAnswerMaxOutputTokens: 3_000,
-  mediumAnswerMaxOutputTokens: 4_500,
-  highAnswerMaxOutputTokens: 6_000,
-  temperature: 0,
-};
+export const DEFAULT_AGENT_POLICY: AgentPolicy = agentPolicySchema.parse(bootstrapAgentPolicy(Object.keys(agentPolicySchema.shape)));
 
 export const inspectLessonContextInputSchema = z
   .object({
     includeObjectives: z.boolean().default(true),
+    detail: z.enum(["summary", "rules", "reference_model", "full"]).default("summary"),
   })
   .strict();
 
 export const inspectCurrentModelInputSchema = z
   .object({
+    source: z.enum(["current_workspace", "last_validated_candidate"]).default("current_workspace"),
     detail: z.enum(["summary", "selection", "diagnostics", "full"]).default("summary"),
   })
   .strict();
@@ -565,6 +666,10 @@ export const searchReviewedKnowledgeInputSchema = z
     topic: z.string().trim().min(2).max(120).optional(),
     limit: z.number().int().min(0).max(25).default(5),
     selectedPatternIds: z.array(opaqueIdSchema).max(8).default([]),
+    offset: z.number().int().nonnegative().optional(),
+    exampleIds: z.array(opaqueIdSchema).optional(),
+    claimIds: z.array(opaqueIdSchema).optional(),
+    evidenceIds: z.array(opaqueIdSchema).optional(),
   })
   .strict();
 
@@ -578,7 +683,7 @@ const candidateFileSchema = z
   .object({
     fileId: opaqueIdSchema,
     baseHash: contentHashSchema,
-    content: z.string().max(200_000),
+    content: z.string().max(MAX_CANDIDATE_ARTIFACT_BYTES * 2),
   })
   .strict();
 
@@ -588,7 +693,7 @@ const candidateEditSchema = z
     baseHash: contentHashSchema,
     startLine: z.number().int().positive(),
     endLine: z.number().int().positive(),
-    replacement: z.string().max(100_000),
+    replacement: z.string().max(MAX_CANDIDATE_ARTIFACT_BYTES),
   })
   .strict()
   .refine((edit) => edit.endLine >= edit.startLine, {
@@ -600,7 +705,7 @@ export const validateCandidateInputSchema = z.discriminatedUnion("mode", [
     .object({
       mode: z.literal("standalone_model"),
       fileName: z.string().trim().min(1).max(160),
-      content: z.string().min(1).max(200_000),
+      content: z.string().min(1).max(MAX_CANDIDATE_ARTIFACT_BYTES),
     })
     .strict(),
   z
@@ -608,7 +713,7 @@ export const validateCandidateInputSchema = z.discriminatedUnion("mode", [
       mode: z.literal("replace_entry"),
       fileId: opaqueIdSchema,
       baseHash: contentHashSchema,
-      content: z.string().max(200_000),
+      content: z.string().max(MAX_CANDIDATE_ARTIFACT_BYTES * 2),
     })
     .strict(),
   z
@@ -637,7 +742,7 @@ export const validateCandidateToolInputSchema = z
     fileName: z.string().trim().min(1).max(160).optional(),
     fileId: opaqueIdSchema.optional(),
     baseHash: contentHashSchema.optional(),
-    content: z.string().max(200_000).optional(),
+    content: z.string().max(MAX_CANDIDATE_ARTIFACT_BYTES * 2).optional(),
     edits: z.array(candidateEditSchema).min(1).max(24).optional(),
     files: z.array(candidateFileSchema).min(1).max(20).optional(),
   })
@@ -657,6 +762,8 @@ export const lessonContextOutputSchema = z
     title: z.string().min(1).max(240),
     objectives: z.array(z.string().min(1).max(1_000)).max(20),
     taskHints: z.array(z.string().min(1).max(1_000)).max(20),
+    courseRules: z.array(courseRuleReferenceSchema).max(100).optional(),
+    referenceModel: courseReferenceModelSchema.optional(),
   })
   .strict();
 
@@ -667,12 +774,13 @@ const modelSummarySchema = z
     contentHash: contentHashSchema,
     editable: z.boolean(),
     characterCount: z.number().int().nonnegative(),
-    content: z.string().max(200_000).optional(),
+    content: z.string().max(MAX_CANDIDATE_ARTIFACT_BYTES * 2).optional(),
   })
   .strict();
 
 export const currentModelOutputSchema = z
   .object({
+    source: z.enum(["current_workspace", "last_validated_candidate"]).default("current_workspace"),
     files: z.array(modelSummarySchema).min(1).max(20),
     activeFileId: opaqueIdSchema.optional(),
     focus: editorGroundingSchema,
@@ -761,11 +869,11 @@ const reviewedKnowledgeItemSchema = z
 const reviewedKnowledgeClaimSchema = z
   .object({
     claimId: opaqueIdSchema,
-    claimText: z.string().min(1).max(4_000),
+    claimText: z.string().min(1),
     authorityLevel: z.enum(["A1", "A2"]),
     operators: z.array(z.string().min(1).max(16)).max(16).default([]),
     astContextIds: z.array(semanticIdSchema).max(16).default([]),
-    evidenceIds: z.array(opaqueIdSchema).min(1).max(16),
+    evidenceIds: z.array(opaqueIdSchema).min(1),
     selectionRole: z.enum(["required", "supporting", "additional_supporting"]),
   })
   .strict();
@@ -832,6 +940,23 @@ const reviewedKnowledgePatternCandidateSchema = z
   })
   .strict();
 
+const reviewedKnowledgeExampleSchema = z
+  .object({
+    exampleId: opaqueIdSchema,
+    title: z.string().min(1).max(240),
+    intentText: z.string().min(1).max(2_000),
+    modelText: z.string().min(1),
+    relatedClaimIds: z.array(opaqueIdSchema).optional(),
+    source: z.unknown().optional(),
+    properties: z.unknown().optional(),
+    constructTags: z.array(z.string().min(1).max(64)).max(32),
+    exampleAuthority: z.enum(["official-example", "community-example"]),
+    languageVersionTrack: z.string().min(1).max(64),
+    validatorPassed: z.literal(true),
+    truncated: z.boolean().optional(),
+  })
+  .strict();
+
 export const reviewedKnowledgeOutputSchema = z
   .object({
     requestedQuery: z.string().min(2).max(500),
@@ -862,27 +987,30 @@ export const reviewedKnowledgeOutputSchema = z
     resultHash: contentHashSchema,
     candidateKnowledgePatterns: z.array(reviewedKnowledgePatternCandidateSchema).max(16).default([]),
     selectedKnowledgePatternIds: z.array(opaqueIdSchema).max(8).default([]),
-    selectedPatternClosureClaimIds: z.array(opaqueIdSchema).max(25).default([]),
+    selectedPatternClosureClaimIds: z.array(opaqueIdSchema).default([]),
     patternSelectionWarnings: z.array(z.string().min(1).max(240)).max(16).default([]),
     closureGaps: z.array(z.string().min(1).max(240)).max(32).default([]),
-    closureClaimIds: z.array(opaqueIdSchema).max(25).default([]),
-    knowledgeAnswerRequiredClaimIds: z.array(opaqueIdSchema).max(25).default([]),
-    knowledgeSupportingClaimIds: z.array(opaqueIdSchema).max(25).default([]),
-    mandatorySupportingCount: z.number().int().min(0).max(25),
-    additionalSupportingClaimIds: z.array(opaqueIdSchema).max(25).default([]),
-    missingClosureClaimIds: z.array(opaqueIdSchema).max(25).default([]),
-    requestedLimit: z.number().int().min(0).max(25),
-    additionalSupportingBudget: z.number().int().min(0).max(25),
-    selectionLimit: z.number().int().min(0).max(25),
-    returnedClaimCount: z.number().int().min(0).max(25),
-    resourceLimit: z.literal(25),
-    claims: z.array(reviewedKnowledgeClaimSchema).max(25).default([]),
+    closureClaimIds: z.array(opaqueIdSchema).default([]),
+    knowledgeAnswerRequiredClaimIds: z.array(opaqueIdSchema).default([]),
+    knowledgeSupportingClaimIds: z.array(opaqueIdSchema).default([]),
+    mandatorySupportingCount: z.number().int().min(0),
+    additionalSupportingClaimIds: z.array(opaqueIdSchema).default([]),
+    missingClosureClaimIds: z.array(opaqueIdSchema).default([]),
+    requestedLimit: z.number().int().min(0),
+    additionalSupportingBudget: z.number().int().min(0),
+    selectionLimit: z.number().int().min(0),
+    returnedClaimCount: z.number().int().min(0),
+    resourceLimit: z.number().int().nonnegative(),
+    claims: z.array(reviewedKnowledgeClaimSchema).default([]),
     evidenceBlocks: z.array(reviewedKnowledgeEvidenceSchema).default([]),
     guardrails: z.array(reviewedKnowledgeGuardrailSchema).max(64).default([]),
-    conflicts: z.array(opaqueIdSchema).max(25).default([]),
+    examples: z.array(reviewedKnowledgeExampleSchema).optional(),
+    nextOffset: z.number().int().nonnegative().optional(),
+    hasMore: z.boolean().optional(),
+    conflicts: z.array(opaqueIdSchema).default([]),
     excludedCandidates: z.object({
       count: z.number().int().min(0),
-      claimIds: z.array(opaqueIdSchema).max(25),
+      claimIds: z.array(opaqueIdSchema),
     }).strict(),
     items: z.array(reviewedKnowledgeItemSchema).max(8),
   })
@@ -962,10 +1090,7 @@ export const reviewedKnowledgeOutputSchema = z
         message: "excludedCandidates must contain unique IDs outside the returned Claim set and a valid total count",
       });
     }
-    if (result.selectionLimit !== Math.min(
-      result.resourceLimit,
-      result.closureClaimIds.length + result.additionalSupportingBudget,
-    )) {
+    if (result.selectionLimit !== result.closureClaimIds.length + result.additionalSupportingBudget) {
       issueContext.addIssue({
         code: "custom",
         path: ["selectionLimit"],
@@ -1315,6 +1440,13 @@ export type AgentLifecycleEvent =
       modelCalls?: TrustedTeacherResponse["modelCalls"];
     };
 
+export interface AgentRepairProgress {
+  phase: "started" | "validation_failed" | "validation_passed" | "stopped";
+  round: number;
+  maxRounds: number;
+  diagnosticCount?: number;
+}
+
 export interface AgentDependencies {
   inspectLessonContext(args: {
     context: TeacherAgentContext;
@@ -1337,6 +1469,21 @@ export interface AgentDependencies {
     input: SearchReviewedKnowledgeInput;
     abortSignal?: AbortSignal;
   }): Promise<unknown>;
+  listActiveExampleCatalog?(args: {
+    abortSignal?: AbortSignal;
+  }): Promise<readonly {
+    exampleId: string;
+    title: string;
+    topicPath: string;
+    constructTags: readonly string[];
+    exampleAuthority: "official-example" | "community-example";
+  }[]>;
+  searchReviewedKnowledgeExamples?(args: {
+    query: string;
+    constructTags: readonly string[];
+    exampleLimit: number;
+    abortSignal?: AbortSignal;
+  }): Promise<unknown>;
   searchDomainEvidence(args: {
     context: TeacherAgentContext;
     input: SearchDomainEvidenceInput;
@@ -1347,6 +1494,8 @@ export interface AgentDependencies {
     input: ValidateCandidateInput;
     abortSignal?: AbortSignal;
   }): Promise<unknown>;
+  /** 服务端投影公开Repair状态；不得携带Candidate正文、Prompt或reasoning。 */
+  reportRepairProgress?(progress: AgentRepairProgress): Promise<void> | void;
   persistExecutionCheckpoint?(boundary: {
     phase: z.infer<typeof executionCheckpointPhaseSchema>;
     candidate?: CandidateArtifact;
@@ -1367,6 +1516,19 @@ export interface AgentDependencies {
     validationOptionsHash: string;
   }): Promise<unknown>;
   loadLatestExecutionCheckpoint?(): Promise<unknown>;
+  ensureTaskLifecycleContract?(input: {
+    taskProfile: "direct_answer" | "model_authoring" | "model_refinement" | "validation_repair" | "analysis";
+    objectiveSummary?: string;
+    preservationConstraints?: readonly string[];
+  }): Promise<unknown>;
+  loadTaskLifecycleContract?(): Promise<unknown>;
+  appendTaskLifecycleContractEvent?(input: {
+    expectedRevision: number;
+    eventType: string;
+    payload?: Record<string, unknown>;
+    actor?: { type: "server" | "main" | "candidate" | "finalizer" | "user" | "operator"; id?: string };
+  }): Promise<unknown>;
+  listTaskLifecycleContractEvents?(): Promise<unknown>;
   onLifecycleEvent?(event: AgentLifecycleEvent): Promise<void> | void;
 }
 
@@ -1401,6 +1563,8 @@ export interface ToolLedgerEntry {
   argsHash: string;
   status: LedgerStatus;
   replayCount: number;
+  /** 只有越过服务端Guard并实际开始调用后端依赖时才为true。 */
+  backendExecuted: boolean;
   replayedFromRunId?: string;
   executionContext?: Readonly<{
     participant: "main" | "candidate" | "repair";
@@ -1504,10 +1668,27 @@ export interface TrustedTeacherResponse {
     };
     canContinue: boolean;
     pendingImprovement: boolean;
+    scorecard?: {
+      userGoalCoverage: number;
+      engineeringClosure: number;
+      consistencyAndPreservation: number;
+      evidenceAndUncertainty: number;
+      total: number;
+      reviewerRecommendation: "deliver" | "deliver_with_advisory" | "optimize";
+    };
+    revisionScorecard?: {
+      userGoalCoverage: number;
+      engineeringClosure: number;
+      consistencyAndPreservation: number;
+      evidenceAndUncertainty: number;
+      total: number;
+      reviewerRecommendation: "deliver" | "deliver_with_advisory" | "optimize";
+    };
     assessmentCallCount: 0 | 1;
     mainReentryCallCount: 0 | 1;
     revisionCycleCount: 0 | 1;
     verificationCallCount: 0 | 1;
+    selectionCallCount: 0 | 1;
   };
   answerCompletionStatus?: "complete" | "incomplete" | "insufficient_evidence" | "unverified" | "not_required" | "waiting_for_clarification";
   reasoningRoute?: {
@@ -1566,6 +1747,8 @@ export interface AgentRunOutcome {
   response: TrustedTeacherResponse;
   ledger: ToolLedgerEntry[];
   mainAgentOutcome?: MainAgentOutcome;
+  /** 同Run已验证候选交付对象；只在进程内传递，不进入公共协议。 */
+  validatedCandidateDelivery?: import("./validated-candidate-delivery.mjs").ValidatedCandidateDelivery;
 }
 
 export type AgentStageId = "fastGate" | "main" | "candidate" | "repair" | "semanticReview" | "finalizer";
@@ -1617,17 +1800,20 @@ export interface RunTeacherAgentOptions {
   thinkingModel?: LanguageModel;
   thinkingModelId?: string;
   reasoningMode?: "adaptive" | "provider-managed" | "max" | "high" | "medium" | "disabled";
+  /** 发布策略冻结的阶段级推理模式；内部非思考调用不得覆盖 Provider 的强制思考能力。 */
   stageReasoningModes?: Partial<Record<AgentStageId, "adaptive" | "provider-managed" | "max" | "high" | "medium" | "disabled">>;
   /** V2一次请求内唯一的服务端共享工作台；不得进入Provider请求或公共响应。 */
   runResources?: RunResources;
   providerOptionsName?: string;
   providerCompatibility?: "generic-openai" | "deepseek-v4-direct" | "deepseek-v4-litellm";
+  /** 由API从当前已发布Alias -> Deployment -> Adapter/Profile解析，并冻结到本Run。 */
   stageProtocolProfiles?: Partial<Record<AgentStageId, AgentStageProtocolProfile>>;
   finalizeVisibleAnswer?: (input: {
     response: TrustedTeacherResponse;
     ledger: readonly ToolLedgerEntry[];
     /** 续跑没有新的Main delegation；服务端终态用于保留原候选交付义务。 */
     mainAgentOutcome?: MainAgentOutcome;
+    validatedCandidateDelivery?: import("./validated-candidate-delivery.mjs").ValidatedCandidateDelivery;
   }) => Promise<{ answer: string; warnings?: string[] }> | { answer: string; warnings?: string[] };
   request: unknown;
   dependencies: AgentDependencies;

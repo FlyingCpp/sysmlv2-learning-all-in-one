@@ -2,6 +2,15 @@
 
 const crypto = require('crypto');
 const {
+  STUDENT_QUESTION_PROTOCOL_CEILING,
+  runtimeProjection: agentResourcePolicyRuntimeProjection
+} = require('../../packages/agent-resource-policy');
+const {
+  applyTaskLifecycleContractEvent,
+  createTaskLifecycleContract
+} = require('../../packages/teacher-contract/task-lifecycle-contract');
+const {
+  EXECUTION_PHASES,
   ExecutionCheckpointError,
   bindValidationArtifactCandidate,
   checkpointError,
@@ -24,9 +33,6 @@ const AUTOMATIC_CONTINUATION_KINDS = new Set([
   EXECUTION_COMPLETION_CONTINUATION,
   ENGINEERING_IMPROVEMENT_CONTINUATION
 ]);
-const ENGINEERING_IMPROVEMENT_RUN_MAX_MS = 900_000;
-const ENGINEERING_IMPROVEMENT_LINEAGE_MAX_MS = 1_500_000;
-const ENGINEERING_IMPROVEMENT_ORCHESTRATION_RESERVE_MS = 20_000;
 
 function createConversationStore(options = {}) {
   const backend = String(options.backend || process.env.AI_TEACHER_CONVERSATION_BACKEND || DEFAULT_BACKEND).toLowerCase();
@@ -50,6 +56,8 @@ function createMemoryConversationStore(options = {}) {
     executionLineages: new Map(),
     executionArtifacts: new Map(),
     executionCheckpoints: new Map(),
+    taskLifecycleContracts: new Map(),
+    taskLifecycleContractEvents: new Map(),
     summaries: new Map(),
     usageLedger: [],
     auditEvents: []
@@ -63,6 +71,8 @@ function createMemoryConversationStore(options = {}) {
   if (!state.executionLineages) state.executionLineages = new Map();
   if (!state.executionArtifacts) state.executionArtifacts = new Map();
   if (!state.executionCheckpoints) state.executionCheckpoints = new Map();
+  if (!state.taskLifecycleContracts) state.taskLifecycleContracts = new Map();
+  if (!state.taskLifecycleContractEvents) state.taskLifecycleContractEvents = new Map();
 
   return {
     mode: 'memory',
@@ -119,12 +129,17 @@ function createMemoryConversationStore(options = {}) {
         .filter((message) => message.role === 'user'
           || message.status === 'succeeded'
           || visibleFallbackBaselineMessage(state, message))
-        .slice(-limit);
+        .slice(-limit)
+        .map((message) => ({
+          ...message,
+          automaticContinuationSourceRunId: String(
+            state.runs.get(message.runId)?.metadata?.automaticContinuationSourceRunId || ''
+          )
+        }));
     },
-    async listSuccessfulMessages(threadId, limit = 8) {
+    async listSuccessfulMessages(threadId) {
       return (state.messages.get(threadId) || [])
-        .filter(modelConversationMessage)
-        .slice(-Math.max(0, limit));
+        .filter(modelConversationMessage);
     },
     async createRun({ threadId, context, intent, route }) {
       const runId = `run_${crypto.randomUUID()}`;
@@ -395,11 +410,13 @@ function createMemoryConversationStore(options = {}) {
           }),
           manualContinuation: true,
           automaticContinuationUsed: lineage.automaticContinuationCount >= 1,
-          sourceResponse: latestMemoryLineageSourceResponse(state, continuationRootRunId, existingRun.runId)
+          sourceResponse: memoryRunSourceResponse(state, sourceId)
         };
       }
       if (manualKind === ENGINEERING_FEEDBACK_CONTINUATION) {
         assertMemoryEngineeringFeedbackSource(state, sourceRun, continuationRootRunId);
+      } else {
+        assertMemoryLatestExecutionContinuationSource(state, sourceRun, continuationRootRunId);
       }
       const activeContinuationRun = [...state.runs.values()].find((candidate) => (
         candidate.runId !== continuationRootRunId
@@ -414,7 +431,7 @@ function createMemoryConversationStore(options = {}) {
         continuationKind: manualKind,
         feedbackMessageId: userMessageId,
       });
-      const sourceResponse = latestMemoryLineageSourceResponse(state, continuationRootRunId);
+      const sourceResponse = memoryRunSourceResponse(state, sourceId);
       const run = {
         runId: `run_${crypto.randomUUID()}`,
         threadId,
@@ -623,6 +640,21 @@ function createMemoryConversationStore(options = {}) {
     async getRun(runId) {
       const run = state.runs.get(runId);
       return run ? { ...run } : null;
+    },
+    async ensureTaskLifecycleContract(input = {}) {
+      return ensureMemoryTaskLifecycleContract(state, input);
+    },
+    async loadTaskLifecycleContract(runId) {
+      return loadMemoryTaskLifecycleContract(state, runId);
+    },
+    async loadLatestTaskLifecycleContractForThread(runId) {
+      return loadLatestMemoryTaskLifecycleContractForThread(state, runId);
+    },
+    async appendTaskLifecycleContractEvent(input = {}) {
+      return appendMemoryTaskLifecycleContractEvent(state, input);
+    },
+    async listTaskLifecycleContractEvents(runId) {
+      return listMemoryTaskLifecycleContractEvents(state, runId);
     },
     async appendExecutionCheckpoint({ runId, boundary }) {
       return appendMemoryExecutionCheckpoint(state, { runId, boundary });
@@ -894,7 +926,9 @@ function createPostgresConversationStore(options = {}) {
     async listMessages(threadId, options = {}) {
       const limit = Math.max(1, Math.min(200, Number(options.limit || 50)));
       const result = await pool.query(`
-        select message_id, thread_id, run_id, role, status, content, response, request_id, created_at
+        select message_id, thread_id, run_id, role, status, content, response, request_id, created_at,
+          coalesce((select metadata ->> 'automaticContinuationSourceRunId'
+            from teacher_runs where run_id = teacher_messages.run_id), '') as automatic_continuation_source_run_id
         from teacher_messages
         where thread_id = $1 and (
           role = 'user'
@@ -916,16 +950,17 @@ function createPostgresConversationStore(options = {}) {
       `, [threadId, limit]);
       return result.rows.reverse().map(messageRow);
     },
-    async listSuccessfulMessages(threadId, limit = 8) {
+    async listSuccessfulMessages(threadId) {
       const result = await pool.query(`
-        select message_id, thread_id, run_id, role, status, content, response, request_id, created_at
+        select message_id, thread_id, run_id, role, status, content, response, request_id, created_at,
+          coalesce((select metadata ->> 'automaticContinuationSourceRunId'
+            from teacher_runs where run_id = teacher_messages.run_id), '') as automatic_continuation_source_run_id
         from teacher_messages
         where thread_id = $1 and (role = 'user' or status = 'succeeded')
         order by created_at desc, run_id desc,
           case role when 'assistant' then 0 when 'user' then 1 else 2 end asc,
           message_id desc
-        limit $2
-      `, [threadId, Math.max(0, Number(limit || 8))]);
+      `, [threadId]);
       return result.rows.reverse().map(messageRow).filter(modelConversationMessage);
     },
     async createRun({ threadId, context, intent, route }) {
@@ -1237,11 +1272,7 @@ function createPostgresConversationStore(options = {}) {
             context,
             { sourceRunId: sourceId, continuationKind: manualKind, feedbackMessageId: userMessageId }
           );
-          const sourceResponse = await postgresLatestLineageSourceResponse(
-            client,
-            continuationRootRunId,
-            existing.rows[0].run_id
-          );
+          const sourceResponse = await postgresRunSourceResponse(client, sourceId);
           await client.query('commit');
           return {
             run: runRow(existing.rows[0]),
@@ -1255,6 +1286,8 @@ function createPostgresConversationStore(options = {}) {
         }
         if (manualKind === ENGINEERING_FEEDBACK_CONTINUATION) {
           await assertPostgresEngineeringFeedbackSource(client, sourceRun, continuationRootRunId);
+        } else {
+          await assertPostgresLatestExecutionContinuationSource(client, sourceRun, continuationRootRunId);
         }
         const active = await client.query(`
           select run_id from teacher_runs
@@ -1272,7 +1305,7 @@ function createPostgresConversationStore(options = {}) {
           context,
           { sourceRunId: sourceId, continuationKind: manualKind, feedbackMessageId: userMessageId }
         );
-        const sourceResponse = await postgresLatestLineageSourceResponse(client, continuationRootRunId);
+        const sourceResponse = await postgresRunSourceResponse(client, sourceId);
         const run = {
           runId: `run_${crypto.randomUUID()}`,
           threadId,
@@ -1511,6 +1544,21 @@ function createPostgresConversationStore(options = {}) {
     async getRun(runId) {
       const run = await loadRun(pool, runId);
       return run ? runRow(run) : null;
+    },
+    async ensureTaskLifecycleContract(input = {}) {
+      return ensurePostgresTaskLifecycleContract(pool, input);
+    },
+    async loadTaskLifecycleContract(runId) {
+      return loadPostgresTaskLifecycleContract(pool, runId);
+    },
+    async loadLatestTaskLifecycleContractForThread(runId) {
+      return loadLatestPostgresTaskLifecycleContractForThread(pool, runId);
+    },
+    async appendTaskLifecycleContractEvent(input = {}) {
+      return appendPostgresTaskLifecycleContractEvent(pool, input);
+    },
+    async listTaskLifecycleContractEvents(runId) {
+      return listPostgresTaskLifecycleContractEvents(pool, runId);
     },
     async appendExecutionCheckpoint({ runId, boundary }) {
       return appendPostgresExecutionCheckpoint(pool, { runId, boundary });
@@ -1967,6 +2015,47 @@ async function migrateTeacherConversationStore(options = {}) {
     await pool.query(`alter table teacher_execution_lineages add column if not exists next_checkpoint_revision int not null default 1`);
     await pool.query(`create index if not exists teacher_execution_lineages_owner_idx on teacher_execution_lineages (tenant_id, user_id, updated_at desc)`);
     await pool.query(`
+      create table if not exists teacher_task_lifecycle_contracts (
+        contract_id text primary key,
+        root_run_id text not null unique references teacher_execution_lineages(root_run_id) on delete cascade,
+        thread_id text not null references teacher_threads(thread_id) on delete cascade,
+        tenant_id text not null,
+        user_id text not null default '',
+        revision int not null default 0,
+        status text not null,
+        snapshot_hash text not null,
+        current_snapshot jsonb not null,
+        created_at timestamptz not null,
+        updated_at timestamptz not null,
+        check (revision >= 0),
+        check (status in (
+          'provisional', 'active', 'waiting_user', 'executing',
+          'sealed_for_finalization', 'finalizing', 'delivery_pending',
+          'delivered', 'cancelled', 'superseded'
+        ))
+      )
+    `);
+    await pool.query(`create index if not exists teacher_task_lifecycle_contracts_owner_idx on teacher_task_lifecycle_contracts (tenant_id, user_id, updated_at desc)`);
+    await pool.query(`create index if not exists teacher_task_lifecycle_contracts_thread_owner_idx on teacher_task_lifecycle_contracts (thread_id, tenant_id, user_id, updated_at desc)`);
+    await pool.query(`
+      create table if not exists teacher_task_lifecycle_contract_events (
+        event_id text primary key,
+        contract_id text not null references teacher_task_lifecycle_contracts(contract_id) on delete cascade,
+        root_run_id text not null references teacher_execution_lineages(root_run_id) on delete cascade,
+        revision int not null,
+        event_type text not null,
+        source_run_id text references teacher_runs(run_id) on delete set null,
+        actor jsonb not null default '{}'::jsonb,
+        payload jsonb not null default '{}'::jsonb,
+        resulting_status text not null,
+        resulting_snapshot_hash text not null,
+        created_at timestamptz not null,
+        unique (contract_id, revision),
+        check (revision >= 0)
+      )
+    `);
+    await pool.query(`create index if not exists teacher_task_lifecycle_contract_events_root_revision_idx on teacher_task_lifecycle_contract_events (root_run_id, revision asc)`);
+    await pool.query(`
       insert into teacher_execution_lineages (
         root_run_id, thread_id, tenant_id, user_id, automatic_continuation_count,
         next_checkpoint_revision, created_at, updated_at
@@ -2043,12 +2132,10 @@ async function migrateTeacherConversationStore(options = {}) {
         unique (root_run_id, revision),
         check (revision >= 1),
         check (repair_round >= 0),
-        check (phase in (
-          'candidate_absent', 'candidate_ready', 'validation_pending', 'validation_failed',
-          'repair_in_progress', 'validated_passed', 'finalization_pending', 'completed'
-        ))
+        check (phase in (${executionCheckpointPhaseSqlList()}))
       )
     `);
+    await pool.query(executionCheckpointPhaseConstraintSql());
     await pool.query(`alter table teacher_execution_checkpoints add column if not exists request_revision_hash text not null default ''`);
     await pool.query(`alter table teacher_execution_checkpoints add column if not exists task_contract_hash text not null default ''`);
     await pool.query(`alter table teacher_execution_checkpoints add column if not exists editor_base_hash text not null default ''`);
@@ -2445,6 +2532,91 @@ function memoryPersistedAnswer(state, runId) {
   return projectPersistedAnswer(message?.response);
 }
 
+function ensureMemoryTaskLifecycleContract(state, input = {}) {
+  const run = state.runs.get(safeId(input.runId));
+  if (!run) throw taskLifecycleStoreError('TASK_CONTRACT_RUN_NOT_FOUND', 'Task contract run was not found.', 404);
+  const rootRunId = memoryExecutionRootRunId(state, run);
+  ensureMemoryExecutionLineage(state, run, rootRunId);
+  const existing = state.taskLifecycleContracts.get(rootRunId);
+  if (existing) return structuredClone(existing);
+  const rootRun = state.runs.get(rootRunId) || run;
+  const rootUserRequest = String(input.rootUserRequest || memoryRootUserRequest(state, rootRun)).trim();
+  if (!rootUserRequest) {
+    throw taskLifecycleStoreError('TASK_CONTRACT_ROOT_REQUEST_MISSING', 'Task contract root user request was not found.', 409);
+  }
+  const contract = createTaskLifecycleContract({
+    contractId: taskLifecycleContractId(rootRunId),
+    rootRunId,
+    threadId: rootRun.threadId,
+    tenantId: rootRun.tenantId,
+    userId: rootRun.userId,
+    rootUserRequest,
+    taskProfile: input.taskProfile,
+    objectiveSummary: input.objectiveSummary,
+    preservationConstraints: input.preservationConstraints,
+    createdAt: rootRun.createdAt
+  });
+  state.taskLifecycleContracts.set(rootRunId, structuredClone(contract));
+  state.taskLifecycleContractEvents.set(rootRunId, [taskLifecycleCreationEvent(contract, run.runId)]);
+  return structuredClone(contract);
+}
+
+function loadMemoryTaskLifecycleContract(state, runId) {
+  const run = state.runs.get(safeId(runId));
+  if (!run) return null;
+  const contract = state.taskLifecycleContracts.get(memoryExecutionRootRunId(state, run));
+  return contract ? structuredClone(contract) : null;
+}
+
+function loadLatestMemoryTaskLifecycleContractForThread(state, runId) {
+  const run = state.runs.get(safeId(runId));
+  if (!run) return null;
+  const currentRootRunId = memoryExecutionRootRunId(state, run);
+  const contract = [...state.taskLifecycleContracts.entries()]
+    .filter(([rootRunId, candidate]) => rootRunId !== currentRootRunId
+      && candidate.threadId === run.threadId
+      && candidate.tenantId === run.tenantId
+      && candidate.userId === run.userId)
+    .map(([, candidate]) => candidate)
+    .sort((left, right) => String(right.updatedAt || '').localeCompare(String(left.updatedAt || '')))[0];
+  return contract ? structuredClone(contract) : null;
+}
+
+function appendMemoryTaskLifecycleContractEvent(state, input = {}) {
+  const run = state.runs.get(safeId(input.runId));
+  if (!run) throw taskLifecycleStoreError('TASK_CONTRACT_RUN_NOT_FOUND', 'Task contract run was not found.', 404);
+  const rootRunId = memoryExecutionRootRunId(state, run);
+  const current = state.taskLifecycleContracts.get(rootRunId);
+  if (!current) throw taskLifecycleStoreError('TASK_CONTRACT_NOT_FOUND', 'Task lifecycle contract was not found.', 404);
+  const transition = applyTaskLifecycleContractEvent(current, {
+    expectedRevision: input.expectedRevision,
+    eventType: input.eventType,
+    payload: input.payload,
+    actor: input.actor,
+    sourceRunId: run.runId,
+    eventId: input.eventId,
+    createdAt: input.createdAt
+  });
+  state.taskLifecycleContracts.set(rootRunId, structuredClone(transition.contract));
+  const events = state.taskLifecycleContractEvents.get(rootRunId) || [];
+  events.push(structuredClone(transition.event));
+  state.taskLifecycleContractEvents.set(rootRunId, events);
+  return { contract: structuredClone(transition.contract), event: structuredClone(transition.event) };
+}
+
+function listMemoryTaskLifecycleContractEvents(state, runId) {
+  const run = state.runs.get(safeId(runId));
+  if (!run) return [];
+  const rootRunId = memoryExecutionRootRunId(state, run);
+  return structuredClone(state.taskLifecycleContractEvents.get(rootRunId) || []);
+}
+
+function memoryRootUserRequest(state, rootRun) {
+  return (state.messages.get(rootRun.threadId) || []).find((message) => (
+    message.runId === rootRun.runId && message.role === 'user'
+  ))?.content || '';
+}
+
 async function ensurePostgresExecutionLineage(client, runId, suppliedRun) {
   let current = suppliedRun || (await client.query('select * from teacher_runs where run_id = $1', [runId])).rows[0];
   if (!current) throw checkpointError('EXECUTION_RUN_NOT_FOUND', 'Execution run was not found.', 404);
@@ -2493,6 +2665,206 @@ async function ensurePostgresExecutionLineage(client, runId, suppliedRun) {
     `, [root.run_id, legacyContinuation.rows[0].run_id]);
   }
   return root.run_id;
+}
+
+async function ensurePostgresTaskLifecycleContract(pool, input = {}) {
+  const client = await pool.connect();
+  try {
+    await client.query('begin');
+    const run = (await client.query('select * from teacher_runs where run_id = $1 for update', [safeId(input.runId)])).rows[0];
+    if (!run) throw taskLifecycleStoreError('TASK_CONTRACT_RUN_NOT_FOUND', 'Task contract run was not found.', 404);
+    const rootRunId = await ensurePostgresExecutionLineage(client, run.run_id, run);
+    const existing = (await client.query(`
+      select current_snapshot
+      from teacher_task_lifecycle_contracts
+      where root_run_id = $1
+      for update
+    `, [rootRunId])).rows[0];
+    if (existing) {
+      await client.query('commit');
+      return structuredClone(existing.current_snapshot);
+    }
+    const rootRun = (await client.query('select * from teacher_runs where run_id = $1', [rootRunId])).rows[0] || run;
+    const message = (await client.query(`
+      select content
+      from teacher_messages
+      where run_id = $1 and role = 'user'
+      order by created_at asc
+      limit 1
+    `, [rootRunId])).rows[0];
+    const rootUserRequest = String(input.rootUserRequest || message?.content || '').trim();
+    if (!rootUserRequest) {
+      throw taskLifecycleStoreError('TASK_CONTRACT_ROOT_REQUEST_MISSING', 'Task contract root user request was not found.', 409);
+    }
+    const contract = createTaskLifecycleContract({
+      contractId: taskLifecycleContractId(rootRunId),
+      rootRunId,
+      threadId: rootRun.thread_id,
+      tenantId: rootRun.tenant_id,
+      userId: rootRun.user_id,
+      rootUserRequest,
+      taskProfile: input.taskProfile,
+      objectiveSummary: input.objectiveSummary,
+      preservationConstraints: input.preservationConstraints,
+      createdAt: rootRun.created_at
+    });
+    const creationEvent = taskLifecycleCreationEvent(contract, run.run_id);
+    await client.query(`
+      insert into teacher_task_lifecycle_contracts (
+        contract_id, root_run_id, thread_id, tenant_id, user_id,
+        revision, status, snapshot_hash, current_snapshot, created_at, updated_at
+      ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::timestamptz, $10::timestamptz)
+    `, [
+      contract.contractId,
+      rootRunId,
+      contract.threadId,
+      contract.tenantId,
+      contract.userId,
+      contract.revision,
+      contract.status,
+      contract.snapshotHash,
+      JSON.stringify(contract),
+      contract.createdAt
+    ]);
+    await insertPostgresTaskLifecycleEvent(client, rootRunId, creationEvent);
+    await client.query('commit');
+    return structuredClone(contract);
+  } catch (error) {
+    await client.query('rollback').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function loadPostgresTaskLifecycleContract(pool, runId) {
+  const result = await pool.query(`
+    select contract.current_snapshot
+    from teacher_runs run
+    join teacher_task_lifecycle_contracts contract
+      on contract.root_run_id = coalesce(nullif(run.metadata ->> 'continuationRootRunId', ''), run.run_id)
+    where run.run_id = $1
+  `, [safeId(runId)]);
+  return result.rows[0] ? structuredClone(result.rows[0].current_snapshot) : null;
+}
+
+async function loadLatestPostgresTaskLifecycleContractForThread(pool, runId) {
+  const result = await pool.query(`
+    select contract.current_snapshot
+    from teacher_runs run
+    join teacher_task_lifecycle_contracts contract
+      on contract.thread_id = run.thread_id
+     and contract.tenant_id = run.tenant_id
+     and contract.user_id = run.user_id
+    where run.run_id = $1
+      and contract.root_run_id <> coalesce(nullif(run.metadata ->> 'continuationRootRunId', ''), run.run_id)
+    order by contract.updated_at desc, contract.created_at desc
+    limit 1
+  `, [safeId(runId)]);
+  return result.rows[0] ? structuredClone(result.rows[0].current_snapshot) : null;
+}
+
+async function appendPostgresTaskLifecycleContractEvent(pool, input = {}) {
+  const client = await pool.connect();
+  try {
+    await client.query('begin');
+    const run = (await client.query('select * from teacher_runs where run_id = $1 for update', [safeId(input.runId)])).rows[0];
+    if (!run) throw taskLifecycleStoreError('TASK_CONTRACT_RUN_NOT_FOUND', 'Task contract run was not found.', 404);
+    const rootRunId = await ensurePostgresExecutionLineage(client, run.run_id, run);
+    const row = (await client.query(`
+      select current_snapshot
+      from teacher_task_lifecycle_contracts
+      where root_run_id = $1
+      for update
+    `, [rootRunId])).rows[0];
+    if (!row) throw taskLifecycleStoreError('TASK_CONTRACT_NOT_FOUND', 'Task lifecycle contract was not found.', 404);
+    const transition = applyTaskLifecycleContractEvent(row.current_snapshot, {
+      expectedRevision: input.expectedRevision,
+      eventType: input.eventType,
+      payload: input.payload,
+      actor: input.actor,
+      sourceRunId: run.run_id,
+      eventId: input.eventId,
+      createdAt: input.createdAt
+    });
+    const updated = await client.query(`
+      update teacher_task_lifecycle_contracts
+      set revision = $3,
+          status = $4,
+          snapshot_hash = $5,
+          current_snapshot = $6::jsonb,
+          updated_at = $7::timestamptz
+      where root_run_id = $1 and revision = $2
+      returning contract_id
+    `, [
+      rootRunId,
+      Number(input.expectedRevision),
+      transition.contract.revision,
+      transition.contract.status,
+      transition.contract.snapshotHash,
+      JSON.stringify(transition.contract),
+      transition.contract.updatedAt
+    ]);
+    if (!updated.rows[0]) {
+      throw taskLifecycleStoreError('TASK_CONTRACT_REVISION_CONFLICT', 'Task contract revision changed during persistence.', 409);
+    }
+    await insertPostgresTaskLifecycleEvent(client, rootRunId, transition.event);
+    await client.query('commit');
+    return { contract: structuredClone(transition.contract), event: structuredClone(transition.event) };
+  } catch (error) {
+    await client.query('rollback').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function listPostgresTaskLifecycleContractEvents(pool, runId) {
+  const result = await pool.query(`
+    select event.event_id, event.contract_id, event.root_run_id, event.revision,
+           event.event_type, event.source_run_id, event.actor, event.payload,
+           event.resulting_status, event.resulting_snapshot_hash, event.created_at
+    from teacher_runs run
+    join teacher_task_lifecycle_contract_events event
+      on event.root_run_id = coalesce(nullif(run.metadata ->> 'continuationRootRunId', ''), run.run_id)
+    where run.run_id = $1
+    order by event.revision asc
+  `, [safeId(runId)]);
+  return result.rows.map((row) => ({
+    version: row.revision === 0 ? 'teacher-task-lifecycle-event-v1' : 'teacher-task-lifecycle-event-v1',
+    eventId: row.event_id,
+    contractId: row.contract_id,
+    lineageId: row.root_run_id,
+    revision: Number(row.revision),
+    eventType: row.event_type,
+    actor: row.actor || {},
+    sourceRunId: row.source_run_id || '',
+    payload: row.payload || {},
+    resultingStatus: row.resulting_status,
+    resultingSnapshotHash: row.resulting_snapshot_hash,
+    createdAt: new Date(row.created_at).toISOString()
+  }));
+}
+
+async function insertPostgresTaskLifecycleEvent(client, rootRunId, event) {
+  await client.query(`
+    insert into teacher_task_lifecycle_contract_events (
+      event_id, contract_id, root_run_id, revision, event_type, source_run_id,
+      actor, payload, resulting_status, resulting_snapshot_hash, created_at
+    ) values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, $10, $11::timestamptz)
+  `, [
+    event.eventId,
+    event.contractId,
+    rootRunId,
+    event.revision,
+    event.eventType,
+    event.sourceRunId || null,
+    JSON.stringify(event.actor || {}),
+    JSON.stringify(event.payload || {}),
+    event.resultingStatus,
+    event.resultingSnapshotHash,
+    event.createdAt
+  ]);
 }
 
 async function appendPostgresExecutionCheckpoint(pool, input) {
@@ -3036,11 +3408,18 @@ function attachEngineeringResumeProjection(execution, checkpoint, engineeringBas
       mainReentryCount: boundedEngineeringCount(engineering?.mainReentryCount),
       revisionCount: boundedEngineeringCount(engineering?.revisionCount ?? engineering?.revisionCycleCount),
       verificationCount: boundedEngineeringCount(engineering?.verificationCount),
+      selectionCount: boundedEngineeringCount(engineering?.selectionCount),
       verification: ['not_run', 'resolved', 'unresolved', 'unavailable'].includes(engineering?.verification)
         ? engineering.verification
         : 'not_run',
       revisionDelivered: engineering?.revisionDelivered === true || engineering?.revisionAdopted === true,
       revisionAdopted: engineering?.revisionAdopted === true,
+      ...(boundedEngineeringScorecard(engineering?.scorecard)
+        ? { scorecard: boundedEngineeringScorecard(engineering.scorecard) }
+        : {}),
+      ...(boundedEngineeringScorecard(engineering?.revisionScorecard)
+        ? { revisionScorecard: boundedEngineeringScorecard(engineering.revisionScorecard) }
+        : {}),
       openSuggestions: boundedEngineeringSuggestions(engineering?.openSuggestions),
       previousSuggestions: publicEngineeringSuggestions(engineering?.previousSuggestions),
       taskGoalRefs: boundedEngineeringList(engineering?.taskGoalRefs, 32),
@@ -3058,6 +3437,30 @@ function attachEngineeringResumeProjection(execution, checkpoint, engineeringBas
 function boundedEngineeringList(value, limit) {
   if (!Array.isArray(value)) return [];
   return JSON.parse(JSON.stringify(value.slice(0, limit)));
+}
+
+function boundedEngineeringScorecard(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const dimensions = [
+    ['userGoalCoverage', 40],
+    ['engineeringClosure', 25],
+    ['consistencyAndPreservation', 20],
+    ['evidenceAndUncertainty', 15],
+    ['total', 100]
+  ];
+  const bounded = {};
+  for (const [name, maximum] of dimensions) {
+    const score = Number(value[name]);
+    if (!Number.isInteger(score) || score < 0 || score > maximum) return undefined;
+    bounded[name] = score;
+  }
+  if (bounded.total !== bounded.userGoalCoverage + bounded.engineeringClosure
+    + bounded.consistencyAndPreservation + bounded.evidenceAndUncertainty
+    || !['deliver', 'deliver_with_advisory', 'optimize'].includes(value.reviewerRecommendation)) {
+    return undefined;
+  }
+  bounded.reviewerRecommendation = value.reviewerRecommendation;
+  return Object.freeze(bounded);
 }
 
 function boundedEngineeringSuggestions(value) {
@@ -3143,16 +3546,7 @@ function stableExecutionRepositoryError(error, fallbackCode) {
 }
 
 function createPool(options = {}) {
-  const connectionString = options.connectionString || process.env.AI_TEACHER_DB_URL || process.env.DATABASE_URL;
-  if (!connectionString) {
-    throw new Error('AI_TEACHER_DB_URL or DATABASE_URL is required for postgres conversation storage');
-  }
-  const { Pool } = require('pg');
-  return new Pool({
-    connectionString,
-    max: Number(options.maxPoolSize || process.env.AI_TEACHER_DB_POOL_MAX || 5),
-    connectionTimeoutMillis: Number(options.connectionTimeoutMillis || process.env.AI_TEACHER_DB_CONNECT_TIMEOUT_MS || 5000)
-  });
+  return require('./database-pool-policy').createTeacherDatabasePool(options, 'postgres conversation storage');
 }
 
 async function loadRun(pool, runId) {
@@ -3255,7 +3649,10 @@ function threadTitle(value) {
 
 function threadContextProjection(contextByteCount, contextLimitTokens) {
   const estimatedTokens = Math.max(0, Math.ceil(Number(contextByteCount || 0) / 3));
-  const limitTokens = Math.max(16_000, Math.min(200_000, Number(contextLimitTokens || 64_000)));
+  const limitTokens = Number(contextLimitTokens);
+  if (!Number.isInteger(limitTokens) || limitTokens <= 0) {
+    throw new RangeError('Thread context limit must come from the active resource policy.');
+  }
   const ratio = limitTokens > 0 ? Math.min(1, estimatedTokens / limitTokens) : 0;
   return {
     contextUsage: {
@@ -3287,6 +3684,8 @@ function deleteMemoryThreadState(state, threadId) {
     'executionLineages',
     'executionArtifacts',
     'executionCheckpoints',
+    'taskLifecycleContracts',
+    'taskLifecycleContractEvents',
     'summaries'
   ]) {
     const map = state[mapName];
@@ -3323,6 +3722,7 @@ function messageRow(row) {
     content: row.content || '',
     response: sanitizeBrowserPayload(row.response || null),
     requestId: row.request_id || '',
+    automaticContinuationSourceRunId: row.automatic_continuation_source_run_id || '',
     createdAt: row.created_at
   };
 }
@@ -3498,6 +3898,7 @@ function operationalWarningCodes(warnings) {
       return detail ? [`code_withheld:${detail}`] : ['code_withheld'];
     }
     if (value.startsWith('main_finalizer_fallback:')) return ['main_finalizer_fallback'];
+    if (value.startsWith('final_answer_worker_fallback:')) return ['final_answer_worker_fallback'];
     if (value.startsWith('lifecycle_callback_failed:')) return ['lifecycle_callback_failed'];
     if (value.startsWith('intent_v2_tool_degraded:')) return ['intent_v2_tool_degraded'];
     if (value.startsWith('intent_v2_gate_fallback:')) return ['intent_v2_gate_fallback'];
@@ -3616,7 +4017,7 @@ async function buildPostgresWorkflowResume(client, checkpoint, context, taskSour
     limit 22
   `, [checkpoint.source_run_id]);
   // 澄清恢复先创建新Run和当前用户消息，再从新Run向源Run回溯。这样当前回答扩展
-  // 已有TaskSourceSet，而不是只作为非规范conversation上下文到达模型。
+  // 已有TaskSourceSet，而不是只作为非规范conversationContext到达模型。
   const taskSources = await buildPostgresTaskSources(client, taskSourceRunId);
   const sourceStudentQuestion = checkpoint.includeSourceStudentQuestion === true
     ? taskSources[0]?.text || await postgresSourceStudentQuestion(client, checkpoint.source_run_id)
@@ -4066,22 +4467,11 @@ function normalizeAutomaticContinuationKind(value) {
 function validateAutomaticContinuationBudget({ kind, context, continuationBudget, lineageCreatedAt }) {
   if (kind !== ENGINEERING_IMPROVEMENT_CONTINUATION) return null;
   const values = context?.runtimeAssignment?.resourcePolicySnapshot?.values || {};
-  const runMaxDurationMs = positiveInteger(
-    values['engineeringImprovement.runMaxDurationMs'],
-    ENGINEERING_IMPROVEMENT_RUN_MAX_MS
-  );
-  const lineageMaxDurationMs = positiveInteger(
-    values['engineeringImprovement.lineageMaxDurationMs'],
-    ENGINEERING_IMPROVEMENT_LINEAGE_MAX_MS
-  );
-  const orchestrationReserveMs = positiveInteger(
-    values['engineeringImprovement.orchestrationReserveMs'],
-    ENGINEERING_IMPROVEMENT_ORCHESTRATION_RESERVE_MS
-  );
-  const minimumCompleteChainMs = positiveInteger(
-    values['engineeringImprovement.minimumCompleteChainMs'],
-    720_000
-  );
+  const policy = agentResourcePolicyRuntimeProjection(values).teacher;
+  const runMaxDurationMs = policy.agentEngineeringImprovementRunMaxDurationMs;
+  const lineageMaxDurationMs = policy.agentEngineeringImprovementLineageMaxDurationMs;
+  const orchestrationReserveMs = policy.agentEngineeringImprovementOrchestrationReserveMs;
+  const minimumCompleteChainMs = policy.agentEngineeringImprovementMinimumCompleteChainMs;
   const requestedDurationMs = positiveInteger(continuationBudget?.effectiveDurationMs, 0);
   const lineageStartedAtMs = Date.parse(String(lineageCreatedAt || ''));
   const elapsedMs = Number.isFinite(lineageStartedAtMs) ? Math.max(0, Date.now() - lineageStartedAtMs) : 0;
@@ -4399,15 +4789,15 @@ async function buildPostgresManualWorkflowResume(client, rootRunId, context, opt
         options.feedbackMessageId,
         rootRun.thread_id
       )
-    : [];
+    : await buildPostgresTaskSources(client, options.sourceRunId);
   const priorSuggestions = options.continuationKind === ENGINEERING_FEEDBACK_CONTINUATION
     ? publicEngineeringSuggestions((await postgresLatestLineageSourceResponse(client, rootRunId))?.engineeringReview?.openSuggestions)
     : [];
   return {
     sourceRunId: rootRunId,
-    ...(options.continuationKind === ENGINEERING_FEEDBACK_CONTINUATION
-      ? { continuationKind: ENGINEERING_IMPROVEMENT_CONTINUATION }
-      : {}),
+    continuationKind: options.continuationKind === ENGINEERING_FEEDBACK_CONTINUATION
+      ? ENGINEERING_IMPROVEMENT_CONTINUATION
+      : EXECUTION_COMPLETION_CONTINUATION,
     fastGate,
     sourceStudentQuestion,
     ...(taskSources.length ? { taskSources } : {}),
@@ -4473,15 +4863,15 @@ function buildMemoryManualWorkflowResume(state, rootRunId, context, options = {}
         options.feedbackMessageId,
         rootRun.threadId
       )
-    : [];
+    : buildMemoryTaskSources(state, options.sourceRunId);
   const priorSuggestions = options.continuationKind === ENGINEERING_FEEDBACK_CONTINUATION
     ? publicEngineeringSuggestions(latestMemoryLineageSourceResponse(state, rootRunId)?.engineeringReview?.openSuggestions)
     : [];
   return {
     sourceRunId: rootRunId,
-    ...(options.continuationKind === ENGINEERING_FEEDBACK_CONTINUATION
-      ? { continuationKind: ENGINEERING_IMPROVEMENT_CONTINUATION }
-      : {}),
+    continuationKind: options.continuationKind === ENGINEERING_FEEDBACK_CONTINUATION
+      ? ENGINEERING_IMPROVEMENT_CONTINUATION
+      : EXECUTION_COMPLETION_CONTINUATION,
     fastGate,
     sourceStudentQuestion,
     ...(taskSources.length ? { taskSources } : {}),
@@ -4593,9 +4983,13 @@ function appendEngineeringFeedbackTaskSource(taskSources, context, messageId, th
 }
 
 function assertMemoryEngineeringFeedbackSource(state, sourceRun, rootRunId) {
-  const latest = [...state.runs.values()]
-    .filter((run) => run.status === 'succeeded' && memoryExecutionRootRunId(state, run) === rootRunId)
-    .sort((left, right) => String(right.createdAt || '').localeCompare(String(left.createdAt || '')))[0];
+  const latest = [...(state.messages.get(sourceRun.threadId) || [])].reverse().find((message) => {
+    const run = state.runs.get(message.runId);
+    return message.role === 'assistant'
+      && message.status === 'succeeded'
+      && run?.status === 'succeeded'
+      && memoryExecutionRootRunId(state, run) === rootRunId;
+  });
   const response = (state.messages.get(sourceRun.threadId) || []).find((message) => (
     message.runId === sourceRun.runId && message.role === 'assistant' && message.status === 'succeeded'
   ))?.response;
@@ -4611,13 +5005,13 @@ async function assertPostgresEngineeringFeedbackSource(client, sourceRun, rootRu
     select run.run_id, message.response
     from teacher_runs run
     join lateral (
-      select response from teacher_messages
+      select response, created_at, message_id from teacher_messages
       where run_id = run.run_id and role = 'assistant' and status = 'succeeded'
       order by created_at desc, message_id desc limit 1
     ) message on true
     where run.status = 'succeeded'
       and (run.run_id = $1 or run.metadata ->> 'continuationRootRunId' = $1)
-    order by run.created_at desc, run.run_id desc
+    order by message.created_at desc, message.message_id desc
     limit 1
   `, [rootRunId]);
   const row = latest.rows[0];
@@ -4629,7 +5023,68 @@ async function assertPostgresEngineeringFeedbackSource(client, sourceRun, rootRu
 }
 
 function normalizeManualContinuationKind(value) {
-  return value === ENGINEERING_FEEDBACK_CONTINUATION ? ENGINEERING_FEEDBACK_CONTINUATION : '';
+  return value === ENGINEERING_FEEDBACK_CONTINUATION
+    ? ENGINEERING_FEEDBACK_CONTINUATION
+    : EXECUTION_COMPLETION_CONTINUATION;
+}
+
+function assertMemoryLatestExecutionContinuationSource(state, sourceRun, rootRunId) {
+  const latest = [...(state.messages.get(sourceRun.threadId) || [])].reverse().find((message) => {
+    const run = state.runs.get(message.runId);
+    return message.role === 'assistant'
+      && message.status === 'succeeded'
+      && run?.status === 'succeeded'
+      && memoryExecutionRootRunId(state, run) === rootRunId;
+  });
+  const response = memoryRunSourceResponse(state, sourceRun.runId);
+  const completedReplayAvailable = loadLatestMemoryExecutionCheckpoint(state, rootRunId)
+    ?.execution?.decision?.phase === 'completed';
+  if (latest?.runId !== sourceRun.runId
+    || !executionContinuationResponseEligible(response, completedReplayAvailable)) {
+    throw manualContinuationError('MANUAL_CONTINUATION_SOURCE_STALE', 409);
+  }
+}
+
+function executionCheckpointPhaseSqlList() {
+  return [...EXECUTION_PHASES]
+    .map((phase) => `'${String(phase).replaceAll("'", "''")}'`)
+    .join(', ');
+}
+
+function executionCheckpointPhaseConstraintSql() {
+  return `
+    alter table teacher_execution_checkpoints
+      drop constraint if exists teacher_execution_checkpoints_phase_check,
+      add constraint teacher_execution_checkpoints_phase_check
+      check (phase in (${executionCheckpointPhaseSqlList()}))
+  `;
+}
+
+async function assertPostgresLatestExecutionContinuationSource(client, sourceRun, rootRunId) {
+  const latest = await client.query(`
+    select run.run_id, message.response
+    from teacher_runs run
+    join teacher_messages message on message.run_id = run.run_id
+      and message.role = 'assistant' and message.status = 'succeeded'
+    where run.status = 'succeeded'
+      and (run.run_id = $1 or run.metadata ->> 'continuationRootRunId' = $1)
+    order by message.created_at desc, message.message_id desc
+    limit 1
+  `, [rootRunId]);
+  const completedReplayAvailable = (await loadLatestPostgresExecutionCheckpointWithClient(client, rootRunId))
+    ?.execution?.decision?.phase === 'completed';
+  if (latest.rows[0]?.run_id !== sourceRun.run_id
+    || !executionContinuationResponseEligible(latest.rows[0]?.response, completedReplayAvailable)) {
+    throw manualContinuationError('MANUAL_CONTINUATION_SOURCE_STALE', 409);
+  }
+}
+
+function executionContinuationResponseEligible(response, completedReplayAvailable = false) {
+  if (response?.answerCompletionStatus === 'complete') return completedReplayAvailable === true;
+  return response?.answerCompletionStatus === 'incomplete'
+    && response?.continuation?.kind === EXECUTION_COMPLETION_CONTINUATION
+    && response?.continuation?.status === 'user_confirmation_required'
+    && response?.continuation?.canContinue === true;
 }
 
 function latestMemoryLineageSourceResponse(state, rootRunId, excludeRunId = '') {
@@ -4644,8 +5099,27 @@ function latestMemoryLineageSourceResponse(state, rootRunId, excludeRunId = '') 
   })?.response;
 }
 
+function memoryRunSourceResponse(state, runId) {
+  const run = state.runs.get(safeId(runId));
+  if (!run) return undefined;
+  return [...(state.messages.get(run.threadId) || [])].reverse().find((message) => (
+    message.runId === run.runId
+    && message.role === 'assistant'
+    && message.status === 'succeeded'
+  ))?.response;
+}
+
+async function postgresRunSourceResponse(client, runId) {
+  const result = await client.query(`
+    select response from teacher_messages
+    where run_id = $1 and role = 'assistant' and status = 'succeeded'
+    order by created_at desc, message_id desc limit 1
+  `, [runId]);
+  return result.rows[0]?.response || undefined;
+}
+
 function boundedResumeQuestion(value) {
-  return String(value || '').trim().slice(0, 8_000);
+  return String(value || '').trim().slice(0, STUDENT_QUESTION_PROTOCOL_CEILING);
 }
 
 const TERMINAL_AUDIT_EVENT_TYPES = new Set([
@@ -4766,6 +5240,34 @@ function safeReasonCode(value) {
     .slice(0, 160);
 }
 
+function taskLifecycleContractId(rootRunId) {
+  return `task_contract_${crypto.createHash('sha256').update(String(rootRunId)).digest('hex').slice(0, 24)}`;
+}
+
+function taskLifecycleCreationEvent(contract, sourceRunId) {
+  return Object.freeze({
+    version: 'teacher-task-lifecycle-event-v1',
+    eventId: `tcevt_${crypto.createHash('sha256').update(`${contract.contractId}:0:created`).digest('hex').slice(0, 24)}`,
+    contractId: contract.contractId,
+    lineageId: contract.lineageId,
+    revision: 0,
+    eventType: 'created',
+    actor: { type: 'server', id: '' },
+    sourceRunId: String(sourceRunId || ''),
+    payload: { rootGoalId: contract.rootGoalId },
+    resultingStatus: contract.status,
+    resultingSnapshotHash: contract.snapshotHash,
+    createdAt: contract.createdAt
+  });
+}
+
+function taskLifecycleStoreError(code, message, statusCode) {
+  const error = new Error(message);
+  error.code = code;
+  error.statusCode = statusCode;
+  return error;
+}
+
 function boundedPositiveInteger(value, fallback, maximum) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
@@ -4776,5 +5278,10 @@ module.exports = {
   createConversationStore,
   createMemoryConversationStore,
   createPostgresConversationStore,
-  migrateTeacherConversationStore
+  migrateTeacherConversationStore,
+  conversationStoreTesting: Object.freeze({
+    boundedResumeQuestion,
+    executionCheckpointPhaseConstraintSql,
+    executionCheckpointPhaseSqlList
+  })
 };

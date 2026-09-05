@@ -129,7 +129,9 @@ export class ToolExecutionLedger {
     input: unknown;
     abortSignal?: AbortSignal;
     replayedFromRunId?: string;
-    operation: () => Promise<OUTPUT>;
+    operation: (controls: Readonly<{
+      markBackendExecutionStarted: () => void;
+    }>) => Promise<OUTPUT>;
   }): Promise<OUTPUT> {
     const canonicalArgs = canonicalizeToolArguments(args.input);
     const argsHash = await hashCanonicalValue(args.input);
@@ -165,6 +167,7 @@ export class ToolExecutionLedger {
         argsHash,
         status: "running",
         replayCount: 1,
+        backendExecuted: false,
         executionContext: this.#executionContexts.get(args.toolCallId),
         startedAt: new Date().toISOString(),
       };
@@ -205,6 +208,7 @@ export class ToolExecutionLedger {
       argsHash,
       status: "running",
       replayCount: 0,
+      backendExecuted: false,
       ...(args.replayedFromRunId ? { replayedFromRunId: args.replayedFromRunId } : {}),
       executionContext: this.#executionContexts.get(args.toolCallId),
       startedAt: new Date().toISOString(),
@@ -214,7 +218,11 @@ export class ToolExecutionLedger {
     const promise = (async (): Promise<OUTPUT> => {
       try {
         args.abortSignal?.throwIfAborted();
-        const output = await raceWithAbort(args.operation(), args.abortSignal);
+        const output = await raceWithAbort(args.operation(Object.freeze({
+          markBackendExecutionStarted: () => {
+            record.backendExecuted = true;
+          },
+        })), args.abortSignal);
         args.abortSignal?.throwIfAborted();
         record.status = "succeeded";
         record.output = output;
@@ -268,6 +276,7 @@ export class ToolExecutionLedger {
       argsHash,
       status: "succeeded",
       replayCount: 0,
+      backendExecuted: false,
       ...(args.replayedFromRunId ? { replayedFromRunId: args.replayedFromRunId } : {}),
       executionContext: this.#executionContexts.get(args.toolCallId),
       startedAt: timestamp,

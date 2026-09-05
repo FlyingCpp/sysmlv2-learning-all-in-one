@@ -13,8 +13,10 @@ const { materializeReviewedKnowledgePatterns } = require('./knowledge-patterns')
 const { rankKnowledgeClaims, resolveKnowledgeRankingMode } = require('./knowledge-ranking');
 const {
   ACTIVATION_READINESS_SCHEMA_VERSION,
-  evaluateActivationReadiness
+  evaluateActivationReadiness,
+  evaluateExampleActivationReadiness
 } = require('../../scripts/sysml-knowledge/activation-readiness-v1');
+const { assertExampleAsset } = require('../../scripts/sysml-knowledge/example-asset-helpers');
 
 const DEFAULT_LIMIT = 8;
 const MAX_LIMIT = 25;
@@ -65,7 +67,8 @@ const OPTIONAL_BUNDLE_ARTIFACTS = [
   'knowledge-patterns.jsonl',
   'production-responsibilities.jsonl',
   'capability-units.jsonl',
-  'model-user-objectives.jsonl'
+  'model-user-objectives.jsonl',
+  'examples.jsonl'
 ];
 const LANGUAGE_GOVERNANCE_EVALUATOR_ID = 'sysml-language-closure/v1';
 const KNOWLEDGE_PATTERN_GOVERNANCE_EVALUATOR_ID = 'model-user-knowledge-pattern-closure/v1';
@@ -89,14 +92,7 @@ const KNOWLEDGE_PATTERN_GATE_MAP = Object.freeze({
 });
 
 function createKnowledgePool(options = {}) {
-  const connectionString = options.connectionString || process.env.AI_TEACHER_DB_URL || process.env.DATABASE_URL;
-  if (!connectionString) throw new Error('AI_TEACHER_DB_URL or DATABASE_URL is required for SysML knowledge storage');
-  const { Pool } = require('pg');
-  return new Pool({
-    connectionString,
-    max: Number(options.maxPoolSize || process.env.AI_TEACHER_DB_POOL_MAX || 5),
-    connectionTimeoutMillis: Number(options.connectionTimeoutMillis || process.env.AI_TEACHER_DB_CONNECT_TIMEOUT_MS || 5000)
-  });
+  return require('./database-pool-policy').createTeacherDatabasePool(options, 'SysML knowledge storage');
 }
 
 async function migrateSysmlKnowledgeStore(options = {}) {
@@ -333,6 +329,29 @@ async function migrateSysmlKnowledgeStore(options = {}) {
       )
     `);
     await pool.query(`
+      create table if not exists knowledge_examples (
+        bundle_id text not null references knowledge_bundles(bundle_id) on delete restrict,
+        example_id text not null,
+        title text not null,
+        intent_text text not null,
+        model_text text not null,
+        model_text_hash text not null,
+        construct_tags text[] not null default '{}',
+        domain_tags text[] not null default '{}',
+        topic_path text,
+        language_version_track text not null,
+        example_authority text not null,
+        source jsonb not null,
+        validator_attestation jsonb not null,
+        review_status text not null check (review_status = 'machine_validated'),
+        size_chars integer not null,
+        related_claim_ids text[] not null default '{}',
+        properties jsonb not null default '{}'::jsonb,
+        search_vector tsvector not null default ''::tsvector,
+        primary key (bundle_id, example_id)
+      )
+    `);
+    await pool.query(`
       create table if not exists knowledge_relations (
         relation_id text not null,
         bundle_id text not null references knowledge_bundles(bundle_id) on delete restrict,
@@ -428,6 +447,8 @@ async function migrateSysmlKnowledgeStore(options = {}) {
     await pool.query(`create index if not exists teaching_overlay_claim_links_claim_idx on teaching_overlay_claim_links (bundle_id, claim_id)`);
     await pool.query(`create index if not exists knowledge_relations_source_idx on knowledge_relations (bundle_id, source_kind, source_id, relation_layer)`);
     await pool.query(`create index if not exists knowledge_relations_target_idx on knowledge_relations (bundle_id, target_kind, target_id, relation_layer)`);
+    await pool.query(`create index if not exists knowledge_examples_search_idx on knowledge_examples using gin (search_vector)`);
+    await pool.query(`create index if not exists knowledge_examples_construct_tags_idx on knowledge_examples using gin (construct_tags)`);
     await pool.query(`create index if not exists knowledge_retrieval_sessions_expiry_idx on knowledge_retrieval_sessions (expires_at)`);
     // 旧 Active Bundle 没有关系 artifact；迁移时只按冻结 profile 回填确定性投影。
     // 临时移除关系表自身 guard，避免已 ACTIVE Bundle 阻断幂等 backfill；其他 artifact guard 不受影响。
@@ -473,6 +494,7 @@ async function migrateSysmlKnowledgeStore(options = {}) {
       'teaching_overlays',
       'teaching_overlay_claim_links',
       'knowledge_patterns',
+      'knowledge_examples',
       'knowledge_relations'
     ]) {
       await pool.query(`drop trigger if exists ${tableName}_immutable_guard on ${tableName}`);
@@ -602,6 +624,45 @@ async function queryActiveSysmlKnowledge(pool, query, context = {}, options = {}
   `, [baselineId]);
   const bundle = active.rows[0];
   if (!bundle) return emptyQueryResult(queryPlan, baselineId);
+  const queryText = normalizeSearchText(queryPlan.effectiveQuery);
+  const searchTsQuery = buildDisjunctiveSearchTsQuery(queryText);
+  let examples = [];
+  const expectedExampleCount = Number(bundle.manifest?.counts?.examples || 0);
+  if (expectedExampleCount > 0) {
+    const exampleLimit = Math.max(1, Number(options.exampleLimit ?? options.limit ?? 5));
+    const offset = Math.max(0, Number(options.offset) || 0);
+    if (exampleLimit > 0) {
+      const constructTags = uniqueStrings(options.constructTags || []);
+      const examplesResult = await pool.query(`
+        select example_id, title, intent_text, model_text, model_text_hash, construct_tags,
+               domain_tags, topic_path, language_version_track, example_authority, source,
+               validator_attestation, review_status, size_chars, related_claim_ids, properties
+        from knowledge_examples
+        where bundle_id = $1
+          and review_status = 'machine_validated'
+          and (
+            example_id = any($6::text[])
+            or (cardinality($6::text[]) = 0 and cardinality($2::text[]) > 0 and construct_tags && $2::text[])
+            or (
+              cardinality($6::text[]) = 0 and length($3) > 0
+              and search_vector @@ to_tsquery('simple', $3)
+            )
+          )
+        order by
+          case when cardinality($2::text[]) > 0 and construct_tags @> $2::text[] then 0 else 1 end,
+          case when length($3) > 0 then ts_rank_cd(search_vector, to_tsquery('simple', $3)) else 0 end desc,
+          case when example_authority = 'official-example' then 0 else 1 end,
+          example_id
+        limit $4 offset $5
+      `, [bundle.bundle_id, constructTags, searchTsQuery, exampleLimit + 1, offset, uniqueStrings(options.exampleIds || [])]);
+      examples = examplesResult.rows.map(rowToKnowledgeExample);
+    }
+  }
+
+  const pageSize = Math.max(1, Number(options.exampleLimit ?? options.limit ?? 5));
+  const moreExamples = examples.length > pageSize;
+  examples = examples.slice(0, pageSize);
+
   const answerRequiredAstContextIds = occurrenceContexts(queryPlan, queryPlan.answerRequiredOperators);
   const supportingAstContextIds = occurrenceContexts(queryPlan, queryPlan.supportingOperators);
   let knowledgeAnswerRequiredClaimIds = requiredClaimIdsForQuery(
@@ -612,17 +673,14 @@ async function queryActiveSysmlKnowledge(pool, query, context = {}, options = {}
     queryPlan.supportingOperators,
     supportingAstContextIds
   ).filter((claimId) => !knowledgeAnswerRequiredClaimIds.includes(claimId));
+  knowledgeAnswerRequiredClaimIds = uniqueStrings([...knowledgeAnswerRequiredClaimIds, ...(options.claimIds || []), ...examples.flatMap(example => example.relatedClaimIds || [])]);
   let closureClaimIds = [...knowledgeAnswerRequiredClaimIds, ...knowledgeSupportingClaimIds];
-  if (closureClaimIds.length > MAX_LIMIT) {
-    throw new Error(`Required Claim closure exceeds the ${MAX_LIMIT}-Claim resource limit`);
-  }
+
   // 模型 limit 只约束闭包之外的候选，不得截断由可信问题/模型上下文推导出的 Claim 闭包。
-  let additionalSupportingBudget = Math.min(requestedLimit, MAX_LIMIT - closureClaimIds.length);
+  let additionalSupportingBudget = requestedLimit;
   let selectionLimit = closureClaimIds.length + additionalSupportingBudget;
   const operators = uniqueStrings([...queryPlan.answerRequiredOperators, ...queryPlan.supportingOperators]);
   const astContextIds = uniqueStrings([...answerRequiredAstContextIds, ...supportingAstContextIds]);
-  const queryText = normalizeSearchText(queryPlan.effectiveQuery);
-  const searchTsQuery = buildDisjunctiveSearchTsQuery(queryText);
   const claimsResult = await pool.query(`
     with candidates as (
       select claim_id, claim_type, subject_node_id, predicate, object_node_id, operators,
@@ -669,7 +727,8 @@ async function queryActiveSysmlKnowledge(pool, query, context = {}, options = {}
     )
     select candidates.*, diagnostics.total_candidate_count, diagnostics.excluded_candidate_ids
     from candidates cross join diagnostics
-    where candidates.candidate_rank <= $6
+    where candidates.claim_id = any($5::text[])
+       or (candidates.candidate_rank > (select count(*) from candidates where claim_id = any($5::text[])) + $9 and candidates.candidate_rank <= (select count(*) from candidates where claim_id = any($5::text[])) + ($6 - cardinality($5::text[])) + $9)
     order by candidates.candidate_rank
   `, [
     bundle.bundle_id,
@@ -679,7 +738,8 @@ async function queryActiveSysmlKnowledge(pool, query, context = {}, options = {}
     closureClaimIds,
     selectionLimit,
     MAX_LIMIT,
-    rankingMode !== 'legacy'
+    rankingMode !== 'legacy',
+    Math.max(0, Number(options.offset) || 0)
   ]);
   const initialClaims = claimsResult.rows.map(rowToClaim);
   const expectedPatternCount = Number(bundle.manifest?.counts?.knowledgePatterns || 0);
@@ -715,7 +775,7 @@ async function queryActiveSysmlKnowledge(pool, query, context = {}, options = {}
   const patternSelection = activateSelectedKnowledgePatterns({
     patterns: selectablePatterns,
     existingClosureClaimIds: closureClaimIds,
-    resourceLimit: MAX_LIMIT
+    resourceLimit: Number.POSITIVE_INFINITY
   });
   const selectedPatterns = patternSelection.patterns;
   const selectedKnowledgePatternIds = selectedPatterns.map((pattern) => pattern.patternId);
@@ -738,7 +798,7 @@ async function queryActiveSysmlKnowledge(pool, query, context = {}, options = {}
   knowledgeSupportingClaimIds = knowledgeSupportingClaimIds
     .filter((claimId) => !knowledgeAnswerRequiredClaimIds.includes(claimId));
   closureClaimIds = [...knowledgeAnswerRequiredClaimIds, ...knowledgeSupportingClaimIds];
-  additionalSupportingBudget = Math.min(requestedLimit, MAX_LIMIT - closureClaimIds.length);
+  additionalSupportingBudget = requestedLimit;
   selectionLimit = closureClaimIds.length + additionalSupportingBudget;
 
   const initialClaimsById = new Map(initialClaims.map((claim) => [claim.claimId, claim]));
@@ -779,7 +839,7 @@ async function queryActiveSysmlKnowledge(pool, query, context = {}, options = {}
       .map((claimId) => String(claimId))
       .filter((claimId) => claimId && !returnedClaimIds.has(claimId))
   };
-  const evidenceIds = [...new Set(legacyClaims.flatMap((claim) => claim.evidenceIds))];
+  const evidenceIds = [...new Set([...legacyClaims.flatMap((claim) => claim.evidenceIds), ...(options.evidenceIds || [])])];
   const evidenceResult = evidenceIds.length
     ? await pool.query(`
         select evidence_id, source_id, section_path, block_type, line_start, line_end, text_content,
@@ -880,7 +940,11 @@ async function queryActiveSysmlKnowledge(pool, query, context = {}, options = {}
   const coverage = claims.length === 0
     ? 'NONE'
     : claimsHaveEvidence && operatorsCovered && closureGaps.length === 0 ? 'COMPLETE' : 'PARTIAL';
+
+  const hasMore = moreExamples || totalCandidateCount > Math.max(0, Number(options.offset) || 0) + requestedLimit;
   const result = {
+    hasMore,
+    ...(hasMore ? { nextOffset: Math.max(0, Number(options.offset) || 0) + pageSize } : {}),
     coverage,
     bundleId: bundle.bundle_id,
     baselineId: bundle.baseline_id,
@@ -918,11 +982,38 @@ async function queryActiveSysmlKnowledge(pool, query, context = {}, options = {}
     evidenceBlocks,
     syntaxMappings,
     guardrails,
+    examples,
     conflicts: [],
     excludedCandidates,
     ...(ranking.audit.mode === 'legacy' ? {} : { ranking: ranking.audit })
   };
   return { ...result, resultHash: hashText(canonicalJson(result)) };
+}
+
+async function listActiveExampleCatalog(pool, options = {}) {
+  const baselineId = String(options.baselineId || 'sysml-2.0-formal');
+  const active = await pool.query(`
+    select bundle_id
+    from knowledge_bundles
+    where baseline_id = $1 and status = 'ACTIVE'
+    limit 1
+  `, [baselineId]);
+  const bundle = active.rows[0];
+  if (!bundle) return [];
+  const result = await pool.query(`
+    select example_id, title, topic_path, construct_tags, example_authority
+    from knowledge_examples
+    where bundle_id = $1
+      and review_status = 'machine_validated'
+    order by topic_path, example_id
+  `, [bundle.bundle_id]);
+  return result.rows.map((row) => ({
+    exampleId: String(row.example_id || ''),
+    title: String(row.title || ''),
+    topicPath: String(row.topic_path || 'generic'),
+    constructTags: uniqueStrings(row.construct_tags || []),
+    exampleAuthority: String(row.example_authority || '')
+  }));
 }
 
 function sysmlKnowledgeResultToHits(result) {
@@ -1081,6 +1172,40 @@ async function insertBundleRecords(client, bundle) {
       pattern.examObjectiveIds, pattern.anchorNodeIds, pattern.requiredClaimIds, pattern.requiredEdgeIds,
       pattern.guardrailIds, pattern.fixtureIds, pattern.reviewStatus, JSON.stringify(pattern.properties || {})]);
   }
+  for (const example of bundle.records['examples.jsonl'] || []) {
+    await client.query(`
+      insert into knowledge_examples (
+        bundle_id, example_id, title, intent_text, model_text, model_text_hash,
+        construct_tags, domain_tags, topic_path, language_version_track, example_authority,
+        source, validator_attestation, review_status, size_chars, related_claim_ids, properties,
+        search_vector
+      ) values (
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13::jsonb,$14,$15,$16,$17::jsonb,
+        setweight(to_tsvector('simple', $4), 'A')
+        || setweight(to_tsvector('simple', $3), 'A')
+        || setweight(to_tsvector('simple', array_to_string($7::text[], ' ')), 'A')
+        || setweight(to_tsvector('simple', coalesce($9, '')), 'B')
+      )
+    `, [
+      bundle.manifest.bundleId,
+      example.exampleId,
+      example.title,
+      example.intentText,
+      example.modelText,
+      example.modelTextHash,
+      example.constructTags || [],
+      example.domainTags || [],
+      example.topicPath || null,
+      example.languageVersionTrack,
+      example.exampleAuthority,
+      JSON.stringify(example.source || {}),
+      JSON.stringify(example.validatorAttestation || {}),
+      example.reviewStatus,
+      example.sizeChars,
+      example.relatedClaimIds || [],
+      JSON.stringify(example.properties || {})
+    ]);
+  }
   const derivedRelations = deriveKnowledgeRelations(bundle.records);
   const explicitRelations = bundle.records['knowledge-relations.jsonl'] || [];
   validateKnowledgeRelationSet([...derivedRelations, ...explicitRelations], bundle.records);
@@ -1186,6 +1311,9 @@ function loadAndVerifyBundle(bundleDir) {
   if (manifest.counts?.knowledgePatterns !== undefined && !records['knowledge-patterns.jsonl']) {
     throw new Error('Bundle knowledgePatterns count requires a hashed knowledge-patterns.jsonl artifact');
   }
+  if (manifest.counts?.examples !== undefined && !records['examples.jsonl']) {
+    throw new Error('Bundle examples count requires a hashed examples.jsonl artifact');
+  }
   for (const [countName, fileName] of [
     ['productionResponsibilities', 'production-responsibilities.jsonl'],
     ['capabilityUnits', 'capability-units.jsonl'],
@@ -1263,6 +1391,22 @@ function loadAndVerifyBundle(bundleDir) {
     records['knowledge-patterns.jsonl'] = artifactPatterns;
   } else if (Array.isArray(authoring.knowledgePatterns)) {
     throw new Error('Locked authoring knowledgePatterns requires a hashed Bundle artifact');
+  }
+  if (records['examples.jsonl'] || manifest.counts?.examples !== undefined) {
+    if (!manifest.exampleGovernance) {
+      throw new Error('Bundle examples require exampleGovernance');
+    }
+    for (const example of records['examples.jsonl'] || []) {
+      assertExampleAsset(example);
+    }
+    const exampleReadiness = evaluateExampleActivationReadiness({
+      examples: records['examples.jsonl'] || [],
+      exampleGovernance: manifest.exampleGovernance
+    });
+    if (exampleReadiness.checks.exampleValidatorAttestation.status !== 'PASS'
+      || (manifest.activationReadiness?.checks?.exampleValidatorAttestation?.status !== 'PASS')) {
+      throw new Error('Bundle example validator attestation is incomplete');
+    }
   }
   assertProductionKnowledgeArtifactsMatchAuthoring({ records, authoring });
   assertLanguageGovernanceAttestation({ manifest, records, sourceRegistry, authoring });
@@ -1680,6 +1824,9 @@ function assertRecordCounts(counts, records) {
   if (records['model-user-objectives.jsonl']) {
     expected.modelUserObjectives = records['model-user-objectives.jsonl'].length;
   }
+  if (records['examples.jsonl']) {
+    expected.examples = records['examples.jsonl'].length;
+  }
   for (const [name, count] of Object.entries(expected)) {
     if (Number(counts?.[name]) !== count) throw new Error(`Bundle record count mismatch: ${name}`);
   }
@@ -1720,6 +1867,20 @@ function assertManifestActivationReady(manifest) {
 }
 
 function isManifestActivationReady(manifest) {
+  const requiresExampleReadiness = Boolean(manifest?.exampleGovernance)
+    || manifest?.counts?.examples !== undefined;
+  if (requiresExampleReadiness) {
+    const governance = manifest.exampleGovernance;
+    if (!governance
+      || governance.status !== 'PASS'
+      || governance.licenseAudited !== true
+      || governance.sourceCommitPinned !== true) {
+      return false;
+    }
+    if (manifest.activationReadiness?.checks?.exampleValidatorAttestation?.status !== 'PASS') {
+      return false;
+    }
+  }
   if (!manifest?.productionKnowledgeGovernance) return true;
   const readiness = manifest.activationReadiness;
   return readiness?.schemaVersion === ACTIVATION_READINESS_SCHEMA_VERSION
@@ -2266,6 +2427,29 @@ function rowToKnowledgePattern(row) {
   };
 }
 
+function rowToKnowledgeExample(row) {
+  return {
+    exampleId: String(row.example_id || ''),
+    title: String(row.title || ''),
+    intentText: String(row.intent_text || ''),
+    modelText: String(row.model_text || ''),
+    modelTextHash: String(row.model_text_hash || ''),
+    constructTags: uniqueStrings(row.construct_tags || []),
+    domainTags: uniqueStrings(row.domain_tags || []),
+    topicPath: row.topic_path == null ? null : String(row.topic_path),
+    languageVersionTrack: String(row.language_version_track || ''),
+    exampleAuthority: String(row.example_authority || ''),
+    source: row.source && typeof row.source === 'object' ? row.source : {},
+    validatorAttestation: row.validator_attestation && typeof row.validator_attestation === 'object'
+      ? row.validator_attestation
+      : {},
+    reviewStatus: String(row.review_status || ''),
+    sizeChars: Number(row.size_chars || 0),
+    relatedClaimIds: uniqueStrings(row.related_claim_ids || []),
+    properties: row.properties && typeof row.properties === 'object' ? row.properties : {}
+  };
+}
+
 function findKnowledgePatternCandidates({ patterns, anchorClaims }) {
   const candidateClaimIds = new Set(anchorClaims.map((claim) => claim.claimId));
   const candidateNodeIds = new Set(anchorClaims.flatMap((claim) => [
@@ -2361,6 +2545,7 @@ function emptyQueryResult(queryPlan, baselineId) {
     evidenceBlocks: [],
     syntaxMappings: [],
     guardrails: [],
+    examples: [],
     conflicts: [],
     excludedCandidates: { count: 0, claimIds: [] }
   };
@@ -2406,6 +2591,7 @@ module.exports = {
   loadAndVerifyBundle,
   migrateSysmlKnowledgeStore,
   queryActiveSysmlKnowledge,
+  listActiveExampleCatalog,
   requiredClaimIdsForQuery,
   SYSML_ANSWER_CLOSURE_PROFILE_HASH,
   SYSML_ANSWER_CLOSURE_PROFILE_ID,

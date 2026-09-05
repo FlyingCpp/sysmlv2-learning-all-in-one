@@ -2,171 +2,210 @@
 
 const crypto = require('crypto');
 
-const SCHEMA_VERSION = 8;
+const SCHEMA_VERSION = 24;
+const CONTEXT_TOKEN_BYTE_ESTIMATE = 4;
+const STUDENT_QUESTION_PROTOCOL_CEILING = 20000;
 
 const GROUPS = Object.freeze([
-  Object.freeze({ id: 'api', label: 'API 外层', description: '平台 API 到 Teacher 的请求宽限与外层终止边界。' }),
-  Object.freeze({ id: 'run', label: 'Run 时间', description: '单个 Agent Run 的总时限、收敛窗口与工具等待预算。' }),
-  Object.freeze({ id: 'scope', label: 'Scope Gate', description: '首次范围筛选与独立复核预算。' }),
-  Object.freeze({ id: 'answer', label: '回答 Token', description: '最终回答的上下文与输出 ceiling。' }),
-  Object.freeze({ id: 'knowledge', label: '知识检索', description: '每个 Run 可发起的新知识查询 ceiling。' }),
-  Object.freeze({ id: 'candidate', label: 'Candidate', description: '候选生成、内容恢复与 Artifact 输入安全边界；初始 Candidate 输出由 Provider 管理。' }),
-  Object.freeze({ id: 'repair', label: 'Repair 阶段', description: 'Validator 失败后的 Repair 时间预留、有效轮次和上下文准入边界。' }),
-  Object.freeze({ id: 'semanticReview', label: '工程语义软 Review', description: 'Official Validator PASS 后的只读评议、Main 判读、一次工程完善和确认预算。' }),
-  Object.freeze({ id: 'engineeringRevision', label: '工程语义完善', description: '工程建议被准入后，由 Candidate Worker 完成一次完整候选修订和必要语法修复。' }),
-  Object.freeze({ id: 'engineeringImprovement', label: '工程改进续跑', description: 'Primary Run 无法容纳完整改进链时，唯一 Improvement 子 Run 的时间和 lineage 边界。' }),
-  Object.freeze({ id: 'validator', label: 'Validator', description: 'Validator Tool 的排队、执行与总等待预算。' }),
-  Object.freeze({ id: 'provider', label: 'Provider', description: '模型 Provider 的并发、排队、重试与熔断策略。' }),
-  Object.freeze({ id: 'probe', label: '健康探测', description: '付费 Provider 探针的频率与超时。' }),
-  Object.freeze({ id: 'model', label: '阶段模型', description: '从已注册 LiteLLM Alias 中为各执行阶段选择模型；按新 Run 冻结。' })
+  group('run', 'Run 与恢复', '单 Run 总资源、终态预留和有界恢复。'),
+  group('stage', '阶段模型与输出', 'Main、Candidate、Repair 和 Finalizer 的模型与输出策略。'),
+  group('tool', 'Tool 与上下文', '只读 Tool 共享预算和对话上下文窗口。'),
+  group('knowledge', '知识与领域证据', '已审核知识和工程领域证据的查询预算。'),
+  group('candidate', 'Candidate 与 Repair', 'Candidate 尝试、Artifact、Repair 进展和唯一验证候选。'),
+  group('validator', 'Validator', 'Official Validator 的容量、排队和执行停滞保护。'),
+  group('provider', 'Run Admission', 'Teacher侧只保留整轮Run的Provider并发准入；重试、熔断和请求超时由LiteLLM Provider Owner管理。'),
+  group('probe', '健康探测', '后台健康探测频率与超时。'),
+  group('scope', 'Scope Gate', '快速范围判读的模型与停滞保护。'),
+  group('semanticReview', '工程语义软 Review', '只读软评议；失败不阻断已验证交付。')
 ]);
 
 const DEFINITIONS = Object.freeze([
-  integer('api.outerTimeoutMs', 'api', 'API 外层超时', 630000, 150000, 1200000, 'ms', 'high', 'new_run', 'api', '平台 API 等待单个 Teacher Run 完成、持久化并关闭响应的外层时限。'),
-  integer('run.maxSteps', 'run', 'Run 最大步数', 8, 1, 8, 'steps', 'high', 'new_run', 'teacher', 'AI SDK 主循环的安全上限。'),
-  integer('run.maxDurationMs', 'run', 'Run 最长执行时间', 600000, 120000, 900000, 'ms', 'high', 'new_run', 'teacher', '从 Run 开始到终态的 hard deadline。'),
-  integer('run.terminalReserveMs', 'run', '终态阶段预留', 30000, 5000, 60000, 'ms', 'high', 'new_run', 'teacher', 'Run 内最终绑定、持久化和安全返回不可被 Candidate 占用的时间。'),
-  integer('run.convergeLeadMs', 'run', '收敛提前量', 75000, 30000, 75000, 'ms', 'medium', 'new_run', '到达 hard deadline 前停止探索并进入收敛的窗口。'),
-  integer('run.toolTimeoutMs', 'run', 'Tool 超时', 75000, 15000, 120000, 'ms', 'medium', 'new_run', '单次 Tool 调用的停滞保护。'),
-  integer('run.terminalPersistTimeoutMs', 'run', '终态持久化超时', 5000, 1000, 25000, 'ms', 'medium', 'owner_reload', 'Run 外写入终态的短窗口。'),
+  integer('run.maxDurationMs', 'run', 'Run 最长执行时间', 600000, 120000, 1200000, 'ms', 'high', 'new_run', 'teacher', '单 Run 最终 hard deadline。'),
+  integer('run.finalizationReserveMs', 'run', '终态阶段预留', 60000, 5000, 120000, 'ms', 'high', 'new_run', 'Finalizer、Artifact 绑定和持久化不可被探索阶段借用；缺少安全公开兜底的Finalizer可在Run hard deadline内有界借用一次同等时长。'),
+  integer('run.maxAutoContinuationsPerLineage', 'run', '自动续跑上限', 1, 0, 1, 'runs', 'high', 'new_run', '0关闭自动续跑，1允许当前架构支持的唯一自动子Run；多子Run需要lineage架构变更，不能伪装成运行参数。'),
 
-  booleanDefinition('scope.enabled', 'scope', '启用 Scope Gate', true, 'high', 'new_run', 'teacher', '关闭只跳过范围筛选，不改变授权与安全硬门。'),
-  integer('scope.initialTimeoutMs', 'scope', '首次筛选超时', 10000, 3000, 30000, 'ms', 'medium', 'new_run', '首次范围判断预算。'),
-  integer('scope.reviewTimeoutMs', 'scope', '独立复核超时', 18000, 5000, 30000, 'ms', 'medium', 'new_run', '完全越界时独立复核预算。'),
-  integer('scope.maxOutputTokens', 'scope', 'Scope Gate 输出上限', 500, 100, 1000, 'tokens', 'low', 'new_run', '范围判断的最大输出 Token。'),
+  modelRef('stage.main.modelRoute', 'stage', 'Main 模型', 'ai-teacher-fast', 'Main 意图理解、只读 Tool 与普通回答。'),
+  enumDefinition('stage.main.reasoningPolicy', 'stage', 'Main 推理策略', 'disabled', ['disabled', 'provider-managed'], 'high', 'new_run', 'teacher', '默认关闭推理，避免可见正文被 reasoning 吞尽。'),
+  integer('stage.temperaturePermille', 'stage', '生成温度', 0, 0, 2000, '‰', 'medium', 'new_run', 'temperature 乘以 1000 后的管理值；0 表示确定性优先。'),
+  modelRef('stage.candidate.modelRoute', 'stage', 'Candidate 模型', 'ai-teacher-reasoning', '完整 Candidate 生成。'),
+  modelRef('stage.repair.modelRoute', 'stage', 'Repair 模型', 'ai-teacher-reasoning', 'Official Validator FAIL 后的 Repair。'),
+  modelRef('stage.finalizer.modelRoute', 'stage', 'Finalizer 模型', 'ai-teacher-fast', '将可信 Artifact 整理为学生可见回答。'),
+  enumDefinition('stage.finalizer.reasoningPolicy', 'stage', 'Finalizer 推理策略', 'disabled', ['disabled', 'provider-managed'], 'high', 'new_run', 'teacher', '默认非思考；如 Provider 能稳定返回可见正文，可由管理员切换。'),
 
-  integer('answer.hardMaxOutputTokens', 'answer', '单步输出硬上限', 16000, 4096, 16000, 'tokens', 'high', 'new_run', '所有回答档位的绝对上限。'),
-  integer('answer.contextWindowTokens', 'answer', '上下文窗口', 64000, 16000, 200000, 'tokens', 'high', 'new_run', '不得超过当前模型组声明能力。'),
-  integer('answer.lowMaxOutputTokens', 'answer', 'LOW 回答上限', 3000, 512, 8000, 'tokens', 'medium', 'new_run', 'LOW 档最终回答输出 ceiling。'),
-  integer('answer.mediumMaxOutputTokens', 'answer', 'MEDIUM 回答上限', 4500, 512, 8000, 'tokens', 'medium', 'new_run', 'MEDIUM 档最终回答输出 ceiling。'),
-  integer('answer.highMaxOutputTokens', 'answer', 'HIGH 回答上限', 6000, 512, 8000, 'tokens', 'medium', 'new_run', 'HIGH 档最终回答输出 ceiling。'),
+  integer('tool.maxCallsPerRun', 'tool', '只读 Tool 共享调用上限', 12, 1, 100, 'calls', 'high', 'new_run', '所有只读 Tool 共用，不再设置逐 Tool 次数门。'),
+  integer('tool.maxRetriesPerOperation', 'tool', '单语义 Tool 操作失败重试', 2, 0, 2, 'retries', 'medium', 'new_run', '同一规范化语义操作首次失败后最多重试次数；不同 Tool 和不同操作不共享失败计数，不关闭回答、澄清或终态动作。'),
+  integer('tool.defaultTimeoutMs', 'tool', 'Tool 默认超时', 30000, 1000, 120000, 'ms', 'medium', 'new_run', '普通只读 Tool 的单次停滞保护。'),
+  integer('context.taskSourceMaxEntries', 'tool', '可信任务来源条目上限', 8, 2, 16, 'entries', 'high', 'new_run', '单次 Agent 执行视图最多包含的可信 TaskSourceSet 条目数；管理页配置值会冻结到 Run Snapshot，后端不得再用固定 8 或 6 二次钳制。'),
+  integer('context.studentQuestionMaxChars', 'tool', '学生原文最大字符数', 16000, 4000, STUDENT_QUESTION_PROTOCOL_CEILING, 'chars', 'medium', 'new_run', 'teacher', '当前学生问题的运营上限，冻结到 Run Snapshot。协议天花板是 20000；超限在创建 Thread/Run 前拒绝。完整 SysML 模型应放在编辑器，不占聊天原文额度。'),
+  integer('context.mainExecutionReserveTokens', 'tool', 'Main 上下文预留 Token', 4096, 512, 16384, 'tokens', 'medium', 'new_run', 'teacher', 'Main 构造 Execution View 时从模型窗口预留的 Token，避免上下文塞满后主模型无法继续。冻结到 Run Snapshot。'),
+  integer('tool.inputMaxBytes', 'tool', '只读 Tool 入参上限', 8192, 1024, 65536, 'bytes', 'high', 'new_run', 'teacher', '只读 Tool 单次入参最大字节数。超限拒绝该次调用，不扩大 Tool 授权。冻结到 Run Snapshot。'),
 
-  integer('knowledge.reviewedMaxNewQueriesPerRun', 'knowledge', 'Reviewed Knowledge 每 Run 最多新查询', 4, 0, 12, 'calls', 'medium', '这是 Main、Candidate 与 Repair 共享的 Run ceiling；证据充分时允许 0 次，Repair 失败换轮不会重置。'),
+  integer('domainEvidence.maxQueriesPerRun', 'knowledge', '工程领域问题组上限', 2, 0, 8, 'queries', 'high', 'new_run', '外部工程领域检索问题组 ceiling。'),
+  integer('domainEvidence.maxSearchUsesPerQuery', 'knowledge', '单问题搜索使用上限', 2, 1, 8, 'uses', 'medium', 'new_run', 'Provider 单问题搜索使用次数。'),
+  integer('domainEvidence.maxProviderStepsPerQuery', 'knowledge', '单问题 Provider 步数', 4, 1, 12, 'steps', 'medium', 'new_run', 'Provider continuation/step ceiling。'),
+  integer('domainEvidence.maxOutputTokensPerQuery', 'knowledge', 'Domain Evidence 单问题辅助输出帽', 4800, 512, 16000, 'tokens', 'medium', 'new_run', '限制单个工程领域证据查询返回给模型的辅助输出Token量，用于控制检索成本与延迟；不限制Main、Candidate、Repair或Finalizer的开放式生成。该值属于Domain Evidence Effort Profile，可在管理页配置。'),
+  integer('domainEvidence.timeoutMs', 'knowledge', '工程领域检索超时', 60000, 5000, 180000, 'ms', 'medium', 'new_run', '单问题停滞保护。'),
 
-  integer('candidate.recoveryMaxAttempts', 'candidate', 'Candidate 恢复次数', 1, 0, 1, 'calls', 'medium', 'new_run', '候选内容截断或不可解析时的有界恢复。'),
-  integer('candidate.maxAttemptMs', 'candidate', 'Candidate 单次上限', 420000, 30000, 600000, 'ms', 'high', 'new_run', 'teacher', '单次 Candidate 生成的绝对上限；实际截止时间还必须保留 Validator、Repair 和终态预算。'),
-  booleanDefinition('candidate.repairEnabled', 'candidate', '启用 Repair', true, 'high', 'new_run', 'teacher', '关闭后 Validator FAIL 不进入 Repair，但仍不得绕过 Validator。'),
-  integer('candidate.maxArtifactBytes', 'candidate', 'Candidate Artifact 上限', 262144, 16384, 2097152, 'bytes', 'high', 'new_run', '完整 Candidate 在进入 Hash、Validator 与持久化前必须满足的 UTF-8 字节安全边界。'),
+  integer('candidate.maxGenerationAttempts', 'candidate', 'Candidate 生成尝试', 2, 1, 4, 'attempts', 'medium', 'new_run', '初次生成加有界截断恢复。'),
+  integer('candidate.maxArtifactBytes', 'candidate', 'Candidate Artifact 上限', 262144, 16384, 2097152, 'bytes', 'high', 'new_run', 'Candidate 存储与输入安全资源边界。'),
+  booleanDefinition('repair.enabled', 'candidate', '启用 Repair', true, 'high', 'new_run', 'teacher', 'Validator FAIL 后允许 Repair；关闭不绕过 Validator。'),
+  integer('repair.maxRounds', 'candidate', 'Repair 最大有效轮次', 3, 0, 12, 'rounds', 'high', 'new_run', '只有新 Candidate、诊断或证据才构成新轮。'),
+  integer('validator.queueLimit', 'validator', 'Validator 队列上限', 8, 0, 64, 'requests', 'medium', 'owner_reload', '等待队列容量。'),
+  integer('validator.queueWaitMs', 'validator', 'Validator 排队等待', 30000, 1000, 120000, 'ms', 'medium', 'owner_reload', '进入执行前的停滞保护。'),
+  integer('validator.executionTimeoutMs', 'validator', 'Validator 执行超时', 25000, 5000, 120000, 'ms', 'high', 'owner_reload', 'Official Validator 单次执行停滞保护。'),
 
-  integer('repair.phaseReserveMs', 'repair', 'Repair 阶段预留', 120000, 30000, 300000, 'ms', 'high', 'new_run', 'teacher', '为至少一次 Repair、完整候选提交和再验证预留的时间。'),
-  integer('repair.maxRounds', 'repair', 'Repair 最大有效轮次', 3, 0, 12, 'rounds', 'high', 'new_run', '每轮必须产生新的 Candidate、诊断或证据；0 表示 Validator FAIL 后不启动 Repair 模型。'),
-
-  booleanDefinition('semanticReview.enabled', 'semanticReview', '启用工程语义软 Review', false, 'high', 'new_run', 'teacher', '首版默认关闭；启用后只产生建议并允许一次有界工程完善，失败时回退已通过Validator的基线，不形成阻断门。'),
-  booleanDefinition('semanticReview.shadowOnly', 'semanticReview', '仅运行 Shadow Assessment', false, 'medium', 'new_run', 'teacher', '启用时只记录Assessment建议，不进入Main或Candidate完善；关闭且Review启用时按taskEffect执行一次完整软审查链。'),
-  integer('semanticReview.assessmentMaxCalls', 'semanticReview', 'Assessment 最大调用数', 1, 1, 1, 'calls', 'high', 'new_run', '每个用户授权周期最多执行一次Assessment。'),
-  integer('semanticReview.assessmentTimeoutMs', 'semanticReview', 'Assessment 超时', 120000, 5000, 120000, 'ms', 'high', 'new_run', 'Pro只读工程评议的单次时间上限；真实长Candidate评议需要覆盖Provider抖动。'),
-  integer('semanticReview.mainDecisionTimeoutMs', 'semanticReview', 'Main 判读超时', 20000, 3000, 60000, 'ms', 'medium', 'new_run', 'Main对已绑定建议进行一次动作选择的时间上限。'),
-  integer('semanticReview.verificationMaxCalls', 'semanticReview', 'Verification 最大调用数', 1, 1, 1, 'calls', 'high', 'new_run', '每个用户授权周期最多执行一次只读Verification。'),
-  integer('semanticReview.verificationTimeoutMs', 'semanticReview', 'Verification 超时', 30000, 5000, 120000, 'ms', 'high', 'new_run', '修订Candidate再次通过Validator后的单次只读确认上限。'),
-  integer('semanticReview.maxOutputTokens', 'semanticReview', 'Review 输出上限', 12000, 512, 16000, 'tokens', 'medium', 'new_run', 'Assessment与Verification建议文本共享的completion ceiling；Assessment需容纳有界推理。'),
-  integer('semanticReview.maxIssues', 'semanticReview', 'Review 建议上限', 8, 1, 8, 'issues', 'medium', 'new_run', '服务端接收并绑定的最大工程建议数；这是上限而非配额，相关遗漏应合并为可一次闭合的目标簇。'),
-  integer('semanticReview.minimumCompleteChainMs', 'semanticReview', '完整改进链最小预算', 180000, 60000, 600000, 'ms', 'high', 'new_run', '预算不足时不启动Assessment，直接保留已通过Validator的基线。'),
-  integer('semanticReview.domainSearchReserveMs', 'semanticReview', '证据查询预留（V1停用）', 0, 0, 0, 'ms', 'medium', 'new_run', 'V1尚未实现Engineering Review内的证据检索动作，因此该值固定为0；后续只有在真实检索链实现并验收后才开放。'),
-
-  integer('engineeringRevision.maxCycles', 'engineeringRevision', '工程完善最大轮次', 1, 1, 1, 'cycles', 'high', 'new_run', '一次用户授权周期最多创建一个Engineering Revision Candidate。'),
-  integer('engineeringRevision.maxDurationMs', 'engineeringRevision', '工程完善Candidate上限', 330000, 60000, 600000, 'ms', 'high', 'new_run', 'Engineering Revision Candidate单次生成的时间上限。'),
-  integer('engineeringRevision.validationRepairReserveMs', 'engineeringRevision', 'Revision语法修复预留', 255000, 60000, 420000, 'ms', 'high', 'new_run', 'Revision引入Official错误后，为Validation Repair及复验保留的总预算。'),
-
-  integer('engineeringImprovement.runMaxDurationMs', 'engineeringImprovement', 'Improvement Run最长时间', 900000, 300000, 900000, 'ms', 'high', 'new_run', '唯一工程改进子Run的hard deadline。'),
-  integer('engineeringImprovement.apiOuterTimeoutMs', 'engineeringImprovement', 'Improvement API外层超时', 930000, 330000, 1200000, 'ms', 'high', 'new_run', '平台API等待Improvement子Run完成、持久化并关闭响应的外层时限。'),
-  integer('engineeringImprovement.lineageMaxDurationMs', 'engineeringImprovement', '自动lineage总时限', 1500000, 900000, 1800000, 'ms', 'high', 'new_run', 'Primary与最多一个自动Continuation/Improvement Run的总hard ceiling。'),
-  integer('engineeringImprovement.orchestrationReserveMs', 'engineeringImprovement', '跨Run编排预留', 20000, 5000, 60000, 'ms', 'medium', 'new_run', '两个Run之间用于持久化、预算预留和调度的时间。'),
-  integer('engineeringImprovement.minimumCompleteChainMs', 'engineeringImprovement', '子Run完整链最小预算', 720000, 300000, 900000, 'ms', 'high', 'new_run', '可用Improvement时间低于该值时不自动创建子Run。'),
-
-  integer('validator.queueLimit', 'validator', 'Validator 队列上限', 8, 0, 32, 'requests', 'medium', 'owner_reload', '等待队列长度，0 表示不排队。'),
-  integer('validator.queueWaitMs', 'validator', 'Validator 排队等待', 15000, 1000, 30000, 'ms', 'medium', 'owner_reload', '进入执行前的最大等待时间。'),
-  integer('validator.executionTimeoutMs', 'validator', 'Validator 执行超时', 25000, 5000, 45000, 'ms', 'high', 'owner_reload', 'Official Validator 执行段预算。'),
-  integer('validator.toolTimeoutMs', 'validator', 'Validator Tool 总超时', 45000, 10000, 60000, 'ms', 'high', 'new_run', 'Teacher 到 API Validator Tool 的总门。'),
-  integer('validator.transientRetryMax', 'validator', 'Validator 瞬时重试次数', 1, 0, 1, 'calls', 'medium', 'owner_reload', '只允许对确定尚未开始的瞬时失败重试。'),
-
-  integer('provider.maxConcurrency', 'provider', 'Provider 最大并发', 2, 1, 8, 'requests', 'high', 'owner_reload', 'Teacher 到模型 Provider 的并发上限。'),
-  integer('provider.queueLimit', 'provider', 'Provider 队列上限', 20, 0, 100, 'requests', 'medium', 'owner_reload', 'Provider 请求等待队列长度。'),
-  integer('provider.queueTimeoutMs', 'provider', 'Provider 排队超时', 8000, 1000, 30000, 'ms', 'medium', 'owner_reload', 'Provider 请求最大排队等待。'),
-  integer('provider.maxRetries', 'provider', 'Provider 最大重试', 1, 0, 2, 'calls', 'high', 'owner_reload', '仅对基础设施瞬时错误重试。'),
-  booleanDefinition('provider.retryJitter', 'provider', '启用重试抖动', true, 'medium', 'owner_reload', 'provider', '避免多个请求按相同退避节奏同时重试。'),
-  integer('provider.retryBaseMs', 'provider', 'Provider 退避起点', 500, 100, 3000, 'ms', 'medium', 'owner_reload', '指数退避起点。'),
-  integer('provider.retryMaxMs', 'provider', 'Provider 退避上限', 3000, 500, 10000, 'ms', 'medium', 'owner_reload', '重试等待上限。'),
-  integer('provider.circuitFailureThreshold', 'provider', '熔断失败阈值', 5, 2, 20, 'requests', 'high', 'owner_reload', '统计窗口内触发熔断的失败数。'),
-  integer('provider.circuitFailureWindowMs', 'provider', '熔断统计窗口', 60000, 10000, 300000, 'ms', 'medium', 'owner_reload', 'Provider 失败统计时间窗。'),
-  integer('provider.circuitOpenMs', 'provider', '熔断开启时长', 30000, 5000, 300000, 'ms', 'high', 'owner_reload', '熔断后暂停请求的时间。'),
-  integer('provider.halfOpenMaxProbes', 'provider', '半开探测并发', 1, 1, 3, 'requests', 'medium', 'owner_reload', '熔断半开状态允许的探测并发。'),
+  integer('provider.maxConcurrentRuns', 'provider', 'Run Admission 最大并发', 2, 1, 16, 'runs', 'high', 'owner_reload', '同时获准进入Provider执行区的完整Agent Run数量；Run内部模型步骤不重复排队。'),
+  integer('provider.queueLimit', 'provider', 'Run Admission 等待队列', 20, 0, 200, 'runs', 'medium', 'owner_reload', '尚未获准开始Provider工作的Run等待容量；已准入Run及其内部模型步骤不占队列槽位。'),
 
   booleanDefinition('probe.enabled', 'probe', '启用后台健康探测', true, 'medium', 'owner_reload', 'teacher', '只控制后台探针，不授予学生联网能力。'),
-  integer('probe.hourlyLimit', 'probe', '每小时探针上限', 6, 0, 24, 'calls', 'medium', 'owner_reload', '付费探针的小时成本上限。'),
-  integer('probe.timeoutMs', 'probe', '探针超时', 30000, 5000, 120000, 'ms', 'medium', 'owner_reload', '单次 Provider 健康探测预算。'),
+  integer('probe.hourlyLimit', 'probe', '每小时探针上限', 6, 0, 48, 'calls', 'medium', 'owner_reload', '付费探针小时成本上限。'),
+  integer('probe.timeoutMs', 'probe', '探针超时', 30000, 5000, 180000, 'ms', 'medium', 'owner_reload', '单次健康探测停滞保护。'),
 
-  modelRef('model.fastRoute', 'Fast Gate 模型', 'ai-teacher-fast', 'Fast Gate 固定非思考调用。'),
-  modelRef('model.mainRoute', 'Main 模型', 'ai-teacher-fast', '意图理解、澄清、普通回答与只读 Tool 编排。'),
-  enumDefinition('model.mainReasoningPolicy', 'model', 'Main 推理策略', 'provider-managed', ['disabled', 'provider-managed'], 'high', 'new_run', 'teacher', '按所选模型协议决定 Main 是否启用 Provider 推理。'),
-  modelRef('model.candidateRoute', 'Candidate 模型', 'ai-teacher-reasoning', '完整 SysML v2 Candidate 生成。'),
-  modelRef('model.repairRoute', 'Repair 模型', 'ai-teacher-reasoning', 'Validator 失败后的多轮 Repair。'),
-  modelRef('model.semanticReviewRoute', '工程语义 Review 模型', 'ai-teacher-reasoning', '用于独立Assessment与Verification；只读建议、失败回退，不形成交付硬门。'),
-  modelRef('model.finalizerRoute', 'Finalizer 模型', 'ai-teacher-fast', '将可信结果整理为学生可见回答。'),
-  enumDefinition('model.finalizerReasoningPolicy', 'model', 'Finalizer 推理策略', 'disabled', ['disabled', 'provider-managed'], 'high', 'new_run', 'teacher', '默认关闭；始终思考模型必须显式使用 Provider 管理策略。')
+  booleanDefinition('scope.enabled', 'scope', '启用 Scope Gate', true, 'high', 'new_run', 'teacher', '关闭只跳过范围判断，不改变授权和安全边界。'),
+  modelRef('scope.modelRoute', 'scope', 'Scope Gate 模型', 'ai-teacher-fast', '快速范围判断模型 Alias。'),
+  integer('scope.initialTimeoutMs', 'scope', '首次判读超时', 10000, 3000, 60000, 'ms', 'medium', 'new_run', '首次范围判读停滞保护。'),
+  integer('scope.reviewTimeoutMs', 'scope', '独立复核超时', 18000, 5000, 120000, 'ms', 'medium', 'new_run', '完全越界时独立复核停滞保护。'),
+  integer('scope.maxOutputTokens', 'scope', 'Scope Gate 协议输出帽', 500, 64, 2000, 'tokens', 'low', 'new_run', '限制Scope Gate单次PASS、RISK_MIXED或RISK_FULL协议判读的输出Token量，用于约束协议偏离、成本与延迟；不限制面向用户的正文回答。可在管理页按Provider兼容性配置。'),
+  integer('scope.hardInputTokenBudget', 'scope', 'Fast Gate 输入 Token 上限', 4096, 1024, 16384, 'tokens', 'medium', 'new_run', 'teacher', '快速范围判断的输入 Token 上限。超过后本次判读 fail-open 放行，不阻断 Run。冻结到 Run Snapshot。'),
+
+
+  booleanDefinition('semanticReview.enabled', 'semanticReview', '启用工程语义软 Review', false, 'high', 'new_run', 'teacher', '在首个已验证候选上给出一次只读建议，交由同一个 Main 核心检查处理；失败不重试，不阻断候选交付。'),
+  booleanDefinition('semanticReview.shadowOnly', 'semanticReview', '仅运行 Shadow Review', false, 'medium', 'new_run', 'teacher', '仅记录一次只读评议，不向 Main 或 Finalizer 注入意见。'),
+  integer('semanticReview.maxCycles', 'semanticReview', '工程评议次数兼容上限', 1, 0, 4, 'cycles', 'high', 'new_run', '兼容旧策略：0 跳过工程评议，正值最多执行一次只读建议；不再执行独立 Revision/Verification 循环。'),
+  integer('semanticReview.timeoutMs', 'semanticReview', '工程语义 Review 超时', 120000, 5000, 300000, 'ms', 'high', 'new_run', '一次只读工程建议的超时，不用于复评或候选选择。'),
+  modelRef('semanticReview.modelRoute', 'semanticReview', '工程语义 Review 模型', 'ai-teacher-reasoning', '只读工程语义评议模型。')
 ]);
 
 const HARD_INVARIANTS = Object.freeze([
-  Object.freeze({ key: 'agent.temperature', label: '温度', value: 0, reason: '保证评测可比性与确定性基线。' }),
-  Object.freeze({ key: 'validator.required', label: 'Official Validator 必需', value: true, reason: '未验证候选不得进入最终可见代码。' }),
-  Object.freeze({ key: 'validator.maxInFlight', label: 'Validator 最大并行数', value: 1, reason: '当前单 Java backend 仅允许单槽。' }),
-  Object.freeze({ key: 'continuation.maxAutoContinuationsPerLineage', label: '整条任务链自动续跑上限', value: 1, reason: '同一根任务链最多自动续跑一次，禁止形成 A→B→C 链式自动续跑。' }),
-  Object.freeze({ key: 'agent.reasoningMode', label: '推理模式', value: 'provider-managed', reason: 'Provider wire contract，不属于运营参数。' })
+  invariant('validator.required', true, '生成或修改的 Candidate 必须经过 Official Validator 才能标记为已验证。'),
+  invariant('delivery.unvalidatedCodeWithheld', true, '未验证、验证失败或未与终末 Validation Artifact 精确绑定的代码不得作为已验证代码公开。'),
+  invariant('delivery.serverOwnedArtifactBinding', true, 'Candidate/Validation Artifact、Hash、权限和最终状态由服务端确定。'),
+  invariant('security.resourcePolicyCannotExpandAuthority', true, '资源策略不得扩大 Tool 授权、所有权或 secret 访问。'),
+  invariant('run.immutablePolicySnapshot', true, '同一 Run 使用不可变策略版本和校验和。'),
+  invariant('evidence.firstFailurePreserved', true, '首次失败证据不得被成功复测覆盖或删除。')
 ]);
+
+const DEPRECATED_KEYS = Object.freeze({
+  'mainReview.modelRoute': { replacement: 'removed:shared-tool-budget-and-single-finalizer' },
+  'mainReview.thinkingEnabled': { replacement: 'removed:shared-tool-budget-and-single-finalizer' },
+  'mainReview.timeoutMs': { replacement: 'removed:shared-tool-budget-and-single-finalizer' },
+  'knowledge.reviewedMaxNewQueriesPerRun': { replacement: 'removed:shared-tool-budget-and-single-finalizer' },
+  'knowledge.exampleMaxPerQuery': { replacement: 'removed:shared-tool-budget-and-single-finalizer' },
+  'knowledge.exampleViewTokenBudget': { replacement: 'removed:shared-tool-budget-and-single-finalizer' },
+  'knowledge.exampleInjectionEnabled': { replacement: 'removed:shared-tool-budget-and-single-finalizer' },
+  'run.maxRecoveryAttempts': { replacement: 'candidate.maxGenerationAttempts' },
+  'context.windowTokens': { replacement: 'model-capability:contextWindowTokens' },
+  'validator.maxUniqueCandidatesPerRun': { replacement: 'derived:initial-candidate+repair.maxRounds' },
+  'tool.maxFailuresPerRun': { replacement: 'tool.maxRetriesPerOperation' },
+  'stage.main.maxOutputTokens': { replacement: 'removed:open-generation-uses-provider-default-and-run-deadline' },
+  'stage.candidate.maxOutputTokens': { replacement: 'removed:complete-candidate-contract-and-provider-capability' },
+  'stage.repair.maxOutputTokens': { replacement: 'removed:repair-visible-output-reserve-is-context-only' },
+  'stage.finalizer.maxOutputTokens': { replacement: 'removed:open-generation-uses-provider-default-and-deterministic-fallback' },
+  'context.historyMaxMessages': { replacement: 'removed:harness-context-compaction' },
+  'context.historyMaxTokens': { replacement: 'removed:harness-context-compaction' },
+  'validator.maxInFlight': { replacement: 'owner-capability:official-validator-serial-execution' },
+  'provider.queueWaitMs': { replacement: 'removed:run-abort-signal' },
+  'provider.requestTimeoutMs': { replacement: 'provider-owner:litellm-connection-timeout' },
+  'provider.maxRetries': { replacement: 'provider-owner:litellm-num-retries' },
+  'provider.retryJitter': { replacement: 'provider-owner:litellm-retry-policy' },
+  'provider.retryBaseMs': { replacement: 'provider-owner:litellm-retry-policy' },
+  'provider.retryMaxMs': { replacement: 'provider-owner:litellm-retry-policy' },
+  'provider.circuitFailureThreshold': { replacement: 'provider-owner:litellm-allowed-fails' },
+  'provider.circuitFailureWindowMs': { replacement: 'provider-owner:litellm-health-policy' },
+  'provider.circuitOpenMs': { replacement: 'provider-owner:litellm-cooldown' },
+  'provider.halfOpenMaxProbes': { replacement: 'provider-owner:litellm-health-policy' },
+  'api.outerTimeoutMs': { replacement: 'derived:run.maxDurationMs+transportGraceMs' },
+  'run.maxSteps': { replacement: 'derived:allocator.progressState' },
+  'run.terminalReserveMs': { replacement: 'run.finalizationReserveMs' },
+  'run.convergeLeadMs': { replacement: 'derived:allocator.commitThreshold' },
+  'run.toolTimeoutMs': { replacement: 'tool.defaultTimeoutMs' },
+  'run.terminalPersistTimeoutMs': { replacement: 'derived:run.finalizationReserveMs' },
+  'answer.hardMaxOutputTokens': { replacement: 'removed:open-generation-stage-caps' },
+  'answer.contextWindowTokens': { replacement: 'derived:model capability' },
+  'answer.lowMaxOutputTokens': { replacement: 'removed:open-generation-stage-caps' },
+  'answer.mediumMaxOutputTokens': { replacement: 'removed:open-generation-stage-caps' },
+  'answer.highMaxOutputTokens': { replacement: 'removed:open-generation-stage-caps' },
+  'tool.inspectLessonContextMaxCallsPerRun': { replacement: 'tool.maxCallsPerRun' },
+  'tool.inspectCurrentModelMaxCallsPerRun': { replacement: 'tool.maxCallsPerRun' },
+  'tool.skillGuidanceMaxCallsPerRun': { replacement: 'tool.maxCallsPerRun' },
+  'tool.reviewedKnowledgeMaxCallsPerRun': { replacement: 'removed:shared-tool-budget-and-single-finalizer' },
+  'tool.domainEvidenceMaxCallsPerRun': { replacement: 'domainEvidence.maxQueriesPerRun' },
+  'tool.outputMaxBytesPerCall': { replacement: 'removed:harness-context-compaction' },
+  'tool.totalOutputMaxBytesPerRun': { replacement: 'removed:harness-context-compaction' },
+  'tool.maxVisibleOutputBytesPerRun': { replacement: 'removed:harness-context-compaction' },
+  'tool.semanticCompressionReviewedKnowledgeEnabled': { replacement: 'removed:fixed-context-compaction-policy' },
+  'tool.semanticCompressionSkillGuidanceEnabled': { replacement: 'removed:fixed-context-compaction-policy' },
+  'tool.semanticCompressionDomainEvidenceEnabled': { replacement: 'removed:fixed-context-compaction-policy' },
+  'tool.readOnlyTimeoutMs': { replacement: 'tool.defaultTimeoutMs' },
+  'tool.domainEvidenceTimeoutMs': { replacement: 'domainEvidence.timeoutMs' },
+  'candidate.recoveryMaxAttempts': { replacement: 'candidate.maxGenerationAttempts' },
+  'candidate.maxAttemptMs': { replacement: 'derived:allocator.candidateWindowMs' },
+  'candidate.repairEnabled': { replacement: 'repair.enabled' },
+  'candidate.maxValidatorCallsPerWorker': { replacement: 'derived:initial-candidate+repair.maxRounds' },
+  'repair.phaseReserveMs': { replacement: 'derived:allocator.repairWindowMs' },
+  'repair.maxOutputTokens': { replacement: 'removed:repair-visible-output-reserve-is-context-only' },
+  'repair.materializationMode': { replacement: 'removed:single-stage-repair-tooloop' },
+  'repair.decisionMaxOutputTokens': { replacement: 'removed:single-stage-repair-tooloop' },
+  'repair.materializationMaxOutputTokens': { replacement: 'removed:single-stage-repair-tooloop' },
+  'repair.materializationThinking': { replacement: 'removed:single-stage-repair-tooloop' },
+  'semanticReview.assessmentMaxCalls': { replacement: 'semanticReview.maxCycles' },
+  'semanticReview.assessmentTimeoutMs': { replacement: 'semanticReview.timeoutMs' },
+  'semanticReview.mainDecisionTimeoutMs': { replacement: 'derived:semanticReview.timeoutMs' },
+  'semanticReview.verificationMaxCalls': { replacement: 'semanticReview.maxCycles' },
+  'semanticReview.verificationTimeoutMs': { replacement: 'semanticReview.timeoutMs' },
+  'semanticReview.maxOutputTokens': { replacement: 'removed:provider-default-and-context-admission' },
+  'semanticReview.maxIssues': { replacement: 'derived:context envelope' },
+  'semanticReview.minimumCompleteChainMs': { replacement: 'derived:allocator.availableWork' },
+  'semanticReview.domainSearchReserveMs': { replacement: 'removed' },
+  'engineeringRevision.maxCycles': { replacement: 'semanticReview.maxCycles' },
+  'engineeringRevision.maxDurationMs': { replacement: 'derived:allocator.candidateWindowMs' },
+  'engineeringRevision.validationRepairReserveMs': { replacement: 'derived:allocator.repairWindowMs' },
+  'engineeringImprovement.runMaxDurationMs': { replacement: 'run.maxDurationMs' },
+  'engineeringImprovement.apiOuterTimeoutMs': { replacement: 'derived:run.maxDurationMs+transportGraceMs' },
+  'engineeringImprovement.lineageMaxDurationMs': { replacement: 'derived:run.maxDurationMs*lineage runs' },
+  'engineeringImprovement.orchestrationReserveMs': { replacement: 'derived:run.finalizationReserveMs' },
+  'engineeringImprovement.minimumCompleteChainMs': { replacement: 'derived:allocator.availableWork' },
+  'validator.toolTimeoutMs': { replacement: 'derived:validator.queueWaitMs+validator.executionTimeoutMs+transportGraceMs' },
+  'validator.transientRetryMax': { replacement: 'removed:validator-tool-executes-once' },
+  'provider.maxConcurrency': { replacement: 'provider.maxConcurrentRuns' },
+  'provider.queueTimeoutMs': { replacement: 'removed:run-abort-signal' },
+  'model.fastRoute': { replacement: 'scope.modelRoute' },
+  'model.mainRoute': { replacement: 'stage.main.modelRoute' },
+  'model.candidateRoute': { replacement: 'stage.candidate.modelRoute' },
+  'model.repairRoute': { replacement: 'stage.repair.modelRoute' },
+  'model.semanticReviewRoute': { replacement: 'semanticReview.modelRoute' },
+  'model.finalizerRoute': { replacement: 'stage.finalizer.modelRoute' }
+});
 
 const BOOTSTRAP_VALUES = Object.freeze(Object.fromEntries(DEFINITIONS.map((definition) => [definition.key, definition.defaultValue])));
 const DEFINITION_BY_KEY = new Map(DEFINITIONS.map((definition) => [definition.key, definition]));
-const DEPRECATED_KEYS = Object.freeze({
-  'candidate.maxValidatorCallsPerWorker': Object.freeze({ replacement: 'derived:initial-candidate+repair.maxRounds' }),
-  'repair.maxOutputTokens': Object.freeze({ replacement: 'removed:repair-output-is-provider-managed' })
-});
 
-function integer(key, group, label, defaultValue, minimum, maximum, unit, risk, applyMode, owner, description) {
+function group(id, label, description) { return Object.freeze({ id, label, description }); }
+function invariant(key, value, reason) { return Object.freeze({ key, label: key, value, reason }); }
+function integer(key, groupId, label, defaultValue, minimum, maximum, unit, risk, applyMode, owner, description) {
   if (description === undefined) {
     description = owner;
-    owner = defaultOwner(key, group);
+    owner = defaultOwner(groupId);
   }
-  return Object.freeze({ key, group, label, valueType: 'integer', defaultValue, minimum, maximum, step: 1, unit, risk, applyMode, owner, state: 'active', description });
+  return Object.freeze({ key, group: groupId, label, valueType: 'integer', defaultValue, minimum, maximum, step: 1, unit, risk, applyMode, owner, state: 'active', description });
 }
-
-function defaultOwner(key, group) {
-  if (group === 'api') return 'api';
-  if (group === 'provider') return 'provider';
-  if (group === 'validator' && !['validator.toolTimeoutMs', 'validator.transientRetryMax'].includes(key)) return 'api-validator';
+function booleanDefinition(key, groupId, label, defaultValue, risk, applyMode, owner, description) {
+  return Object.freeze({ key, group: groupId, label, valueType: 'boolean', defaultValue, risk, applyMode, owner, state: 'active', description });
+}
+function enumDefinition(key, groupId, label, defaultValue, allowedValues, risk, applyMode, owner, description) {
+  return Object.freeze({ key, group: groupId, label, valueType: 'enum', defaultValue, allowedValues: Object.freeze([...allowedValues]), risk, applyMode, owner, state: 'active', description });
+}
+function modelRef(key, groupId, label, defaultValue, description) {
+  return Object.freeze({ key, group: groupId, label, valueType: 'model-ref', defaultValue, risk: 'high', applyMode: 'new_run', owner: 'teacher', state: 'active', choiceSource: 'litellm-active-alias-ids', referenceTarget: 'business-model-alias.aliasId', description });
+}
+function defaultOwner(groupId) {
+  if (groupId === 'validator') return 'validator';
+  if (groupId === 'provider') return 'provider';
   return 'teacher';
 }
 
-function booleanDefinition(key, group, label, defaultValue, risk, applyMode, owner, description) {
-  return Object.freeze({ key, group, label, valueType: 'boolean', defaultValue, risk, applyMode, owner, state: 'active', description });
-}
-
-function enumDefinition(key, group, label, defaultValue, allowedValues, risk, applyMode, owner, description) {
-  return Object.freeze({ key, group, label, valueType: 'enum', defaultValue, allowedValues: Object.freeze([...allowedValues]), risk, applyMode, owner, state: 'active', description });
-}
-
-function modelRef(key, label, defaultValue, description) {
-  return Object.freeze({
-    key,
-    group: 'model',
-    label,
-    valueType: 'model-ref',
-    defaultValue,
-    risk: 'high',
-    applyMode: 'new_run',
-    owner: 'teacher',
-    state: 'active',
-    choiceSource: 'litellm-active-model-groups',
-    description
-  });
-}
-
 function catalog() {
-  return {
-    schemaVersion: SCHEMA_VERSION,
-    groups: GROUPS.map((group) => ({ ...group })),
-    definitions: DEFINITIONS.map((definition) => ({ ...definition })),
-    hardInvariants: HARD_INVARIANTS.map((item) => ({ ...item })),
-    deprecatedKeys: { ...DEPRECATED_KEYS }
-  };
+  return { schemaVersion: SCHEMA_VERSION, groups: GROUPS.map(copy), definitions: DEFINITIONS.map(copy), hardInvariants: HARD_INVARIANTS.map(copy), deprecatedKeys: { ...DEPRECATED_KEYS } };
 }
 
 function validatePolicyValues(input, options = {}) {
@@ -174,145 +213,64 @@ function validatePolicyValues(input, options = {}) {
   const errors = [];
   const warnings = [];
   const normalized = {};
-  const modelProfilesByAlias = normalizedModelProfilesByAlias(options.modelRegistry);
   if (!isPlainObject(input)) errors.push(issue('values', 'POLICY_VALUES_OBJECT_REQUIRED', '策略值必须是对象。'));
-
-  for (const key of Object.keys(values)) {
-    if (!DEFINITION_BY_KEY.has(key)) errors.push(issue(key, 'POLICY_FIELD_UNKNOWN', `未知策略字段：${key}`));
-  }
+  for (const key of Object.keys(values)) if (!DEFINITION_BY_KEY.has(key)) errors.push(issue(key, 'POLICY_FIELD_UNKNOWN', `未知或已弃用策略字段：${key}`));
+  const registeredAliasIds = normalizedRegisteredAliasIds(options.modelRegistry);
+  const modelProfilesByAliasId = normalizedModelProfilesByAliasId(options.modelRegistry);
   for (const definition of DEFINITIONS) {
-    const hasValue = Object.prototype.hasOwnProperty.call(values, definition.key);
-    if (!hasValue) {
-      if (options.allowPartial === true) continue;
-      errors.push(issue(definition.key, 'POLICY_FIELD_REQUIRED', `${definition.label}不能为空。`));
+    if (!Object.hasOwn(values, definition.key)) {
+      if (!options.allowPartial) errors.push(issue(definition.key, 'POLICY_FIELD_REQUIRED', `${definition.label}不能为空。`));
       continue;
     }
     const value = values[definition.key];
-    if (definition.valueType === 'model-ref') {
-      const alias = String(value || '').trim();
-      if (!/^[a-zA-Z0-9][a-zA-Z0-9._/-]{1,199}$/.test(alias)) {
-        errors.push(issue(definition.key, 'POLICY_MODEL_ALIAS_INVALID', `${definition.label}必须引用有效的 LiteLLM Alias。`));
-      } else {
-        normalized[definition.key] = alias;
-        const registeredAliases = normalizedRegisteredAliases(options.modelRegistry);
-        if (registeredAliases && !registeredAliases.has(alias)) {
-          errors.push(issue(definition.key, 'POLICY_MODEL_ALIAS_NOT_REGISTERED', `${definition.label}引用的 Alias 未在当前 LiteLLM 配置中注册。`));
-        }
-      }
-      continue;
-    }
     if (definition.valueType === 'boolean') {
       if (typeof value !== 'boolean') errors.push(issue(definition.key, 'POLICY_FIELD_TYPE', `${definition.label}必须是布尔值。`));
       else normalized[definition.key] = value;
-      continue;
-    }
-    if (definition.valueType === 'enum') {
+    } else if (definition.valueType === 'model-ref') {
+      const alias = String(value || '').trim();
+      if (!/^[a-zA-Z0-9][a-zA-Z0-9._/-]{1,199}$/.test(alias)) errors.push(issue(definition.key, 'POLICY_MODEL_REFERENCE_INVALID', `${definition.label}必须引用有效的 Alias ID。`));
+      else if (registeredAliasIds && !registeredAliasIds.has(alias)) errors.push(issue(definition.key, 'POLICY_MODEL_REFERENCE_NOT_REGISTERED', `${definition.label}引用的 Alias ID 未注册。`));
+      else if (modelProfilesByAliasId?.get(alias)?.runtimeProtocolStatus
+        && modelProfilesByAliasId.get(alias).runtimeProtocolStatus !== 'ready') {
+        errors.push(issue(definition.key, 'POLICY_MODEL_PROTOCOL_UNREADY', `${definition.label}引用的 Alias 没有唯一且可执行的模型协议。`));
+      }
+      else normalized[definition.key] = alias;
+    } else if (definition.valueType === 'enum') {
       if (!definition.allowedValues.includes(value)) errors.push(issue(definition.key, 'POLICY_FIELD_ENUM', `${definition.label}不在允许值内。`));
       else normalized[definition.key] = value;
-      continue;
-    }
-    if (!Number.isInteger(value)) {
+    } else if (!Number.isInteger(value)) {
       errors.push(issue(definition.key, 'POLICY_FIELD_TYPE', `${definition.label}必须是整数。`));
-      continue;
-    }
-    if (value < definition.minimum || value > definition.maximum) {
+    } else if (value < definition.minimum || value > definition.maximum) {
       errors.push(issue(definition.key, 'POLICY_FIELD_RANGE', `${definition.label}必须在 ${definition.minimum}–${definition.maximum} 之间。`));
-      continue;
-    }
-    normalized[definition.key] = value;
+    } else normalized[definition.key] = value;
   }
-
-  if (!errors.length || options.collectCrossFieldErrors === true) validateCrossFields(normalized, errors, warnings, modelProfilesByAlias);
-  if (options.baseline && isPlainObject(options.baseline)) {
-    for (const definition of DEFINITIONS) {
-      if (definition.risk !== 'high') continue;
-      if (normalized[definition.key] !== undefined && normalized[definition.key] !== options.baseline[definition.key]) {
-        warnings.push(issue(definition.key, 'POLICY_HIGH_RISK_CHANGE', `${definition.label}是高风险变更。`, 'warning'));
-      }
-    }
-  }
+  if (!errors.length || options.collectCrossFieldErrors) validateCrossFields(normalized, errors, warnings, modelProfilesByAliasId);
+  if (options.baseline) for (const definition of DEFINITIONS) if (definition.risk === 'high' && normalized[definition.key] !== undefined && normalized[definition.key] !== options.baseline[definition.key]) warnings.push(issue(definition.key, 'POLICY_HIGH_RISK_CHANGE', `${definition.label}是高风险变更。`, 'warning'));
   return { ok: errors.length === 0, values: normalized, errors, warnings };
 }
 
-function validateCrossFields(values, errors, warnings, modelProfilesByAlias) {
-  compare(values, errors, 'api.outerTimeoutMs', '>', values['run.maxDurationMs'], 'API 外层超时必须大于 Run 最长执行时间。');
-  compare(values, errors, 'run.convergeLeadMs', '<', values['run.maxDurationMs'] - values['run.terminalReserveMs'], '收敛提前量必须小于 Run 时限减去终态阶段预留。');
-  compare(values, errors, 'run.toolTimeoutMs', '<=', values['run.maxDurationMs'] - values['run.terminalReserveMs'], 'Tool 超时不能超过 Run 可工作窗口。');
-  compare(values, errors, 'scope.initialTimeoutMs', '<=', values['scope.reviewTimeoutMs'], '首次筛选超时不能大于独立复核超时。');
-  compare(values, errors, 'scope.reviewTimeoutMs', '<=', values['run.toolTimeoutMs'], 'Scope Gate 复核超时不能大于 Tool 超时。');
-  compare(values, errors, 'answer.lowMaxOutputTokens', '<=', values['answer.mediumMaxOutputTokens'], 'LOW 回答上限不能大于 MEDIUM。');
-  compare(values, errors, 'answer.mediumMaxOutputTokens', '<=', values['answer.highMaxOutputTokens'], 'MEDIUM 回答上限不能大于 HIGH。');
-  compare(values, errors, 'answer.highMaxOutputTokens', '<=', values['answer.hardMaxOutputTokens'], 'HIGH 回答上限不能超过硬上限。');
-  compare(values, errors, 'semanticReview.maxOutputTokens', '<=', values['answer.hardMaxOutputTokens'], '工程语义Review输出上限不能超过单步输出硬上限。');
-  compare(values, errors, 'semanticReview.minimumCompleteChainMs', '<', values['run.maxDurationMs'] - values['run.terminalReserveMs'], '完整改进链最小预算必须小于Run可工作窗口。');
-  compare(values, errors, 'engineeringRevision.maxDurationMs', '<', values['engineeringImprovement.runMaxDurationMs'] - values['run.terminalReserveMs'], '工程完善Candidate上限必须为Validator、Repair、Verification和终态保留时间。');
-  compare(values, errors, 'engineeringRevision.validationRepairReserveMs', '<', values['engineeringImprovement.runMaxDurationMs'] - values['run.terminalReserveMs'], '工程完善后的Validation Repair预留必须小于Improvement工作窗口。');
-  compare(values, errors, 'engineeringImprovement.apiOuterTimeoutMs', '>', values['engineeringImprovement.runMaxDurationMs'], 'Improvement API外层超时必须大于Improvement Run时限。');
-  compare(values, errors, 'engineeringImprovement.minimumCompleteChainMs', '<=', values['engineeringImprovement.runMaxDurationMs'] - values['run.terminalReserveMs'], 'Improvement完整链最小预算不能超过其工作窗口。');
-  compare(values, errors, 'engineeringImprovement.lineageMaxDurationMs', '>=', values['run.maxDurationMs'] + values['engineeringImprovement.runMaxDurationMs'], '自动lineage总时限必须覆盖Primary与Improvement两个Run。');
-  compare(values, errors, 'validator.queueWaitMs', '<=', values['validator.toolTimeoutMs'] - values['validator.executionTimeoutMs'], 'Validator 排队等待加执行超时不能超过 Tool 总超时。');
-  compare(values, errors, 'validator.toolTimeoutMs', '<', values['run.toolTimeoutMs'], 'Validator Tool 超时必须小于 Agent Tool 超时。');
-  compare(values, errors, 'provider.retryBaseMs', '<=', values['provider.retryMaxMs'], 'Provider 退避起点不能大于退避上限。');
-  compare(values, errors, 'provider.halfOpenMaxProbes', '<=', values['provider.maxConcurrency'], '半开探测并发不能大于 Provider 最大并发。');
-  const engineeringChainMs = values['semanticReview.assessmentTimeoutMs']
-    + values['semanticReview.mainDecisionTimeoutMs']
-    + values['semanticReview.domainSearchReserveMs']
-    + values['engineeringRevision.maxDurationMs']
-    + values['validator.toolTimeoutMs']
-    + values['engineeringRevision.validationRepairReserveMs']
-    + values['semanticReview.verificationTimeoutMs'];
-  const engineeringWorkWindowMs = values['engineeringImprovement.runMaxDurationMs']
-    - values['engineeringImprovement.orchestrationReserveMs']
-    - values['run.terminalReserveMs'];
-  if (Number.isFinite(engineeringChainMs)
-    && Number.isFinite(engineeringWorkWindowMs)
-    && engineeringChainMs > engineeringWorkWindowMs) {
-    errors.push(issue(
-      'engineeringImprovement.runMaxDurationMs',
-      'POLICY_ENGINEERING_CHAIN_BUDGET_CONFLICT',
-      'Assessment、Main、Engineering Revision、Validator、Validation Repair 与 Verification 的预算总和不能超过 Improvement 可工作窗口。'
-    ));
-  }
-  const reservedMs = values['run.terminalReserveMs']
-    + values['validator.toolTimeoutMs']
-    + values['repair.phaseReserveMs'];
-  if (Number.isFinite(reservedMs) && Number.isFinite(values['run.maxDurationMs'])) {
-    if (reservedMs >= values['run.maxDurationMs']) {
-      errors.push(issue(
-        'repair.phaseReserveMs',
-        'POLICY_RUN_PHASE_RESERVE_CONFLICT',
-        '终态、Validator 与 Repair 预留之和必须小于 Run 最长执行时间。'
-      ));
-    }
-    const candidateWindowMs = Math.min(
-      values['candidate.maxAttemptMs'],
-      values['run.maxDurationMs'] - reservedMs
-    );
-    if (!Number.isFinite(candidateWindowMs) || candidateWindowMs <= 0) {
-      errors.push(issue(
-        'candidate.maxAttemptMs',
-        'POLICY_CANDIDATE_DEADLINE_UNAVAILABLE',
-        '当前阶段预留无法为 Candidate 留出有效执行窗口。'
-      ));
-    }
-  }
-  if (values['scope.enabled'] === false) warnings.push(issue('scope.enabled', 'POLICY_SCOPE_GATE_DISABLED', 'Scope Gate 将关闭；授权和安全硬门仍保持。', 'warning'));
-  if (values['candidate.repairEnabled'] === false) warnings.push(issue('candidate.repairEnabled', 'POLICY_REPAIR_DISABLED', 'Repair 将关闭；Validator FAIL 不会绕过。', 'warning'));
-  validateModelReasoningCompatibility(values, errors, modelProfilesByAlias);
+function validateCrossFields(v, errors, warnings, modelProfilesByAliasId) {
+  compare(v, errors, 'run.finalizationReserveMs', '<', v['run.maxDurationMs'], '终态预留必须小于 Run 时限。');
+  compare(v, errors, 'scope.initialTimeoutMs', '<=', v['scope.reviewTimeoutMs'], '首次判读超时不能大于独立复核超时。');
+  compare(v, errors, 'validator.queueWaitMs', '<', v['run.maxDurationMs'] - v['run.finalizationReserveMs'], 'Validator 排队等待超出 Run 工作窗口。');
+  compare(v, errors, 'validator.executionTimeoutMs', '<', v['run.maxDurationMs'] - v['run.finalizationReserveMs'], 'Validator 执行超时超出 Run 工作窗口。');
+  if (v['scope.enabled'] === false) warnings.push(issue('scope.enabled', 'POLICY_SCOPE_GATE_DISABLED', 'Scope Gate 将关闭；授权与安全硬门保持。', 'warning'));
+  if (v['repair.enabled'] === false) warnings.push(issue('repair.enabled', 'POLICY_REPAIR_DISABLED', 'Repair 将关闭；Validator FAIL 不会绕过。', 'warning'));
+  validateModelReasoningCompatibility(v, errors, modelProfilesByAliasId);
 }
 
-function validateModelReasoningCompatibility(values, errors, modelProfilesByAlias) {
-  if (!(modelProfilesByAlias instanceof Map)) return;
+function validateModelReasoningCompatibility(values, errors, modelProfilesByAliasId) {
+  if (!(modelProfilesByAliasId instanceof Map)) return;
   const requirements = [
-    ['model.fastRoute', 'disabled', 'Fast Gate'],
-    ['model.mainRoute', values['model.mainReasoningPolicy'], 'Main'],
-    ['model.candidateRoute', 'provider-managed', 'Candidate'],
-    ['model.repairRoute', 'provider-managed', 'Repair'],
-    ['model.semanticReviewRoute', 'provider-managed', 'Semantic Review'],
-    ['model.finalizerRoute', values['model.finalizerReasoningPolicy'], 'Finalizer']
+    ['scope.modelRoute', 'disabled', 'Scope Gate'],
+    ['stage.main.modelRoute', values['stage.main.reasoningPolicy'], 'Main'],
+    ['stage.candidate.modelRoute', 'provider-managed', 'Candidate'],
+    ['stage.repair.modelRoute', 'provider-managed', 'Repair'],
+    ['semanticReview.modelRoute', 'provider-managed', 'Semantic Review'],
+    ['stage.finalizer.modelRoute', values['stage.finalizer.reasoningPolicy'], 'Finalizer']
   ];
   for (const [routeKey, reasoningPolicy, label] of requirements) {
-    const profile = modelProfilesByAlias.get(String(values[routeKey] || '').trim());
+    const profile = modelProfilesByAliasId.get(String(values[routeKey] || ''));
     const reasoning = profile?.executionPolicy?.reasoning;
     if (!reasoning) continue;
     const supported = reasoningPolicy === 'disabled'
@@ -333,268 +291,222 @@ function validateModelReasoningCompatibility(values, errors, modelProfilesByAlia
 function compare(values, errors, key, operator, right, message) {
   const left = values[key];
   if (!Number.isFinite(left) || !Number.isFinite(right)) return;
-  const ok = operator === '<'
-    ? left < right
-    : operator === '>'
-      ? left > right
-      : operator === '>='
-        ? left >= right
-        : left <= right;
+  const ok = operator === '<' ? left < right : operator === '>' ? left > right : operator === '>=' ? left >= right : left <= right;
   if (!ok) errors.push(issue(key, 'POLICY_CROSS_FIELD_CONFLICT', message));
 }
+function issue(key, code, message, severity = 'error') { return { key, code, message, severity }; }
 
-function issue(key, code, message, severity = 'error') {
-  return { key, code, message, severity };
+function migratePolicyValues(sourceValues = {}, options = {}) {
+  const source = isPlainObject(sourceValues) ? sourceValues : {};
+  const values = { ...BOOTSTRAP_VALUES };
+  for (const key of Object.keys(values)) if (Object.hasOwn(source, key)) values[key] = source[key];
+  const map = (target, sourceKey, transform = (value) => value) => { if (Object.hasOwn(source, sourceKey)) values[target] = transform(source[sourceKey]); };
+  const mapIfTargetAbsent = (target, sourceKey, transform = (value) => value) => {
+    if (!Object.hasOwn(source, target) && Object.hasOwn(source, sourceKey)) values[target] = transform(source[sourceKey]);
+  };
+  map('run.finalizationReserveMs', 'run.terminalReserveMs');
+  map('stage.main.modelRoute', 'model.mainRoute');
+  map('stage.candidate.modelRoute', 'model.candidateRoute');
+  map('stage.repair.modelRoute', 'model.repairRoute');
+  map('stage.finalizer.modelRoute', 'model.finalizerRoute');
+  map('tool.maxRetriesPerOperation', 'tool.maxFailuresPerRun', (value) => Math.min(2, Math.max(0, (Number(value) || 1) - 1)));
+  map('tool.defaultTimeoutMs', 'tool.readOnlyTimeoutMs');
+  map('domainEvidence.maxQueriesPerRun', 'tool.domainEvidenceMaxCallsPerRun');
+  map('domainEvidence.timeoutMs', 'tool.domainEvidenceTimeoutMs');
+  mapIfTargetAbsent('candidate.maxGenerationAttempts', 'run.maxRecoveryAttempts', (value) => 1 + Math.max(0, Number(value) || 0));
+  mapIfTargetAbsent('candidate.maxGenerationAttempts', 'candidate.recoveryMaxAttempts', (value) => 1 + Math.max(0, Number(value) || 0));
+  map('repair.enabled', 'candidate.repairEnabled');
+  map('provider.maxConcurrentRuns', 'provider.maxConcurrency');
+  map('scope.modelRoute', 'model.fastRoute');
+  map('semanticReview.maxCycles', 'engineeringRevision.maxCycles');
+  map('semanticReview.timeoutMs', 'semanticReview.assessmentTimeoutMs');
+  map('semanticReview.modelRoute', 'model.semanticReviewRoute');
+  // 旧策略升级时继承原复核行为；新字段已有值时不得被 Main 或工程 Review 覆盖。
+
+
+  const legacyModelRouteKeys = {
+    'stage.main.modelRoute': 'model.mainRoute',
+    'stage.candidate.modelRoute': 'model.candidateRoute',
+    'stage.repair.modelRoute': 'model.repairRoute',
+    'stage.finalizer.modelRoute': 'model.finalizerRoute',
+    'scope.modelRoute': 'model.fastRoute',
+    'semanticReview.modelRoute': 'model.semanticReviewRoute'
+  };
+  const hasNonBlankModelReference = (key) => Object.hasOwn(source, key) && String(source[key] ?? '').trim().length > 0;
+  const missingModelRouteKeys = new Set(Object.entries(legacyModelRouteKeys)
+    .filter(([target, legacy]) => {
+      if (!hasNonBlankModelReference(target) && !hasNonBlankModelReference(legacy)) return true;
+      const sourceReference = String(hasNonBlankModelReference(target) ? source[target] : source[legacy]).trim();
+      return sourceReference === BOOTSTRAP_VALUES[target];
+    })
+    .map(([target]) => target));
+  const resolvedValues = resolvePolicyModelReferenceValues(values, options.modelRegistry, { fallbackKeys: missingModelRouteKeys });
+  // 新增独立模型路由时继承已经解析成功的 Main Alias，不凭名称猜测替换模型。
+
+  const validation = validatePolicyValues(resolvedValues, { modelRegistry: options.modelRegistry });
+  if (!validation.ok) {
+    const error = new Error('Agent resource policy migration is invalid.');
+    error.code = 'AGENT_RESOURCE_POLICY_SCHEMA_MIGRATION_INVALID';
+    const registryProfiles = Array.isArray(options.modelRegistry?.profiles) ? options.modelRegistry.profiles : [];
+    error.details = {
+      ...validation,
+      migrationDiagnostics: {
+        registryProfileCount: registryProfiles.length,
+        executableProfileCount: registryProfiles.filter((profile) => String(profile?.aliasId || '').trim()
+          && profile?.runtimeProtocolStatus === 'ready').length,
+        fallbackEligibleCount: missingModelRouteKeys.size,
+        resolvedRouteCount: Object.keys(legacyModelRouteKeys).filter((key) => Object.hasOwn(validation.values, key)).length,
+        routes: Object.entries(legacyModelRouteKeys).map(([target, legacy]) => {
+          const targetNonBlank = hasNonBlankModelReference(target);
+          const legacyNonBlank = hasNonBlankModelReference(legacy);
+          const selectedReference = String(targetNonBlank ? source[target] : legacyNonBlank ? source[legacy] : '').trim();
+          return {
+            key: target,
+            targetPresent: Object.hasOwn(source, target),
+            targetNonBlank,
+            legacyPresent: Object.hasOwn(source, legacy),
+            legacyNonBlank,
+            selectedMatchesLegacyDefault: selectedReference === BOOTSTRAP_VALUES[target],
+            fallbackEligible: missingModelRouteKeys.has(target),
+            bootstrapFamilyMatchCount: registryProfiles.filter((profile) => {
+              if (!String(profile?.aliasId || '').trim() || profile?.runtimeProtocolStatus !== 'ready') return false;
+              const runtimeAlias = String(profile?.litellmAlias || profile?.alias || '').trim();
+              const legacyDefault = String(BOOTSTRAP_VALUES[target] || '').trim();
+              return runtimeAlias === legacyDefault || runtimeAlias.startsWith(`${legacyDefault}-`);
+            }).length,
+            resolved: Object.hasOwn(validation.values, target)
+          };
+        })
+      }
+    };
+    throw error;
+  }
+  return { values: validation.values, deprecatedKeys: Object.keys(source).filter((key) => DEPRECATED_KEYS[key]), unknownKeys: Object.keys(source).filter((key) => !DEFINITION_BY_KEY.has(key) && !DEPRECATED_KEYS[key]) };
 }
 
-function canonicalJson(value) {
-  return JSON.stringify(canonicalValue(value));
+function resolvePolicyModelReferenceValues(sourceValues = {}, modelRegistry, options = {}) {
+  const values = isPlainObject(sourceValues) ? { ...sourceValues } : {};
+  if (!modelRegistry) return values;
+  const profiles = Array.isArray(modelRegistry.profiles) ? modelRegistry.profiles : [];
+  const byId = new Map(profiles.map((profile) => [String(profile?.aliasId || '').trim(), profile]).filter(([key]) => key));
+  const byRuntimeAlias = new Map(profiles.map((profile) => [String(profile?.litellmAlias || profile?.alias || '').trim(), profile]).filter(([key]) => key));
+  const fallbackProfiles = profiles
+    .filter((profile) => String(profile?.aliasId || '').trim() && profile?.runtimeProtocolStatus === 'ready')
+    .sort((left, right) => String(left.aliasId).localeCompare(String(right.aliasId)));
+  const fallbackKeys = options.fallbackKeys instanceof Set ? options.fallbackKeys : new Set();
+  const resolvedExecutableAliasIds = new Set();
+  const ambiguousFamilyFallbackKeys = new Set();
+  for (const definition of DEFINITIONS) {
+    if (definition.valueType !== 'model-ref' || !Object.hasOwn(values, definition.key)) continue;
+    const reference = String(values[definition.key] || '').trim();
+    const profile = byId.get(reference) || byRuntimeAlias.get(reference);
+    if (profile?.aliasId) {
+      values[definition.key] = String(profile.aliasId).trim();
+      if (profile.runtimeProtocolStatus === 'ready') {
+        resolvedExecutableAliasIds.add(String(profile.aliasId).trim());
+      }
+    }
+  }
+  for (const key of fallbackKeys) {
+    const reference = String(values[key] || '').trim();
+    const currentProfile = byId.get(reference) || byRuntimeAlias.get(reference);
+    if (currentProfile && (!currentProfile.runtimeProtocolStatus || currentProfile.runtimeProtocolStatus === 'ready')) continue;
+    const legacyDefault = String(BOOTSTRAP_VALUES[key] || '').trim();
+    if (reference !== legacyDefault) continue;
+    const familyMatches = fallbackProfiles.filter((profile) => {
+      const runtimeAlias = String(profile?.litellmAlias || profile?.alias || '').trim();
+      return runtimeAlias === legacyDefault || runtimeAlias.startsWith(`${legacyDefault}-`);
+    });
+    if (familyMatches.length > 1) {
+      ambiguousFamilyFallbackKeys.add(key);
+      continue;
+    }
+    if (familyMatches.length !== 1) continue;
+    const aliasId = String(familyMatches[0].aliasId).trim();
+    values[key] = aliasId;
+    resolvedExecutableAliasIds.add(aliasId);
+  }
+  const consensusFallbackAliasId = resolvedExecutableAliasIds.size === 1
+    ? Array.from(resolvedExecutableAliasIds)[0]
+    : fallbackProfiles.length === 1
+      ? String(fallbackProfiles[0].aliasId).trim()
+      : '';
+  if (consensusFallbackAliasId) for (const key of fallbackKeys) {
+    if (ambiguousFamilyFallbackKeys.has(key)) continue;
+    const reference = String(values[key] || '').trim();
+    const profile = byId.get(reference) || byRuntimeAlias.get(reference);
+    if (!profile || (profile.runtimeProtocolStatus && profile.runtimeProtocolStatus !== 'ready')) values[key] = consensusFallbackAliasId;
+  }
+  return values;
 }
 
+function canonicalJson(value) { return JSON.stringify(canonicalValue(value)); }
 function canonicalValue(value) {
-  if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value;
+  if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) return value;
   if (Array.isArray(value)) return value.map(canonicalValue);
   if (isPlainObject(value)) return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonicalValue(value[key])]));
   throw new TypeError('Policy value is not JSON serializable.');
 }
-
-function checksumPolicyValues(values) {
-  return `sha256:${crypto.createHash('sha256').update(canonicalJson(values), 'utf8').digest('hex')}`;
-}
+function checksumPolicyValues(values) { return `sha256:${crypto.createHash('sha256').update(canonicalJson(values), 'utf8').digest('hex')}`; }
 
 function createPolicySnapshot({ versionId, values, frozenAt = new Date().toISOString() } = {}) {
   const validation = validatePolicyValues(values);
-  if (!validation.ok) {
-    const error = new Error('Agent resource policy is invalid.');
-    error.code = 'AGENT_RESOURCE_POLICY_INVALID';
-    error.statusCode = 400;
-    error.details = validation;
-    throw error;
-  }
-  return Object.freeze({
-    schemaVersion: SCHEMA_VERSION,
-    versionId: String(versionId || '').trim() || `arp_bootstrap_v${SCHEMA_VERSION}`,
-    checksum: checksumPolicyValues(validation.values),
-    values: Object.freeze({ ...validation.values }),
-    frozenAt
-  });
+  if (!validation.ok) { const error = new Error('Agent resource policy is invalid.'); error.code = 'AGENT_RESOURCE_POLICY_INVALID'; error.statusCode = 400; error.details = validation; throw error; }
+  return Object.freeze({ schemaVersion: SCHEMA_VERSION, versionId: String(versionId || '').trim() || `arp_bootstrap_v${SCHEMA_VERSION}`, checksum: checksumPolicyValues(validation.values), values: Object.freeze({ ...validation.values }), frozenAt });
 }
-
 function validatePolicySnapshot(snapshot) {
-  const errors = [];
   if (!isPlainObject(snapshot)) return { ok: false, errors: [issue('snapshot', 'POLICY_SNAPSHOT_REQUIRED', '资源策略快照不能为空。')], warnings: [] };
-  if (snapshot.schemaVersion !== SCHEMA_VERSION) errors.push(issue('schemaVersion', 'POLICY_SCHEMA_VERSION_INVALID', '资源策略 Schema 版本不受支持。'));
-  if (!/^arp_[a-zA-Z0-9_-]{3,120}$/.test(String(snapshot.versionId || ''))) errors.push(issue('versionId', 'POLICY_VERSION_ID_INVALID', '资源策略版本 ID 无效。'));
   const validation = validatePolicyValues(snapshot.values);
-  const expectedChecksum = validation.ok ? checksumPolicyValues(validation.values) : '';
-  if (!/^sha256:[a-f0-9]{64}$/.test(String(snapshot.checksum || '')) || snapshot.checksum !== expectedChecksum) {
-    errors.push(issue('checksum', 'POLICY_CHECKSUM_MISMATCH', '资源策略 checksum 不匹配。'));
-  }
-  return { ok: errors.length === 0 && validation.ok, values: validation.values, errors: [...validation.errors, ...errors], warnings: validation.warnings };
+  const errors = [...validation.errors];
+  if (snapshot.schemaVersion !== SCHEMA_VERSION) errors.push(issue('schemaVersion', 'POLICY_SCHEMA_VERSION_INVALID', '资源策略 Schema 版本不受支持。'));
+  if (snapshot.checksum !== (validation.ok ? checksumPolicyValues(validation.values) : '')) errors.push(issue('checksum', 'POLICY_CHECKSUM_MISMATCH', '资源策略 checksum 不匹配。'));
+  return { ok: errors.length === 0, values: validation.values, errors, warnings: validation.warnings };
 }
 
 function runtimeProjection(values) {
   const validation = validatePolicyValues(values);
-  if (!validation.ok) {
-    const error = new Error('Cannot project an invalid Agent resource policy.');
-    error.code = 'AGENT_RESOURCE_POLICY_INVALID';
-    error.details = validation;
-    throw error;
-  }
+  if (!validation.ok) { const error = new Error('Cannot project an invalid Agent resource policy.'); error.code = 'AGENT_RESOURCE_POLICY_INVALID'; error.details = validation; throw error; }
   const v = validation.values;
+  const transportGraceMs = Math.max(5000, Math.floor(v['run.finalizationReserveMs'] / 3));
+  const validatorToolTimeoutMs = v['validator.queueWaitMs'] + v['validator.executionTimeoutMs'] + transportGraceMs;
   const maxUniqueCandidateValidationsPerWorker = 1 + v['repair.maxRounds'];
   return Object.freeze({
-    api: Object.freeze({
-      outerTimeoutMs: v['api.outerTimeoutMs']
-    }),
+    api: Object.freeze({ outerTimeoutMs: v['run.maxDurationMs'] + transportGraceMs }),
     teacher: Object.freeze({
-      agentMaxSteps: v['run.maxSteps'],
-      agentMaxDurationMs: v['run.maxDurationMs'],
-      agentTerminalReserveMs: v['run.terminalReserveMs'],
-      agentConvergeLeadMs: v['run.convergeLeadMs'],
-      agentToolTimeoutMs: v['run.toolTimeoutMs'],
-      agentTerminalPersistenceTimeoutMs: v['run.terminalPersistTimeoutMs'],
-      agentMaxOutputTokens: v['answer.hardMaxOutputTokens'],
-      agentContextWindowTokens: v['answer.contextWindowTokens'],
-      agentScopeGateEnabled: v['scope.enabled'],
-      agentScopeGateInitialTimeoutMs: v['scope.initialTimeoutMs'],
-      agentScopeGateReviewTimeoutMs: v['scope.reviewTimeoutMs'],
-      agentScopeGateMaxOutputTokens: v['scope.maxOutputTokens'],
-      agentCandidateRecoveryMaxAttempts: v['candidate.recoveryMaxAttempts'],
-      agentCandidateMaxAttemptMs: v['candidate.maxAttemptMs'],
-      agentCandidateRepairEnabled: v['candidate.repairEnabled'],
-      agentRepairPhaseReserveMs: v['repair.phaseReserveMs'],
-      agentRepairMaxRounds: v['repair.maxRounds'],
-      agentCandidateMaxArtifactBytes: v['candidate.maxArtifactBytes'],
-      agentSemanticReviewEnabled: v['semanticReview.enabled'],
-      agentSemanticReviewShadowOnly: v['semanticReview.shadowOnly'],
-      agentSemanticReviewAssessmentMaxCalls: v['semanticReview.assessmentMaxCalls'],
-      agentSemanticReviewAssessmentTimeoutMs: v['semanticReview.assessmentTimeoutMs'],
-      agentSemanticReviewMainDecisionTimeoutMs: v['semanticReview.mainDecisionTimeoutMs'],
-      agentSemanticReviewVerificationMaxCalls: v['semanticReview.verificationMaxCalls'],
-      agentSemanticReviewVerificationTimeoutMs: v['semanticReview.verificationTimeoutMs'],
-      agentSemanticReviewMaxOutputTokens: v['semanticReview.maxOutputTokens'],
-      agentSemanticReviewMaxIssues: v['semanticReview.maxIssues'],
-      agentSemanticReviewMinimumCompleteChainMs: v['semanticReview.minimumCompleteChainMs'],
-      agentSemanticReviewDomainSearchReserveMs: v['semanticReview.domainSearchReserveMs'],
-      agentEngineeringRevisionMaxCycles: v['engineeringRevision.maxCycles'],
-      agentEngineeringRevisionMaxDurationMs: v['engineeringRevision.maxDurationMs'],
-      agentEngineeringRevisionValidationRepairReserveMs: v['engineeringRevision.validationRepairReserveMs'],
-      agentEngineeringImprovementRunMaxDurationMs: v['engineeringImprovement.runMaxDurationMs'],
-      agentEngineeringImprovementApiOuterTimeoutMs: v['engineeringImprovement.apiOuterTimeoutMs'],
-      agentEngineeringImprovementLineageMaxDurationMs: v['engineeringImprovement.lineageMaxDurationMs'],
-      agentEngineeringImprovementOrchestrationReserveMs: v['engineeringImprovement.orchestrationReserveMs'],
-      agentEngineeringImprovementMinimumCompleteChainMs: v['engineeringImprovement.minimumCompleteChainMs'],
-      agentValidatorToolTimeoutMs: v['validator.toolTimeoutMs'],
-      agentMaxUniqueCandidateValidationsPerWorker: maxUniqueCandidateValidationsPerWorker,
-      agentReviewedKnowledgeMaxNewQueriesPerRun: v['knowledge.reviewedMaxNewQueriesPerRun'],
-      agentLowAnswerMaxOutputTokens: v['answer.lowMaxOutputTokens'],
-      agentMediumAnswerMaxOutputTokens: v['answer.mediumMaxOutputTokens'],
-      agentHighAnswerMaxOutputTokens: v['answer.highMaxOutputTokens'],
-      agentTemperature: 0,
-      agentReasoningMode: 'provider-managed',
-      agentStageModelRoutes: Object.freeze({
-        fastGate: v['model.fastRoute'],
-        main: v['model.mainRoute'],
-        candidate: v['model.candidateRoute'],
-        repair: v['model.repairRoute'],
-        semanticReview: v['model.semanticReviewRoute'],
-        finalizer: v['model.finalizerRoute']
-      }),
-      agentStageReasoningPolicies: Object.freeze({
-        fastGate: 'disabled',
-        main: v['model.mainReasoningPolicy'],
-        candidate: 'provider-managed',
-        repair: 'provider-managed',
-        semanticReview: 'provider-managed',
-        finalizer: v['model.finalizerReasoningPolicy']
-      })
+      agentMaxDurationMs: v['run.maxDurationMs'], agentTerminalReserveMs: v['run.finalizationReserveMs'], agentConvergeLeadMs: Math.floor((v['run.maxDurationMs'] - v['run.finalizationReserveMs']) / 6), agentToolTimeoutMs: v['tool.defaultTimeoutMs'], agentTerminalPersistenceTimeoutMs: transportGraceMs,
+      agentScopeGateEnabled: v['scope.enabled'], agentScopeGateInitialTimeoutMs: v['scope.initialTimeoutMs'], agentScopeGateReviewTimeoutMs: v['scope.reviewTimeoutMs'], agentScopeGateHardInputTokenBudget: v['scope.hardInputTokenBudget'], agentScopeGateMaxOutputTokens: v['scope.maxOutputTokens'], agentMainContextExecutionReserveTokens: v['context.mainExecutionReserveTokens'],
+      agentMaxSteps: v['tool.maxCallsPerRun'], agentInspectLessonContextMaxCallsPerRun: v['tool.maxCallsPerRun'], agentInspectCurrentModelMaxCallsPerRun: v['tool.maxCallsPerRun'], agentSkillGuidanceMaxCallsPerRun: v['tool.maxCallsPerRun'], agentReviewedKnowledgeMaxCallsPerRun: v['tool.maxCallsPerRun'], agentDomainEvidenceMaxCallsPerRun: v['domainEvidence.maxQueriesPerRun'],
+      agentReadOnlyToolMaxRetriesPerOperation: v['tool.maxRetriesPerOperation'], agentReadOnlyToolInputMaxBytes: v['tool.inputMaxBytes'], agentReadOnlyToolTimeoutMs: v['tool.defaultTimeoutMs'], agentDomainEvidenceToolTimeoutMs: v['domainEvidence.timeoutMs'],
+      agentCandidateRecoveryMaxAttempts: Math.max(0, v['candidate.maxGenerationAttempts'] - 1), agentCandidateMaxAttemptMs: v['run.maxDurationMs'] - v['run.finalizationReserveMs'] - validatorToolTimeoutMs, agentCandidateRepairEnabled: v['repair.enabled'], agentRepairPhaseReserveMs: Math.max(validatorToolTimeoutMs, Math.floor((v['run.maxDurationMs'] - v['run.finalizationReserveMs']) / 4)), agentRepairMaxRounds: v['repair.maxRounds'], agentCandidateMaxArtifactBytes: v['candidate.maxArtifactBytes'],
+      agentSemanticReviewEnabled: v['semanticReview.enabled'], agentSemanticReviewShadowOnly: v['semanticReview.shadowOnly'], agentSemanticReviewAssessmentMaxCalls: v['semanticReview.maxCycles'], agentSemanticReviewAssessmentTimeoutMs: v['semanticReview.timeoutMs'], agentSemanticReviewMainDecisionTimeoutMs: Math.min(v['semanticReview.timeoutMs'], v['tool.defaultTimeoutMs']), agentSemanticReviewVerificationMaxCalls: v['semanticReview.maxCycles'], agentSemanticReviewVerificationTimeoutMs: v['semanticReview.timeoutMs'], agentSemanticReviewMinimumCompleteChainMs: Math.floor((v['run.maxDurationMs'] - v['run.finalizationReserveMs']) / 3), agentSemanticReviewDomainSearchReserveMs: 0,
+      agentEngineeringRevisionMaxCycles: v['semanticReview.maxCycles'], agentEngineeringRevisionMaxDurationMs: Math.floor((v['run.maxDurationMs'] - v['run.finalizationReserveMs']) / 2), agentEngineeringRevisionValidationRepairReserveMs: validatorToolTimeoutMs, agentEngineeringImprovementRunMaxDurationMs: v['run.maxDurationMs'], agentEngineeringImprovementApiOuterTimeoutMs: v['run.maxDurationMs'] + transportGraceMs, agentEngineeringImprovementLineageMaxDurationMs: v['run.maxDurationMs'] * (1 + v['run.maxAutoContinuationsPerLineage']), agentEngineeringImprovementOrchestrationReserveMs: transportGraceMs, agentEngineeringImprovementMinimumCompleteChainMs: Math.floor((v['run.maxDurationMs'] - v['run.finalizationReserveMs']) / 2),
+      agentValidatorToolTimeoutMs: validatorToolTimeoutMs, agentTemperature: v['stage.temperaturePermille'] / 1000, agentReasoningMode: v['stage.main.reasoningPolicy'],
+      agentStageModelRoutes: Object.freeze({ fastGate: v['scope.modelRoute'], main: v['stage.main.modelRoute'], candidate: v['stage.candidate.modelRoute'], repair: v['stage.repair.modelRoute'], semanticReview: v['semanticReview.modelRoute'], finalizer: v['stage.finalizer.modelRoute'] }),
+      agentStageReasoningPolicies: Object.freeze({ fastGate: 'disabled', main: v['stage.main.reasoningPolicy'], candidate: 'provider-managed', repair: 'provider-managed', semanticReview: 'provider-managed', finalizer: v['stage.finalizer.reasoningPolicy'] }),
+      run06: Object.freeze({ toolMaxCallsPerRun: v['tool.maxCallsPerRun'], toolMaxRetriesPerOperation: v['tool.maxRetriesPerOperation'], taskSourceMaxEntries: v['context.taskSourceMaxEntries'], studentQuestionMaxChars: v['context.studentQuestionMaxChars'], repairMaxRounds: v['repair.maxRounds'], candidateMaxArtifactBytes: v['candidate.maxArtifactBytes'], maxUniqueCandidateValidationsPerWorker, maxUniqueCandidateValidationsFormula: '1 + repair.maxRounds', maxAutoContinuationsPerLineage: v['run.maxAutoContinuationsPerLineage'], domainEvidenceMaxSearchUsesPerQuery: v['domainEvidence.maxSearchUsesPerQuery'], domainEvidenceMaxProviderStepsPerQuery: v['domainEvidence.maxProviderStepsPerQuery'], domainEvidenceMaxOutputTokensPerQuery: v['domainEvidence.maxOutputTokensPerQuery'] })
     }),
-    validator: Object.freeze({
-      maxInFlight: 1,
-      queueLimit: v['validator.queueLimit'],
-      queueWaitMs: v['validator.queueWaitMs'],
-      executionTimeoutMs: v['validator.executionTimeoutMs'],
-      toolTimeoutMs: v['validator.toolTimeoutMs'],
-      transientRetryMax: v['validator.transientRetryMax']
-    }),
-    provider: Object.freeze({
-      maxConcurrency: v['provider.maxConcurrency'],
-      queueLimit: v['provider.queueLimit'],
-      queueTimeoutMs: v['provider.queueTimeoutMs'],
-      maxRetries: v['provider.maxRetries'],
-      retryJitter: v['provider.retryJitter'],
-      retryBaseMs: v['provider.retryBaseMs'],
-      retryMaxMs: v['provider.retryMaxMs'],
-      circuitFailureThreshold: v['provider.circuitFailureThreshold'],
-      circuitFailureWindowMs: v['provider.circuitFailureWindowMs'],
-      circuitOpenMs: v['provider.circuitOpenMs'],
-      halfOpenMaxProbes: v['provider.halfOpenMaxProbes'],
-      contextWindowTokens: v['answer.contextWindowTokens'],
-      hardMaxTier: v['answer.hardMaxOutputTokens']
-    }),
-    probe: Object.freeze({
-      enabled: v['probe.enabled'],
-      hourlyLimit: v['probe.hourlyLimit'],
-      timeoutMs: v['probe.timeoutMs']
-    })
+    validator: Object.freeze({ queueLimit: v['validator.queueLimit'], queueWaitMs: v['validator.queueWaitMs'], executionTimeoutMs: v['validator.executionTimeoutMs'], toolTimeoutMs: validatorToolTimeoutMs }),
+    provider: Object.freeze({ maxConcurrency: v['provider.maxConcurrentRuns'], queueLimit: v['provider.queueLimit'] }),
+    probe: Object.freeze({ enabled: v['probe.enabled'], hourlyLimit: v['probe.hourlyLimit'], timeoutMs: v['probe.timeoutMs'] })
   });
 }
 
-function migratePolicyValues(sourceValues = {}) {
-  const source = isPlainObject(sourceValues) ? sourceValues : {};
-  const values = { ...BOOTSTRAP_VALUES };
-  for (const key of Object.keys(values)) {
-    if (Object.prototype.hasOwnProperty.call(source, key)) values[key] = source[key];
-  }
-
-  if (Object.prototype.hasOwnProperty.call(source, 'candidate.maxValidatorCallsPerWorker')
-    && !Object.prototype.hasOwnProperty.call(source, 'repair.maxRounds')) {
-    const oldLimit = source['candidate.maxValidatorCallsPerWorker'];
-    if (!Number.isInteger(oldLimit) || oldLimit < 1 || oldLimit > 20) {
-      throw policyMigrationError('candidate.maxValidatorCallsPerWorker');
-    }
-    values['repair.maxRounds'] = Math.min(
-      BOOTSTRAP_VALUES['repair.maxRounds'],
-      Math.max(0, oldLimit - 1)
-    );
-  }
-  if (Object.prototype.hasOwnProperty.call(source, 'repair.maxOutputTokens')) {
-    const oldLimit = source['repair.maxOutputTokens'];
-    if (!Number.isInteger(oldLimit) || oldLimit < 4096 || oldLimit > 64000) {
-      throw policyMigrationError('repair.maxOutputTokens');
-    }
-  }
-
-  const validation = validatePolicyValues(values);
-  if (!validation.ok) {
-    const error = policyMigrationError('migrated_values');
-    error.details = validation;
+function deriveRequestEnvelopeMaxBytes(candidateArtifactBytesValue, contextWindowTokensValue) {
+  const candidateArtifactBytes = Number(candidateArtifactBytesValue);
+  const contextWindowTokens = Number(contextWindowTokensValue);
+  if (!Number.isInteger(candidateArtifactBytes) || candidateArtifactBytes <= 0
+    || !Number.isInteger(contextWindowTokens) || contextWindowTokens <= 0) {
+    const error = new Error('Request envelope size requires positive Candidate bytes and context tokens.');
+    error.code = 'AGENT_RESOURCE_POLICY_REQUEST_SIZE_INVALID';
     throw error;
   }
-  return {
-    values: validation.values,
-    deprecatedKeys: Object.keys(source).filter((key) => DEPRECATED_KEYS[key]),
-    unknownKeys: Object.keys(source).filter((key) => !DEFINITION_BY_KEY.has(key) && !DEPRECATED_KEYS[key])
-  };
+  return candidateArtifactBytes + contextWindowTokens * CONTEXT_TOKEN_BYTE_ESTIMATE;
 }
 
-function policyMigrationError(key) {
-  const error = new Error(`Agent resource policy migration rejected ${key}.`);
-  error.code = 'AGENT_RESOURCE_POLICY_SCHEMA_MIGRATION_INVALID';
-  error.key = key;
-  return error;
-}
+function diffPolicyValues(before = {}, after = {}) { return DEFINITIONS.flatMap((definition) => before[definition.key] === after[definition.key] ? [] : [{ key: definition.key, label: definition.label, before: before[definition.key], after: after[definition.key], risk: definition.risk, owner: definition.owner, applyMode: definition.applyMode }]); }
+function normalizedRegisteredAliasIds(modelRegistry) { if (!modelRegistry) return null; const source = Array.isArray(modelRegistry) ? modelRegistry : Array.isArray(modelRegistry.aliasIds) ? modelRegistry.aliasIds : Array.isArray(modelRegistry.profiles) ? modelRegistry.profiles.map((item) => item?.aliasId) : []; return new Set(source.map((item) => String(item || '').trim()).filter(Boolean)); }
+function normalizedModelProfilesByAliasId(modelRegistry) { if (!modelRegistry || !Array.isArray(modelRegistry.profiles)) return null; return new Map(modelRegistry.profiles.map((profile) => [String(profile?.aliasId || '').trim(), profile]).filter(([key]) => key)); }
+function isPlainObject(value) { return Boolean(value) && typeof value === 'object' && !Array.isArray(value); }
+function copy(value) { return { ...value, ...(value.allowedValues ? { allowedValues: [...value.allowedValues] } : {}) }; }
 
-function diffPolicyValues(before = {}, after = {}) {
-  return DEFINITIONS.flatMap((definition) => {
-    if (before[definition.key] === after[definition.key]) return [];
-    return [{ key: definition.key, label: definition.label, before: before[definition.key], after: after[definition.key], risk: definition.risk, owner: definition.owner, applyMode: definition.applyMode }];
-  });
-}
-
-function isPlainObject(value) {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
-function normalizedRegisteredAliases(modelRegistry) {
-  if (!modelRegistry) return null;
-  const source = Array.isArray(modelRegistry)
-    ? modelRegistry
-    : Array.isArray(modelRegistry.aliases)
-      ? modelRegistry.aliases
-      : Array.isArray(modelRegistry.profiles)
-        ? modelRegistry.profiles.map((profile) => profile?.litellmAlias || profile?.alias)
-        : [];
-  return new Set(source.map((value) => String(value || '').trim()).filter(Boolean));
-}
-
-function normalizedModelProfilesByAlias(modelRegistry) {
-  if (!modelRegistry || !Array.isArray(modelRegistry.profiles)) return null;
-  const profiles = new Map();
-  for (const profile of modelRegistry.profiles) {
-    for (const alias of [profile?.aliasId, profile?.litellmAlias, profile?.alias]) {
-      const normalized = String(alias || '').trim();
-      if (normalized) profiles.set(normalized, profile);
-    }
-  }
-  return profiles;
-}
-
-module.exports = {
-  SCHEMA_VERSION,
-  GROUPS,
-  DEFINITIONS,
-  HARD_INVARIANTS,
-  DEPRECATED_KEYS,
-  BOOTSTRAP_VALUES,
-  catalog,
-  validatePolicyValues,
-  validatePolicySnapshot,
-  checksumPolicyValues,
-  createPolicySnapshot,
-  runtimeProjection,
-  migratePolicyValues,
-  diffPolicyValues,
-  canonicalJson
-};
+module.exports = { SCHEMA_VERSION, CONTEXT_TOKEN_BYTE_ESTIMATE, STUDENT_QUESTION_PROTOCOL_CEILING, GROUPS, DEFINITIONS, HARD_INVARIANTS, DEPRECATED_KEYS, BOOTSTRAP_VALUES, catalog, validatePolicyValues, validatePolicySnapshot, checksumPolicyValues, createPolicySnapshot, runtimeProjection, deriveRequestEnvelopeMaxBytes, migratePolicyValues, resolvePolicyModelReferenceValues, diffPolicyValues, canonicalJson };

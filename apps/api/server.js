@@ -1,10 +1,12 @@
 'use strict';
+const { canonicalWorkspaceText } = require('../../packages/teacher-contract/candidate-content');
 
 const http = require('http');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { URL } = require('url');
+const { businessDeadlineFetch } = require('./business-deadline-fetch');
 const { createCourseStore } = require('./course-store');
 const { createCoursePackRegistry } = require('./course-pack-registry');
 const { createKnowledgePackRegistry } = require('./knowledge-pack-registry');
@@ -65,7 +67,9 @@ const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || '0.0.0.0';
 const VALIDATOR_URL = process.env.VALIDATOR_URL || 'http://localhost:9090';
 const TEACHER_URL = process.env.TEACHER_URL || 'http://localhost:7070';
-const DEFAULT_TEACHER_TIMEOUT_MS = Number(AGENT_RESOURCE_POLICY_BOOTSTRAP_VALUES['api.outerTimeoutMs']);
+const DEFAULT_TEACHER_TIMEOUT_MS = agentResourcePolicyRuntimeProjection(
+  AGENT_RESOURCE_POLICY_BOOTSTRAP_VALUES
+).api.outerTimeoutMs;
 const TEACHER_INTERNAL_TOKEN = process.env.AI_TEACHER_INTERNAL_TOKEN || '';
 const TEACHER_TOOL_TOKEN = process.env.AI_TEACHER_TOOL_TOKEN || '';
 const STREAM_RESPONSE_HANDLED = Symbol('stream-response-handled');
@@ -96,11 +100,9 @@ const AGENT_RESOURCE_POLICY_BOOTSTRAP_SNAPSHOT = createAgentResourcePolicySnapsh
 });
 const AGENT_RESOURCE_POLICY_BOOTSTRAP_PROJECTION = agentResourcePolicyRuntimeProjection(AGENT_RESOURCE_POLICY_BOOTSTRAP_VALUES);
 const AI_TEACHER_AGENT_TOOL_TIMEOUT_MS = AGENT_RESOURCE_POLICY_BOOTSTRAP_PROJECTION.teacher.agentToolTimeoutMs;
-const AI_TEACHER_VALIDATOR_TOOL_TIMEOUT_MARGIN_MS = 2000;
 const AI_TEACHER_VALIDATOR_TOOL_TIMEOUT_MS = AGENT_RESOURCE_POLICY_BOOTSTRAP_PROJECTION.validator.toolTimeoutMs;
 const AI_TEACHER_VALIDATOR_QUEUE_WAIT_MS = AGENT_RESOURCE_POLICY_BOOTSTRAP_PROJECTION.validator.queueWaitMs;
 const AI_TEACHER_VALIDATOR_EXECUTION_TIMEOUT_MS = AGENT_RESOURCE_POLICY_BOOTSTRAP_PROJECTION.validator.executionTimeoutMs;
-const AI_TEACHER_VALIDATOR_MAX_IN_FLIGHT = AGENT_RESOURCE_POLICY_BOOTSTRAP_PROJECTION.validator.maxInFlight;
 
 assertValidatorToolTimeoutContract();
 
@@ -177,6 +179,13 @@ function createServer(options = {}) {
     return memoizedPlatformGlossaryStore;
   };
 
+  let agentResourcePolicyStartupError = null;
+  let agentResourcePolicyStartupReconciliation = Promise.resolve();
+  const waitForAgentResourcePolicyStartup = async () => {
+    await agentResourcePolicyStartupReconciliation;
+    if (agentResourcePolicyStartupError) throw agentResourcePolicyStartupError;
+  };
+
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     if (req.method === 'OPTIONS') return send(res, 204, {});
@@ -219,7 +228,14 @@ function createServer(options = {}) {
 
       if (url.pathname.startsWith('/api/teacher/')) {
         if (!features.aiTeacherEnabled) return send(res, 503, aiTeacherDisabledPayload());
-        const result = await handleTeacherRequest(req, url, getCourseStore(), authService, res);
+        const result = await handleTeacherRequest(
+          req,
+          url,
+          getCourseStore(),
+          authService,
+          res,
+          waitForAgentResourcePolicyStartup
+        );
         if (result === STREAM_RESPONSE_HANDLED) return;
         return send(res, 200, result);
       }
@@ -646,20 +662,32 @@ function createServer(options = {}) {
         const validated = await accountStore.validateAgentResourcePolicyVersion({ versionId, actorUserId: admin.id, modelRegistry });
         if (!validated.validation?.ok) throwAgentResourcePolicyPublishInvalid(validated.validation);
         const snapshot = resourcePolicySnapshotFromVersion(validated);
-        const staged = await callTeacher('/v1/admin/resource-policy/stage', { method: 'POST', body: { snapshot } });
-        if (staged?.accepted !== true) throwAgentResourcePolicyOwnerFailed('AGENT_RESOURCE_POLICY_STAGE_FAILED', staged);
-        const published = await accountStore.publishAgentResourcePolicyVersion({ versionId, actorUserId: admin.id, modelRegistry });
-        let observed;
+        const previous = await accountStore.getActiveAgentResourcePolicyVersion();
+        const previousSnapshot = previous ? resourcePolicySnapshotFromVersion(previous) : AGENT_RESOURCE_POLICY_BOOTSTRAP_SNAPSHOT;
+        const changedOwners = changedAgentResourcePolicyOwners(previousSnapshot, snapshot);
         try {
-          observed = await callTeacher('/v1/admin/resource-policy/activate', { method: 'POST', body: { snapshot } });
+          const observed = await reconcileAgentResourcePolicyRuntime(snapshot, { validatorChanged: changedOwners.includes('validator') });
+          if (!agentResourcePolicyOwnersInSync(snapshot, observed)) {
+            throwAgentResourcePolicyOwnerFailed('AGENT_RESOURCE_POLICY_READBACK_MISMATCH', observed);
+          }
+          const published = await accountStore.publishAgentResourcePolicyVersion({ versionId, actorUserId: admin.id, modelRegistry });
+          return send(res, 200, {
+            desired: published,
+            observed,
+            apply: { status: 'applied', changedOwners },
+            inSync: true
+          });
         } catch (error) {
-          observed = { status: 'degraded', errorCode: error.code || 'AGENT_RESOURCE_POLICY_OWNER_ACTIVATE_FAILED' };
+          const compensation = await compensateAgentResourcePolicyRuntime(previousSnapshot, { validatorChanged: changedOwners.includes('validator') });
+          await accountStore.recordAdminAudit({
+            actorUserId: admin.id,
+            eventType: 'ai_teacher.agent_resource_policy.apply_failed',
+            targetType: 'ai_teacher_agent_resource_policy',
+            targetRef: versionId,
+            metadata: { errorCode: error.code || 'AGENT_RESOURCE_POLICY_APPLY_FAILED', compensation }
+          });
+          throw error;
         }
-        return send(res, 200, {
-          desired: published,
-          observed,
-          inSync: observed?.versionId === published.versionId && observed?.checksum === published.checksum
-        });
       }
       const agentResourcePolicyRollbackMatch = url.pathname.match(/^\/api\/admin\/ai-teacher\/resource-policy\/versions\/([^/]+)\/rollback$/);
       if (agentResourcePolicyRollbackMatch && req.method === 'POST') {
@@ -683,10 +711,28 @@ function createServer(options = {}) {
         });
         const validated = await accountStore.validateAgentResourcePolicyVersion({ versionId: draft.versionId, actorUserId: admin.id, modelRegistry });
         const snapshot = resourcePolicySnapshotFromVersion(validated);
-        const staged = await callTeacher('/v1/admin/resource-policy/stage', { method: 'POST', body: { snapshot } });
-        if (staged?.accepted !== true) throwAgentResourcePolicyOwnerFailed('AGENT_RESOURCE_POLICY_STAGE_FAILED', staged);
-        const published = await accountStore.publishAgentResourcePolicyVersion({ versionId: draft.versionId, actorUserId: admin.id, modelRegistry });
-        const observed = await callTeacher('/v1/admin/resource-policy/activate', { method: 'POST', body: { snapshot } });
+        const previous = await accountStore.getActiveAgentResourcePolicyVersion();
+        const previousSnapshot = previous ? resourcePolicySnapshotFromVersion(previous) : AGENT_RESOURCE_POLICY_BOOTSTRAP_SNAPSHOT;
+        const changedOwners = changedAgentResourcePolicyOwners(previousSnapshot, snapshot);
+        let observed;
+        let published;
+        try {
+          observed = await reconcileAgentResourcePolicyRuntime(snapshot, { validatorChanged: changedOwners.includes('validator') });
+          if (!agentResourcePolicyOwnersInSync(snapshot, observed)) {
+            throwAgentResourcePolicyOwnerFailed('AGENT_RESOURCE_POLICY_READBACK_MISMATCH', observed);
+          }
+          published = await accountStore.publishAgentResourcePolicyVersion({ versionId: draft.versionId, actorUserId: admin.id, modelRegistry });
+        } catch (error) {
+          const compensation = await compensateAgentResourcePolicyRuntime(previousSnapshot, { validatorChanged: changedOwners.includes('validator') });
+          await accountStore.recordAdminAudit({
+            actorUserId: admin.id,
+            eventType: 'ai_teacher.agent_resource_policy.apply_failed',
+            targetType: 'ai_teacher_agent_resource_policy',
+            targetRef: draft.versionId,
+            metadata: { errorCode: error.code || 'AGENT_RESOURCE_POLICY_APPLY_FAILED', compensation }
+          });
+          throw error;
+        }
         await accountStore.recordAdminAudit({
           actorUserId: admin.id,
           eventType: 'ai_teacher.agent_resource_policy.rolled_back',
@@ -697,7 +743,8 @@ function createServer(options = {}) {
         return send(res, 200, {
           desired: published,
           observed,
-          inSync: observed?.versionId === published.versionId && observed?.checksum === published.checksum
+          apply: { status: 'applied', changedOwners },
+          inSync: true
         });
       }
       if (url.pathname === '/api/admin/ai-teacher/tier-policies' && req.method === 'GET') {
@@ -978,20 +1025,12 @@ function createServer(options = {}) {
         preflight.capabilityEvidence = capabilityEvidence;
         const credentialIssues = dynamicEnvironmentCredentialIssues(draft);
         if (credentialIssues.length) {
-          throwLiteLlmPublishGateFailed(
-            'LITELLM_DYNAMIC_CREDENTIAL_UNSUPPORTED',
-            'Dynamic LiteLLM deployments must use a provider-default environment key or a managed LiteLLM credential.',
-            { credentialIssues }
-          );
+          throwLiteLlmPublishGateFailed('LITELLM_DYNAMIC_CREDENTIAL_UNSUPPORTED', 'Dynamic LiteLLM deployments must use a provider-default environment key or a managed LiteLLM credential.', { credentialIssues });
         }
         const desired = buildLiteLlmDesiredState(draft);
         const reconciled = await reconcileLiteLlmRuntime(liteLlmAdminClient(), desired);
         if (!reconciled.ok) {
-          throwLiteLlmPublishGateFailed(
-            reconciled.errorCode || 'LITELLM_CONFIG_APPLY_FAILED',
-            reconciled.message || 'LiteLLM runtime reconcile failed.',
-            { preflight, reconcile: reconciled }
-          );
+          throwLiteLlmPublishGateFailed(reconciled.errorCode || 'LITELLM_CONFIG_APPLY_FAILED', reconciled.message || 'LiteLLM runtime reconcile failed.', { preflight, reconcile: reconciled });
         }
         const apply = { ...reconciled, applied: true, status: 'applied' };
         const health = await aiTeacherLiteLlmHealth(draft, reconciled.observed);
@@ -1261,6 +1300,14 @@ function createServer(options = {}) {
 
   providerStatusMonitor.start?.();
   server.once('close', () => providerStatusMonitor.stop?.());
+  if (options.agentResourcePolicyStartupReconcile !== false && process.env.NODE_ENV !== 'test') {
+    server.once('listening', () => {
+      agentResourcePolicyStartupReconciliation = reconcileActiveAgentResourcePolicyAtStartup(authService)
+        .catch((error) => {
+          agentResourcePolicyStartupError = error;
+        });
+    });
+  }
   return server;
 
   function resolveRequestCoursePack(url) {
@@ -1408,7 +1455,14 @@ function positiveInteger(value, fallback) {
   return Number.isFinite(number) && number > 0 ? Math.floor(number) : fallback;
 }
 
-async function handleTeacherRequest(req, url, courseStore, authService, res) {
+async function handleTeacherRequest(
+  req,
+  url,
+  courseStore,
+  authService,
+  res,
+  waitForAgentResourcePolicyStartup = async () => {}
+) {
   const route = url.pathname.slice('/api/teacher'.length) || '/';
   if (route === '/health' && req.method === 'GET') {
     return projectPublicTeacherHealth(await callTeacher('/health', { method: 'GET' }));
@@ -1427,7 +1481,7 @@ async function handleTeacherRequest(req, url, courseStore, authService, res) {
   }
   if (route === '/threads' && req.method === 'GET') {
     const user = await requireAiTeacherAccess(req, authService, { capability: 'threads' });
-    const envelope = await enrichTeacherEnvelope(teacherContextFromQuery(url), courseStore, user);
+    const envelope = teacherManagementEnvelopeFromQuery(url, courseStore, user);
     const payload = await callTeacher(`/v1/teacher/threads?${teacherQuery(envelope, {
       scope: url.searchParams.get('scope') || 'current',
       limit: url.searchParams.get('limit') || 50
@@ -1436,7 +1490,7 @@ async function handleTeacherRequest(req, url, courseStore, authService, res) {
   }
   if (route === '/threads' && req.method === 'POST') {
     const user = await requireAiTeacherAccess(req, authService, { capability: 'threads' });
-    const envelope = await enrichTeacherEnvelope(teacherContextFromQuery(url), courseStore, user);
+    const envelope = teacherManagementEnvelopeFromQuery(url, courseStore, user);
     const payload = await callTeacher('/v1/teacher/threads', {
       method: 'POST',
       body: { context: envelope },
@@ -1447,7 +1501,7 @@ async function handleTeacherRequest(req, url, courseStore, authService, res) {
   const threadMatch = route.match(/^\/threads\/([^/]+)$/);
   if (threadMatch && req.method === 'DELETE') {
     const user = await requireAiTeacherAccess(req, authService, { capability: 'threads' });
-    const envelope = await enrichTeacherEnvelope(teacherContextFromQuery(url), courseStore, user);
+    const envelope = teacherManagementEnvelopeFromQuery(url, courseStore, user);
     const payload = await callTeacher(`/v1/teacher/threads/${encodeURIComponent(threadMatch[1])}?${teacherQuery(envelope)}`, {
       method: 'DELETE',
       sanitize: false
@@ -1460,7 +1514,7 @@ async function handleTeacherRequest(req, url, courseStore, authService, res) {
   const threadMessagesMatch = route.match(/^\/threads\/([^/]+)\/messages$/);
   if (threadMessagesMatch && req.method === 'GET') {
     const user = await requireAiTeacherAccess(req, authService, { capability: 'thread_messages' });
-    const envelope = await enrichTeacherEnvelope(teacherContextFromQuery(url), courseStore, user);
+    const envelope = teacherManagementEnvelopeFromQuery(url, courseStore, user);
     const payload = await callTeacher(`/v1/teacher/threads/${encodeURIComponent(threadMessagesMatch[1])}/messages?${teacherQuery(envelope, {
       limit: url.searchParams.get('limit') || 50
     })}`, { method: 'GET', sanitize: false });
@@ -1470,7 +1524,7 @@ async function handleTeacherRequest(req, url, courseStore, authService, res) {
   if (messageFeedbackMatch && req.method === 'POST') {
     const user = await requireAiTeacherAccess(req, authService, { capability: 'message_feedback' });
     const payload = await readJson(req);
-    const envelope = await enrichTeacherEnvelope(teacherContextFromQuery(url), courseStore, user);
+    const envelope = teacherManagementEnvelopeFromQuery(url, courseStore, user);
     return callTeacher(`/v1/teacher/messages/${encodeURIComponent(messageFeedbackMatch[1])}/feedback`, {
       method: 'POST',
       body: {
@@ -1486,7 +1540,7 @@ async function handleTeacherRequest(req, url, courseStore, authService, res) {
   if (clarificationCancelMatch && req.method === 'POST') {
     const user = await requireAiTeacherAccess(req, authService, { capability: 'answer' });
     const payload = await readJson(req);
-    const envelope = await enrichTeacherEnvelope(teacherContextFromQuery(url), courseStore, user);
+    const envelope = teacherManagementEnvelopeFromQuery(url, courseStore, user);
     return callTeacher(`/v1/teacher/clarifications/${encodeURIComponent(clarificationCancelMatch[1])}/cancel`, {
       method: 'POST',
       body: { context: envelope, threadId: String(payload.threadId || '') }
@@ -1495,7 +1549,7 @@ async function handleTeacherRequest(req, url, courseStore, authService, res) {
   const runEventsMatch = route.match(/^\/runs\/([^/]+)\/events$/);
   if (runEventsMatch && req.method === 'GET') {
     const user = await requireAiTeacherAccess(req, authService, { capability: 'run_events' });
-    const envelope = await enrichTeacherEnvelope(teacherContextFromQuery(url), courseStore, user);
+    const envelope = teacherManagementEnvelopeFromQuery(url, courseStore, user);
     const params = new URLSearchParams({
       afterSeq: url.searchParams.get('afterSeq') || '0',
       tenantId: envelope?.tenant?.tenantId || 'local-dev',
@@ -1510,7 +1564,7 @@ async function handleTeacherRequest(req, url, courseStore, authService, res) {
   const runCancelMatch = route.match(/^\/runs\/([^/]+)\/cancel$/);
   if (runCancelMatch && req.method === 'POST') {
     const user = await requireAiTeacherAccess(req, authService, { capability: 'run_cancel' });
-    const envelope = await enrichTeacherEnvelope(teacherContextFromQuery(url), courseStore, user);
+    const envelope = teacherManagementEnvelopeFromQuery(url, courseStore, user);
     const payload = await callTeacher(`/v1/teacher/runs/${encodeURIComponent(runCancelMatch[1])}/cancel?${teacherQuery(envelope)}`, {
       method: 'POST',
       sanitize: false
@@ -1520,7 +1574,7 @@ async function handleTeacherRequest(req, url, courseStore, authService, res) {
   const runMatch = route.match(/^\/runs\/([^/]+)$/);
   if (runMatch && req.method === 'GET') {
     const user = await requireAiTeacherAccess(req, authService, { capability: 'run_status' });
-    const envelope = await enrichTeacherEnvelope(teacherContextFromQuery(url), courseStore, user);
+    const envelope = teacherManagementEnvelopeFromQuery(url, courseStore, user);
     const payload = await callTeacher(`/v1/teacher/runs/${encodeURIComponent(runMatch[1])}?${teacherQuery(envelope)}`, {
       method: 'GET',
       sanitize: false
@@ -1554,6 +1608,7 @@ async function handleTeacherRequest(req, url, courseStore, authService, res) {
     const budgetReservation = await reserveTeacherTokenBudget(authService, user, envelope, 'answer');
     let primarySettled = false;
     try {
+      await waitForAgentResourcePolicyStartup();
       await prepareTeacherDispatch(authService, user, envelope, budgetReservation?.resourcePolicySnapshot);
       const rawResponse = await callTeacher('/v1/teacher/answer', {
         method: 'POST',
@@ -1586,8 +1641,10 @@ async function handleTeacherRequest(req, url, courseStore, authService, res) {
           user,
           continuationEnvelope,
           'answer_auto_continuation',
-          envelope.runtimeAssignment?.resourcePolicySnapshot
+          envelope.runtimeAssignment?.resourcePolicySnapshot,
+          { reuseLineageAdmission: true }
         );
+        await waitForAgentResourcePolicyStartup();
         await prepareTeacherDispatch(authService, user, continuationEnvelope, continuationReservation?.resourcePolicySnapshot);
         continuationStarted = true;
         const continuationRaw = await callTeacher('/v1/teacher/answer', {
@@ -1645,8 +1702,10 @@ async function handleTeacherRequest(req, url, courseStore, authService, res) {
     let continuationSettled = false;
     let continuationEnvelope = null;
     let continuationStarted = false;
+    let continuationRunId = '';
     let continuationSourceRaw = null;
     try {
+      await waitForAgentResourcePolicyStartup();
       await prepareTeacherDispatch(authService, user, envelope, budgetReservation?.resourcePolicySnapshot);
       await callTeacherStream('/v1/teacher/answer-stream', {
         method: 'POST',
@@ -1678,8 +1737,10 @@ async function handleTeacherRequest(req, url, courseStore, authService, res) {
               user,
               continuationEnvelope,
               'answer_stream_auto_continuation',
-              envelope.runtimeAssignment?.resourcePolicySnapshot
+              envelope.runtimeAssignment?.resourcePolicySnapshot,
+              { reuseLineageAdmission: true }
             );
+            await waitForAgentResourcePolicyStartup();
             await prepareTeacherDispatch(
               authService,
               user,
@@ -1717,7 +1778,12 @@ async function handleTeacherRequest(req, url, courseStore, authService, res) {
         await callTeacherStream('/v1/teacher/answer-stream', {
           method: 'POST',
           body: continuationEnvelope,
-          onStart: async (startEvent) => assertTeacherRuntimePostcondition(startEvent, continuationEnvelope),
+          onStart: async (startEvent) => {
+            assertTeacherRuntimePostcondition(startEvent, continuationEnvelope);
+            continuationRunId = /^run_[a-zA-Z0-9-]{8,160}$/.test(String(startEvent?.runId || ''))
+              ? String(startEvent.runId)
+              : '';
+          },
           onFinal: async (rawFinal) => {
             assertTeacherRuntimePostcondition(rawFinal, continuationEnvelope);
             const response = validateTeacherProxyResponse(
@@ -1737,6 +1803,28 @@ async function handleTeacherRequest(req, url, courseStore, authService, res) {
             return { ...response, type: 'final' };
           },
           onError: async (error) => {
+            const recovered = await recoverPersistedAutomaticContinuationResponse(
+              continuationEnvelope,
+              continuationRunId
+            ).catch(() => null);
+            if (recovered) {
+              assertTeacherRuntimePostcondition(recovered, continuationEnvelope);
+              const response = validateTeacherProxyResponse(
+                projectStudentTeacherResponse(recovered),
+                continuationEnvelope
+              );
+              await recordTeacherExchange(
+                authService,
+                user,
+                continuationEnvelope,
+                response,
+                'answer_stream_auto_continuation_recovered',
+                recovered,
+                continuationReservation
+              );
+              continuationSettled = true;
+              return { ...response, type: 'final' };
+            }
             await recordAutomaticContinuationFailure(
               authService,
               user,
@@ -1937,6 +2025,34 @@ async function requireAdminUser(req, authService) {
   return authService.requireEntitlement(req, 'admin.console.access');
 }
 
+function teacherManagementEnvelopeFromQuery(url, courseStore, user = null) {
+  const requested = teacherContextFromQuery(url).course;
+  return {
+    requestId: `req_${Date.now()}_${Math.random().toString(16).slice(2)}`,
+    contractVersion: '1.0',
+    host: {
+      hostAppId: 'sysmlv2-learning-platform',
+      hostAppVersion: '0.1.0',
+      integrationMode: 'embedded-panel'
+    },
+    tenant: {
+      tenantId: user?.tenantId || 'local-dev',
+      userId: user?.id || '',
+      dataPolicy: {
+        allowLLM: Boolean(user?.id),
+        allowTelemetry: false,
+        allowCrossSessionMemory: false
+      },
+      workspaceId: 'default'
+    },
+    course: {
+      coursePackId: courseStore.packId,
+      courseId: String(requested.courseId || '').slice(0, 160),
+      lessonId: String(requested.lessonId || '').slice(0, 160)
+    }
+  };
+}
+
 function assertAdminSecretMutationOrigin(req) {
   const origin = String(req.headers.origin || '').trim();
   if (!origin) return;
@@ -2025,9 +2141,9 @@ function projectPublicTeacherCapabilities(value) {
 
 async function agentResourcePolicyAdminState(accountStore) {
   const desired = await accountStore.getActiveAgentResourcePolicyVersion();
-  let observed = null;
+  let observed;
   try {
-    observed = await callTeacher('/v1/admin/resource-policy/state', { method: 'GET' });
+    observed = await observeAgentResourcePolicyRuntime(desired);
   } catch (error) {
     observed = {
       status: 'unavailable',
@@ -2037,11 +2153,159 @@ async function agentResourcePolicyAdminState(accountStore) {
   return {
     desired,
     observed,
-    inSync: Boolean(desired && observed?.versionId === desired.versionId && observed?.checksum === desired.checksum),
+    inSync: agentResourcePolicyOwnersInSync(desired, observed),
     diff: desired && observed?.values
       ? diffAgentResourcePolicyValues(observed.values, desired.values)
       : []
   };
+}
+
+async function reconcileActiveAgentResourcePolicyAtStartup(authService, options = {}) {
+  const accountStore = authService?.betterAuth?.accountStore;
+  if (!accountStore?.getActiveAgentResourcePolicyVersion) return null;
+  const active = await accountStore.getActiveAgentResourcePolicyVersion();
+  if (!active) return null;
+  const snapshot = resourcePolicySnapshotFromVersion(active);
+  const maxAttempts = Number.isInteger(options.maxAttempts) ? options.maxAttempts : 4;
+  const reconcileRuntime = options.reconcileRuntime || reconcileAgentResourcePolicyRuntime;
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const observed = await reconcileRuntime(snapshot, { validatorChanged: true });
+      if (!agentResourcePolicyOwnersInSync(snapshot, observed)) {
+        throwAgentResourcePolicyOwnerFailed('AGENT_RESOURCE_POLICY_STARTUP_READBACK_MISMATCH', observed);
+      }
+      console.log(`Agent resource policy startup reconciliation applied ${snapshot.versionId} (${snapshot.checksum}).`);
+      return observed;
+    } catch (error) {
+      lastError = error;
+      if (attempt < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, 500 * (2 ** (attempt - 1))));
+      }
+    }
+  }
+
+  const error = new Error('Active Agent resource policy could not be reconciled after API startup.');
+  error.statusCode = 503;
+  error.code = 'AGENT_RESOURCE_POLICY_STARTUP_RECONCILIATION_FAILED';
+  error.cause = lastError;
+  console.error(`${error.code}: ${lastError?.code || 'unknown_error'}`);
+  throw error;
+}
+
+async function reconcileAgentResourcePolicyRuntime(snapshot, options = {}) {
+  const staged = await callTeacher('/v1/admin/resource-policy/stage', { method: 'POST', body: { snapshot } });
+  if (staged?.accepted !== true) throwAgentResourcePolicyOwnerFailed('AGENT_RESOURCE_POLICY_STAGE_FAILED', staged);
+  const teacher = await callTeacher('/v1/admin/resource-policy/activate', { method: 'POST', body: { snapshot } });
+  const projection = agentResourcePolicyRuntimeProjection(snapshot.values);
+  const validator = options.validatorChanged
+    ? await callValidatorResourcePolicy('PUT', {
+      versionId: snapshot.versionId,
+      checksum: snapshot.checksum,
+      ...validatorOwnerSettings(projection.validator)
+    })
+    : await callValidatorResourcePolicy('GET');
+  return combineAgentResourcePolicyObserved(snapshot, teacher, validator, {
+    requireValidatorVersion: options.validatorChanged === true
+  });
+}
+
+async function observeAgentResourcePolicyRuntime(desired) {
+  const [teacherResult, validatorResult] = await Promise.allSettled([
+    callTeacher('/v1/admin/resource-policy/state', { method: 'GET' }),
+    callValidatorResourcePolicy('GET')
+  ]);
+  if (teacherResult.status !== 'fulfilled') throw teacherResult.reason;
+  const teacher = teacherResult.value;
+  const snapshot = desired ? resourcePolicySnapshotFromVersion(desired) : {
+    versionId: teacher.versionId,
+    checksum: teacher.checksum,
+    values: teacher.values
+  };
+  const validator = validatorResult.status === 'fulfilled'
+    ? validatorResult.value
+    : { status: 'unavailable', errorCode: validatorResult.reason?.code || 'VALIDATOR_RESOURCE_POLICY_UNAVAILABLE' };
+  return combineAgentResourcePolicyObserved(snapshot, teacher, validator);
+}
+
+function combineAgentResourcePolicyObserved(snapshot, teacher, validator, options = {}) {
+  const desiredValidator = validatorOwnerSettings(agentResourcePolicyRuntimeProjection(snapshot.values).validator);
+  const observedValidator = {
+    queueLimit: validator?.queueLimit,
+    queueWaitMs: validator?.queueWaitMs,
+    executionTimeoutMs: validator?.executionTimeoutMs
+  };
+  const validatorApplied = validator?.status === 'applied'
+    && (!options.requireValidatorVersion || (
+      validator.versionId === snapshot.versionId && validator.checksum === snapshot.checksum
+    ))
+    && JSON.stringify(desiredValidator) === JSON.stringify(observedValidator);
+  return {
+    ...teacher,
+    owners: {
+      ...(teacher?.owners || {}),
+      validator: {
+        status: validatorApplied ? 'applied' : 'not_applied',
+        desired: desiredValidator,
+        applied: observedValidator,
+        observed: observedValidator,
+        applyMode: 'owner_reload',
+        ...(validatorApplied ? {} : { reasonCode: validator?.errorCode || 'VALIDATOR_OWNER_READBACK_MISMATCH' })
+      }
+    }
+  };
+}
+
+async function compensateAgentResourcePolicyRuntime(snapshot, options = {}) {
+  const result = { teacher: 'not_attempted', validator: 'not_attempted' };
+  try {
+    const staged = await callTeacher('/v1/admin/resource-policy/stage', { method: 'POST', body: { snapshot } });
+    if (staged?.accepted !== true) throwAgentResourcePolicyOwnerFailed('AGENT_RESOURCE_POLICY_COMPENSATION_STAGE_FAILED', staged);
+    await callTeacher('/v1/admin/resource-policy/activate', { method: 'POST', body: { snapshot } });
+    result.teacher = 'restored';
+  } catch (error) {
+    result.teacher = error.code || 'restore_failed';
+  }
+  if (options.validatorChanged) try {
+    const projection = agentResourcePolicyRuntimeProjection(snapshot.values);
+    await callValidatorResourcePolicy('PUT', {
+      versionId: snapshot.versionId,
+      checksum: snapshot.checksum,
+      ...validatorOwnerSettings(projection.validator)
+    });
+    result.validator = 'restored';
+  } catch (error) {
+    result.validator = error.code || 'restore_failed';
+  }
+  return result;
+}
+
+function validatorOwnerSettings(projection = {}) {
+  return {
+    queueLimit: projection.queueLimit,
+    queueWaitMs: projection.queueWaitMs,
+    executionTimeoutMs: projection.executionTimeoutMs
+  };
+}
+
+function changedAgentResourcePolicyOwners(previousSnapshot, nextSnapshot) {
+  const previous = agentResourcePolicyRuntimeProjection(previousSnapshot.values);
+  const next = agentResourcePolicyRuntimeProjection(nextSnapshot.values);
+  return ['teacher', 'provider', 'validator', 'probe'].filter((owner) => (
+    JSON.stringify(previous[owner]) !== JSON.stringify(next[owner])
+  ));
+}
+
+function agentResourcePolicyOwnersInSync(desired, observed) {
+  if (!desired || observed?.versionId !== desired.versionId || observed?.checksum !== desired.checksum) return false;
+  const owners = observed?.owners;
+  if (!owners || typeof owners !== 'object') return false;
+  return Object.values(owners).every((owner) => (
+    typeof owner === 'string'
+      ? ['active', 'applied', 'snapshot_per_run'].includes(owner)
+      : owner?.status === 'applied'
+  ));
 }
 
 async function activeAiTeacherModelRegistry(accountStore) {
@@ -2056,16 +2320,17 @@ async function agentResourcePolicyAliasAdvisory(accountStore, liteLlmVersion) {
       return { status: 'not_configured', required: false, policyVersionId: '', missingAliases: [], references: [] };
     }
     const modelRegistry = modelRegistryFromLiteLlmVersion(liteLlmVersion || {});
-    const registeredAliases = new Set(modelRegistry.aliases || []);
+    const registeredAliasIds = new Set(modelRegistry.aliasIds || []);
     const references = AGENT_RESOURCE_POLICY_DEFINITIONS
       .filter((definition) => definition.valueType === 'model-ref')
-      .map((definition) => ({ key: definition.key, alias: String(activePolicy.values[definition.key] || '').trim() }))
-      .filter((reference) => reference.alias && !registeredAliases.has(reference.alias));
+      .map((definition) => ({ key: definition.key, aliasId: String(activePolicy.values[definition.key] || '').trim() }))
+      .filter((reference) => reference.aliasId && !registeredAliasIds.has(reference.aliasId));
     return {
       status: references.length ? 'migration_required' : 'ready',
       required: references.length > 0,
       policyVersionId: activePolicy.versionId,
-      missingAliases: [...new Set(references.map((reference) => reference.alias))].sort(),
+      missingAliasIds: [...new Set(references.map((reference) => reference.aliasId))].sort(),
+      missingAliases: [...new Set(references.map((reference) => reference.aliasId))].sort(),
       references
     };
   } catch {
@@ -2171,9 +2436,7 @@ async function aiTeacherLiteLlmHealth(activeVersion, knownObserved) {
       const desired = buildLiteLlmDesiredState(activeVersion);
       const observed = knownObserved || await observeLiteLlmRuntime(liteLlmAdminClient(), desired);
       result.runtime = observed;
-      result.status = observed.matched
-        ? 'healthy'
-        : observed.status === 'unavailable' ? 'unavailable' : 'drift';
+      result.status = observed.matched ? 'healthy' : observed.status === 'unavailable' ? 'unavailable' : 'drift';
     } else {
       const response = await fetch(new URL(process.env.LITELLM_ADMIN_HEALTH_PATH || '/health/liveliness', baseUrl), {
         method: 'GET',
@@ -2249,25 +2512,21 @@ async function validateLiteLlmPublishPreflight(version = {}, options = {}) {
   }
   const policyReferences = AGENT_RESOURCE_POLICY_DEFINITIONS
     .filter((definition) => definition.valueType === 'model-ref')
-    .map((definition) => ({
-      key: definition.key,
-      alias: String(activePolicy.values[definition.key] || '').trim()
-    }))
-    .filter((reference) => reference.alias);
+    .map((definition) => ({ key: definition.key, aliasId: String(activePolicy.values[definition.key] || '').trim() }))
+    .filter((reference) => reference.aliasId);
   const referenceClosure = validateLiteLlmReferenceClosure(version, policyReferences);
   if (!referenceClosure.ok) {
     const primary = referenceClosure.errors[0];
     const messages = {
       LITELLM_STAGE_ALIAS_UNRESOLVED: 'Agent resource policy references a model alias that is absent from the desired LiteLLM configuration.',
       LITELLM_DEPLOYMENT_ORPHANED: 'Every enabled Model Deployment must belong to an enabled Business Model Alias.',
-      LITELLM_ALIAS_NO_READY_MEMBER: 'Every enabled Business Model Alias must contain at least one ready deployment.',
-      LITELLM_ALIAS_PROTOCOL_UNREADY: 'Every enabled Business Model Alias must resolve to one executable protocol profile.'
+      LITELLM_ALIAS_NO_READY_MEMBER: 'Every enabled Business Model Alias must contain at least one ready deployment.'
     };
-    throwLiteLlmPublishGateFailed(
-      primary.code,
-      messages[primary.code] || 'LiteLLM reference closure validation failed.',
-      { validation, policyVersionId: activePolicy.versionId, referenceClosure }
-    );
+    throwLiteLlmPublishGateFailed(primary.code, messages[primary.code] || 'LiteLLM reference closure validation failed.', {
+      validation,
+      policyVersionId: activePolicy.versionId,
+      referenceClosure
+    });
   }
   const secrets = await liteLlmConfigSecretStatuses(version);
   const missing = secrets.filter((item) => item.required && !item.present);
@@ -2447,52 +2706,6 @@ async function liteLlmConfigSecretStatuses(version = {}) {
   });
 }
 
-async function applyLiteLlmConfigVersion(version = {}) {
-  const baseUrl = process.env.LITELLM_ADMIN_BASE_URL || '';
-  const masterKey = process.env.LITELLM_MASTER_KEY || '';
-  const applyPath = process.env.LITELLM_ADMIN_APPLY_PATH || '/config/update';
-  const result = {
-    applied: false,
-    status: 'skipped',
-    mode: 'litellm-admin-api',
-    baseUrl: publicBaseUrl(baseUrl),
-    path: applyPath,
-    message: ''
-  };
-  if (!baseUrl || !masterKey) {
-    result.message = 'LiteLLM admin apply is not configured; publish preflight should block live activation before this step.';
-    return result;
-  }
-  try {
-    const response = await fetch(new URL(applyPath, baseUrl), {
-      method: 'POST',
-      headers: litellmAdminHeaders(true),
-      body: JSON.stringify({
-        versionId: version.versionId,
-        checksum: version.checksum,
-        config: version.config,
-        renderedYaml: version.renderedYaml,
-        config_yaml: version.renderedYaml
-      })
-    });
-    const payload = await response.json().catch(() => ({}));
-    result.httpStatus = response.status;
-    result.response = publicLiteLlmAdminResponse(payload);
-    if (response.ok) {
-      result.applied = true;
-      result.status = 'applied';
-      result.message = 'LiteLLM admin apply request accepted.';
-    } else {
-      result.status = 'failed';
-      result.message = payload?.error || payload?.detail || `LiteLLM admin apply failed with ${response.status}.`;
-    }
-  } catch (error) {
-    result.status = 'failed';
-    result.message = error.message || 'LiteLLM admin apply failed.';
-  }
-  return result;
-}
-
 function parseLiteLlmUsagePayload(payload) {
   const rows = Array.isArray(payload) ? payload
     : Array.isArray(payload?.data) ? payload.data
@@ -2524,7 +2737,13 @@ function numeric(value) {
 
 function throwLiteLlmPublishGateFailed(code, message, details = {}) {
   const error = new Error(message);
-  error.statusCode = code === 'LITELLM_CAPABILITY_PROBE_REQUIRED'
+  error.statusCode = new Set([
+    'LITELLM_CAPABILITY_PROBE_REQUIRED',
+    'LITELLM_STAGE_ALIAS_UNRESOLVED',
+    'LITELLM_DEPLOYMENT_ORPHANED',
+    'LITELLM_ALIAS_NO_READY_MEMBER',
+    'LITELLM_STATIC_ALIAS_OWNERSHIP_CONFLICT'
+  ]).has(code)
     ? 409
     : code === 'LITELLM_CONFIG_INVALID' || code === 'LITELLM_SECRET_ENV_MISSING' ? 400 : 503;
   error.code = code;
@@ -2532,27 +2751,11 @@ function throwLiteLlmPublishGateFailed(code, message, details = {}) {
   throw error;
 }
 
-function liteLlmAdminClient() {
-  return createLiteLlmAdminClient({
-    baseUrl: process.env.LITELLM_ADMIN_BASE_URL || process.env.LITELLM_BASE_URL || '',
-    headers: litellmAdminHeaders(false)
-  });
-}
-
 function litellmAdminHeaders(includeJson) {
   const headers = { accept: 'application/json' };
   if (includeJson) headers['content-type'] = 'application/json';
   if (process.env.LITELLM_MASTER_KEY) headers.authorization = `Bearer ${process.env.LITELLM_MASTER_KEY}`;
   return headers;
-}
-
-function publicLiteLlmAdminResponse(payload) {
-  if (!payload || typeof payload !== 'object') return {};
-  return JSON.parse(JSON.stringify(payload, (key, value) => {
-    if (/key|token|secret|password/i.test(key)) return '[redacted]';
-    if (typeof value === 'string' && /sk-[A-Za-z0-9_-]{8,}/.test(value)) return '[redacted]';
-    return value;
-  }));
 }
 
 async function safeTeacherHealth() {
@@ -2612,31 +2815,32 @@ async function recordAiAccess(authService, event) {
   await authService.betterAuth?.accountStore?.recordAiAccessEvent(event);
 }
 
-async function reserveTeacherTokenBudget(authService, user, envelope, capability, trustedResourcePolicySnapshot = null) {
+async function reserveTeacherTokenBudget(
+  authService,
+  user,
+  envelope,
+  capability,
+  trustedResourcePolicySnapshot = null,
+  options = {}
+) {
   const accountStore = authService.betterAuth?.accountStore;
   const reserveBudget = accountStore?.reserveAiTeacherBudget;
   if (!reserveBudget) return null;
   const resourcePolicySnapshot = trustedResourcePolicySnapshot
     || await loadActiveAgentResourcePolicySnapshot(accountStore);
-  const resourcePolicy = agentResourcePolicyRuntimeProjection(resourcePolicySnapshot.values);
-  const estimatedInputTokens = estimateTeacherRequestTokens(envelope);
-  const estimatedOutputTokens = resourcePolicy.teacher.agentMediumAnswerMaxOutputTokens;
   const decision = await reserveBudget.call(accountStore, {
     user,
     envelope,
     capability,
     requestId: envelope.requestId || null,
     tenantId: envelope.tenant?.tenantId || '',
-    estimatedTokens: estimatedInputTokens + estimatedOutputTokens,
-    estimatedInputTokens,
-    estimatedOutputTokens,
-    resourcePolicyVersion: resourcePolicySnapshot.versionId
+    resourcePolicyVersion: resourcePolicySnapshot.versionId,
+    reuseLineageAdmission: options.reuseLineageAdmission === true
   });
   if (decision?.allowed !== false) {
     return {
       ...decision,
-      resourcePolicySnapshot,
-      estimate: { inputTokens: estimatedInputTokens, outputTokens: estimatedOutputTokens }
+      resourcePolicySnapshot
     };
   }
   const error = new Error(decision.message || 'AI Teacher token quota exceeded.');
@@ -2703,19 +2907,6 @@ function extractTeacherTokenUsage(response, envelope, directAnswer = '') {
   };
 }
 
-function estimateTeacherRequestTokens(envelope = {}) {
-  const parts = [
-    envelope.question?.text,
-    envelope.prompt,
-    envelope.message,
-    envelope.course?.lessonTitle,
-    ...(Array.isArray(envelope.editor?.files) ? envelope.editor.files.map((file) => file.content || '') : []),
-    ...(Array.isArray(envelope.diagnostics?.officialValidator) ? envelope.diagnostics.officialValidator.map((item) => item.message || '') : []),
-    ...(Array.isArray(envelope.diagnostics?.courseRules) ? envelope.diagnostics.courseRules.map((item) => item.message || '') : [])
-  ];
-  return Math.max(1, estimateTokens(parts.filter(Boolean).join('\n')));
-}
-
 function automaticContinuationPending(response) {
   const kind = automaticContinuationKind(response?.continuation?.kind);
   return response?.continuation?.status === 'automatic_pending'
@@ -2757,11 +2948,11 @@ function engineeringImprovementBudget(snapshot, lineageStartedAtMs) {
     error.code = 'AGENT_RESOURCE_POLICY_SNAPSHOT_INVALID';
     throw error;
   }
-  const values = validation.values;
-  const runMaxDurationMs = Number(values['engineeringImprovement.runMaxDurationMs']);
-  const lineageMaxDurationMs = Number(values['engineeringImprovement.lineageMaxDurationMs']);
-  const orchestrationReserveMs = Number(values['engineeringImprovement.orchestrationReserveMs']);
-  const minimumCompleteChainMs = Number(values['engineeringImprovement.minimumCompleteChainMs']);
+  const policy = agentResourcePolicyRuntimeProjection(validation.values).teacher;
+  const runMaxDurationMs = policy.agentEngineeringImprovementRunMaxDurationMs;
+  const lineageMaxDurationMs = policy.agentEngineeringImprovementLineageMaxDurationMs;
+  const orchestrationReserveMs = policy.agentEngineeringImprovementOrchestrationReserveMs;
+  const minimumCompleteChainMs = policy.agentEngineeringImprovementMinimumCompleteChainMs;
   const startedAtMs = Number.isFinite(Number(lineageStartedAtMs)) ? Number(lineageStartedAtMs) : Date.now();
   const remainingLineageMs = Math.max(
     0,
@@ -2922,6 +3113,15 @@ async function enrichTeacherEnvelope(payload, courseStore, user = null) {
         references: lesson.courseReferences || [],
         conceptExplanations: lesson.courseConceptExplanations || [],
         codeGuideExplanations: lesson.codeGuideExplanations || [],
+        courseRules: Array.isArray(lesson.validation?.rules?.rules)
+          ? lesson.validation.rules.rules
+          : [],
+        referenceModel: lesson.workspace
+          ? {
+            entryFile: lesson.workspace.entryFile || 'main.sysml',
+            files: normalizeTeacherFiles(lesson.workspace.files || [])
+          }
+          : undefined,
         clientSupplement: untrustedCourseContextSupplement(clientCourseContext)
       };
       if (!envelope.editor && lesson.workspace) {
@@ -2951,6 +3151,7 @@ async function enrichTeacherEnvelope(payload, courseStore, user = null) {
       references: [],
       conceptExplanations: [],
       codeGuideExplanations: [],
+      courseRules: [],
       clientSupplement: untrustedCourseContextSupplement(clientCourseContext)
     };
   }
@@ -2961,7 +3162,9 @@ async function enrichTeacherEnvelope(payload, courseStore, user = null) {
     });
   }
   if (!envelope.question) envelope.question = { text: '' };
-  const authoritative = await buildAuthoritativeTeacherContext(envelope, courseStore, clientDiagnostics);
+  const authoritative = await buildAuthoritativeTeacherContext(envelope, courseStore, clientDiagnostics, {
+    signal: AbortSignal.timeout(AI_TEACHER_VALIDATOR_TOOL_TIMEOUT_MS)
+  });
   envelope.diagnostics = authoritative.diagnostics;
   envelope.model = authoritative.model;
   return envelope;
@@ -3087,7 +3290,7 @@ function untrustedCourseContextSupplement(value) {
   };
 }
 
-async function buildAuthoritativeTeacherContext(envelope, courseStore, clientDiagnostics) {
+async function buildAuthoritativeTeacherContext(envelope, courseStore, clientDiagnostics, options = {}) {
   const files = Array.isArray(envelope.editor?.files) ? envelope.editor.files : [];
   const requestedActiveDiagnosticId = /^diag-[0-9a-f]{8}$/.test(String(clientDiagnostics?.activeDiagnosticId || ''))
     ? String(clientDiagnostics.activeDiagnosticId)
@@ -3119,7 +3322,7 @@ async function buildAuthoritativeTeacherContext(envelope, courseStore, clientDia
     const validation = await validateWithRules({
       files,
       entryFile: envelope.editor.entryFile || envelope.editor.activeFilePath || files[0].path
-    }, rulesForTeacherEnvelope(envelope, courseStore));
+    }, rulesForTeacherEnvelope(envelope, courseStore), { signal: options.signal });
     const allDiagnostics = normalizeAuthoritativeDiagnostics(validation.diagnostics);
     const officialValidator = allDiagnostics.filter((item) => item.source !== 'course-rule');
     const courseRules = allDiagnostics.filter((item) => item.source === 'course-rule');
@@ -3208,7 +3411,7 @@ async function callTeacher(path, options = {}) {
   if (options.body !== undefined) headers['content-type'] = 'application/json';
   headers['x-ai-teacher-token'] = TEACHER_INTERNAL_TOKEN;
   try {
-    const response = await fetch(target, {
+    const response = await businessDeadlineFetch(target, {
       method: options.method || 'GET',
       headers,
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
@@ -3247,6 +3450,55 @@ async function callTeacher(path, options = {}) {
   }
 }
 
+function liteLlmAdminClient() {
+  return createLiteLlmAdminClient({
+    baseUrl: process.env.LITELLM_ADMIN_BASE_URL || process.env.LITELLM_BASE_URL || '',
+    headers: litellmAdminHeaders(false)
+  });
+}
+
+async function callValidatorResourcePolicy(method, body) {
+  assertTeacherInternalToken();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  try {
+    const response = await businessDeadlineFetch(new URL('/internal/resource-policy', VALIDATOR_URL), {
+      method,
+      headers: {
+        accept: 'application/json',
+        'x-ai-teacher-token': TEACHER_INTERNAL_TOKEN,
+        ...(body === undefined ? {} : { 'content-type': 'application/json' })
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: controller.signal
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = new Error(payload.message || `Validator resource policy returned ${response.status}.`);
+      error.status = response.status >= 500 ? 503 : response.status;
+      error.statusCode = error.status;
+      error.code = payload.code || 'VALIDATOR_RESOURCE_POLICY_UPSTREAM_ERROR';
+      throw error;
+    }
+    return payload;
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      error = Object.assign(new Error('Validator resource policy request timed out.'), {
+        status: 504,
+        statusCode: 504,
+        code: 'VALIDATOR_RESOURCE_POLICY_TIMEOUT'
+      });
+    } else if (!error.status) {
+      error.status = 503;
+      error.statusCode = 503;
+      error.code = 'VALIDATOR_RESOURCE_POLICY_UNAVAILABLE';
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function callTeacherStream(path, options = {}, res, request) {
   assertTeacherInternalToken();
   const controller = new AbortController();
@@ -3272,7 +3524,7 @@ async function callTeacherStream(path, options = {}, res, request) {
       });
       res.write(`${JSON.stringify({ type: 'accepted', threadId: String(options.acceptedThreadId) })}\n`);
     }
-    const response = await fetch(target, {
+    const response = await businessDeadlineFetch(target, {
       method: options.method || 'GET',
       headers,
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
@@ -3401,7 +3653,7 @@ async function aiTeacherModelRouteAttestation(requestedAlias, activeVersion = nu
     throw error;
   }
   const deployments = payload.data
-    .filter((item) => String(item?.model_name || '') === modelAlias)
+    .filter((item) => String(item?.model_name || '') === modelAlias && !liteLlmRouteBlocked(item))
     .map((item) => {
       const params = item?.litellm_params || {};
       const providerModel = String(params.model || '');
@@ -3411,8 +3663,8 @@ async function aiTeacherModelRouteAttestation(requestedAlias, activeVersion = nu
         modelAlias,
         providerModel,
         apiBaseHash: apiBase ? hashContent(apiBase) : '',
-        rpm: safeRouteLimit(params.rpm),
-        tpm: safeRouteLimit(params.tpm)
+        rpm: optionalRouteLimit(params.rpm),
+        tpm: optionalRouteLimit(params.tpm)
       };
       return {
         ...deploymentFingerprint,
@@ -3452,9 +3704,18 @@ async function aiTeacherModelRouteAttestation(requestedAlias, activeVersion = nu
   };
 }
 
+function liteLlmRouteBlocked(item = {}) {
+  return item.blocked === true || item.model_info?.blocked === true;
+}
+
 function safeRouteLimit(value) {
   const number = Number(value);
   return Number.isFinite(number) && number >= 0 ? number : null;
+}
+
+function optionalRouteLimit(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : null;
 }
 
 function safeReasoningRouteProfile(params = {}) {
@@ -3485,8 +3746,8 @@ function publishedRouteControlPlane(activeVersion, modelAlias) {
       .map((item) => ({
         deploymentId: String(item.deploymentId || ''),
         providerModel: String(item.model || ''),
-        rpm: safeRouteLimit(item.rpm),
-        tpm: safeRouteLimit(item.tpm)
+        rpm: optionalRouteLimit(item.rpm),
+        tpm: optionalRouteLimit(item.tpm)
       }))
       .sort((left, right) => `${left.providerModel}:${left.deploymentId}`.localeCompare(`${right.providerModel}:${right.deploymentId}`))
   };
@@ -3741,8 +4002,8 @@ function projectStudentThreadMessages(value) {
   const completedAutomaticSources = new Set(messages
     .filter((message) => message?.role === 'assistant'
       && message?.response?.continuation?.autoContinuationUsed === true
-      && /^run_[a-zA-Z0-9-]{8,160}$/.test(String(message?.response?.continuation?.sourceRunId || '')))
-    .map((message) => String(message.response.continuation.sourceRunId)));
+      && /^run_[a-zA-Z0-9-]{8,160}$/.test(String(message?.automaticContinuationSourceRunId || '')))
+    .map((message) => String(message.automaticContinuationSourceRunId)));
   return {
     threadId: String(value?.threadId || ''),
     messages: messages
@@ -3771,6 +4032,30 @@ function projectStudentThreadMessages(value) {
           updatedAt: String(message.updatedAt || '')
         };
       })
+  };
+}
+
+async function recoverPersistedAutomaticContinuationResponse(envelope, runId) {
+  const threadId = String(envelope?.threadId || '');
+  const currentRunId = String(runId || '');
+  if (!/^thread_[a-zA-Z0-9-]{8,160}$/.test(threadId)
+    || !/^run_[a-zA-Z0-9-]{8,160}$/.test(currentRunId)) return null;
+  const payload = await callTeacher(
+    `/v1/teacher/threads/${encodeURIComponent(threadId)}/messages?${teacherQuery(envelope, { limit: 50 })}`,
+    { method: 'GET', sanitize: false }
+  );
+  const message = (Array.isArray(payload?.messages) ? payload.messages : []).find((item) => (
+    item?.role === 'assistant'
+    && item?.status === 'succeeded'
+    && String(item?.runId || '') === currentRunId
+    && item?.response
+  ));
+  if (!message) return null;
+  return {
+    ...message.response,
+    threadId,
+    runId: currentRunId,
+    messageId: String(message.messageId || '')
   };
 }
 
@@ -4432,12 +4717,7 @@ function assertStrictObject(value, allowedKeys, label) {
   }
 }
 
-function canonicalWorkspaceText(files) {
-  return [...files]
-    .sort((left, right) => String(left.path).localeCompare(String(right.path)))
-    .map((file) => `${file.path}\n${hashContent(String(file.content || ''))}`)
-    .join('\n');
-}
+
 
 function buildTeacherCandidateStructureEvidence({ validation, files, candidateWorkspaceHash }) {
   const outline = validation?.semanticOutline;
@@ -4679,7 +4959,7 @@ async function callValidator(payload, options = {}) {
 }
 
 function publicTeacherActivity(value) {
-  const allowedKinds = new Set(['context', 'knowledge', 'web', 'skill', 'validator']);
+  const allowedKinds = new Set(['context', 'knowledge', 'web', 'skill', 'validator', 'repair']);
   const allowedStatuses = new Set(['running', 'complete', 'error']);
   const kind = allowedKinds.has(String(value.kind || '')) ? String(value.kind) : 'knowledge';
   const status = allowedStatuses.has(String(value.status || '')) ? String(value.status) : 'running';
@@ -4823,24 +5103,10 @@ function requireTeacherToolRequest(req) {
 }
 
 function assertValidatorToolTimeoutContract() {
-  const margin = AI_TEACHER_AGENT_TOOL_TIMEOUT_MS - AI_TEACHER_VALIDATOR_TOOL_TIMEOUT_MS;
-  if (margin < AI_TEACHER_VALIDATOR_TOOL_TIMEOUT_MARGIN_MS) {
-    const error = new Error(
-      `AI_TEACHER_VALIDATOR_TOOL_TIMEOUT_MS must be at least ${AI_TEACHER_VALIDATOR_TOOL_TIMEOUT_MARGIN_MS}ms shorter than AI_TEACHER_AGENT_TOOL_TIMEOUT_MS.`
-    );
-    error.code = 'AI_TEACHER_VALIDATOR_TOOL_TIMEOUT_INVALID';
-    throw error;
-  }
-  if (AI_TEACHER_VALIDATOR_MAX_IN_FLIGHT !== 1) {
-    const error = new Error('AI_TEACHER_VALIDATOR_MAX_IN_FLIGHT must be 1 for the current single-process backend.');
-    error.code = 'AI_TEACHER_VALIDATOR_CONCURRENCY_INVALID';
-    throw error;
-  }
   if (AI_TEACHER_VALIDATOR_QUEUE_WAIT_MS
     + AI_TEACHER_VALIDATOR_EXECUTION_TIMEOUT_MS
-    + AI_TEACHER_VALIDATOR_TOOL_TIMEOUT_MARGIN_MS
     > AI_TEACHER_VALIDATOR_TOOL_TIMEOUT_MS) {
-    const error = new Error('Validator tool timeout must cover queue wait plus execution timeout and a 2000ms margin.');
+    const error = new Error('Validator tool timeout must cover queue wait plus execution timeout.');
     error.code = 'AI_TEACHER_VALIDATOR_BUDGET_RELATION_INVALID';
     throw error;
   }
@@ -4978,6 +5244,13 @@ if (require.main === module) {
 module.exports = {
   createServer,
   validateWithRules,
+  modelRouteAttestationForTests: Object.freeze({
+    optionalLimit: optionalRouteLimit,
+    publishedDeploymentsMatch
+  }),
+  agentResourcePolicyStartupForTests: Object.freeze({
+    reconcileActive: reconcileActiveAgentResourcePolicyAtStartup
+  }),
   engineeringImprovementApiForTests: Object.freeze({
     automaticContinuationEnvelope,
     automaticContinuationPending,

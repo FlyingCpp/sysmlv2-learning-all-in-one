@@ -804,8 +804,8 @@ function AliasEditor({ alias, config, onChange }: { alias: BusinessModelAlias; c
     onChange({ ...alias, members });
   };
   return <div className="llmEditorForm">
+    <Field label="不可变 ID"><input value={alias.aliasId} readOnly aria-readonly="true" /></Field>
     <Field label="显示名称" required><input value={alias.displayName} onChange={(event) => onChange({ ...alias, displayName: event.target.value })} /></Field>
-    <Field label="不可变 Alias ID"><input value={alias.aliasId} readOnly aria-readonly="true" /></Field>
     <Field label="LiteLLM 路由名" required><input value={alias.litellmAlias} onChange={(event) => onChange({ ...alias, litellmAlias: event.target.value })} /></Field>
     <Field label="路由策略"><select value={alias.routing.strategy} onChange={(event) => onChange({ ...alias, routing: { ...alias.routing, strategy: event.target.value as BusinessModelAlias['routing']['strategy'] } })}><option value="simple-shuffle">simple-shuffle</option><option value="least-busy">least-busy</option><option value="usage-based-routing">usage-based-routing</option><option value="latency-based-routing">latency-based-routing</option></select></Field>
     <Field label="重试次数"><input type="number" min={0} value={alias.routing.numRetries} onChange={(event) => onChange({ ...alias, routing: { ...alias.routing, numRetries: numberValue(event.target.value, 0) } })} /></Field>

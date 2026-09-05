@@ -1,4 +1,5 @@
 'use strict';
+const { renderSysmlCode, canonicalCodeForBinding, canonicalWorkspaceText, parseMarkdownFences, sysmlCodeBlocks, MAX_CANDIDATE_ARTIFACT_BYTES } = require('../../packages/teacher-contract/candidate-content');
 
 const fs = require('fs');
 const path = require('path');
@@ -95,8 +96,7 @@ async function agentRuntimeReadiness(config = {}) {
         config,
         intentV2SelectedReasoningMode(reasoningMode)
       ),
-      maxOutputTokens: policy.maxOutputTokens,
-      outputBudgetMode: 'run-resource-profiled',
+      outputBudgetMode: 'provider-default-no-open-generation-cap',
       temperature: policy.temperature,
       reasoningMode,
       answerMode
@@ -113,6 +113,12 @@ async function agentRuntimeReadiness(config = {}) {
 }
 
 async function runAgentCapability(hostContext, config = {}, options = {}) {
+  return await withProviderRunAdmission(config, async () => (
+    await runAgentCapabilityAdmitted(hostContext, config, options)
+  ));
+}
+
+async function runAgentCapabilityAdmitted(hostContext, config = {}, options = {}) {
   const modulePath = resolveAgentModulePath(config.agentModulePath);
   const runtime = await loadAgentRuntime({ modulePath });
   const answerMode = 'result_bound_v2';
@@ -122,7 +128,7 @@ async function runAgentCapability(hostContext, config = {}, options = {}) {
   frozenAgentWorkflowVersion(hostContext);
   const reasoningMode = normalizeReasoningMode(config.agentReasoningMode);
   const stageModelAssignment = resolvedStageModelAssignment(config, hostContext);
-  const mapped = createAgentContext(hostContext);
+  const mapped = createAgentContext(hostContext, config.lastValidatedCandidate);
   const stageModels = createStageModels(runtime, config, stageModelAssignment);
   const model = stageModels.main;
   const runId = config.runId || opaqueId('run', hostContext.requestId || 'request');
@@ -143,6 +149,7 @@ async function runAgentCapability(hostContext, config = {}, options = {}) {
     ...checkpointDependencies,
     ...(config.agentDependencies || {})
   };
+  const taskContractContext = await loadTaskContractContextForAgent(config.conversation, runId);
   const lifecycle = createLifecycleRecorder({ ...config, runId });
   const auditedRun = await runtime.withModelCallAuditContext({
     runId,
@@ -179,9 +186,9 @@ async function runAgentCapability(hostContext, config = {}, options = {}) {
       return {
         answer: safety.answer,
         warnings: [
-          ...(safety.rendered ? ['validated_candidate_rendered_from_terminal_ledger'] : []),
+          ...(safety.rendered ? ['validated_candidate_rendered_from_delivery'] : []),
           ...(safety.modelCodeDiscarded ? ['model_generated_candidate_code_discarded'] : []),
-          ...(safety.recovered ? ['validated_candidate_recovered_from_terminal_ledger'] : []),
+          ...(safety.recovered ? ['validated_candidate_recovered_from_delivery'] : []),
           ...(safety.withheld ? ['unvalidated_or_unbound_code_withheld'] : []),
           ...(safety.withheldReason ? [`code_withheld_reason:${safety.withheldReason}`] : [])
         ]
@@ -195,11 +202,12 @@ async function runAgentCapability(hostContext, config = {}, options = {}) {
         hostContext,
         agentStudentQuestion(hostContext, config.workflowResume)
       ),
-      taskSources: authorizedTaskSources(hostContext, config.workflowResume),
+      taskSources: authorizedTaskSources(hostContext, config.workflowResume, config),
+      ...(taskContractContext ? { taskContractContext } : {}),
       operation: taskPolicy.operation,
       evaluationMode: localBenchmarkEvaluationMode(hostContext),
       capabilityGrant: taskPolicy.capabilityGrant,
-      resumeContext: projectWorkflowResumeForAgent(config.workflowResume),
+      resumeContext: projectWorkflowResumeForAgent(config.workflowResume, config),
       context: mapped.context
     },
     dependencies: {
@@ -207,10 +215,12 @@ async function runAgentCapability(hostContext, config = {}, options = {}) {
       onLifecycleEvent: lifecycle.onLifecycleEvent
     },
     reasoningMode,
-    stageReasoningModes: Object.fromEntries(AGENT_STAGE_IDS.map((stageId) => [
-      stageId,
-      stageModelAssignment.stages[stageId].reasoningMode
-    ])),
+    ...(config.agentStageReasoningPolicies ? {
+      stageReasoningModes: Object.fromEntries(AGENT_STAGE_IDS.map((stageId) => [
+        stageId,
+        stageModelAssignment.stages[stageId].reasoningMode
+      ]))
+    } : {}),
     providerOptionsName: providerName(config.llm?.providerMode),
     providerCompatibility: config.agentProviderCompatibility,
     stageProtocolProfiles: stageProtocolProfilesFromAssignment(stageModelAssignment),
@@ -269,6 +279,12 @@ async function runAgentCapability(hostContext, config = {}, options = {}) {
 
 /** 评测控制面专用：隔离Primary生成，复用生产模型路由、Tool Adapter和Agent核心链。 */
 async function runEngineeringReviewEvaluationCapability(hostContext, baselineCandidate, config = {}) {
+  return await withProviderRunAdmission(config, async () => (
+    await runEngineeringReviewEvaluationCapabilityAdmitted(hostContext, baselineCandidate, config)
+  ));
+}
+
+async function runEngineeringReviewEvaluationCapabilityAdmitted(hostContext, baselineCandidate, config = {}) {
   const modulePath = resolveAgentModulePath(config.agentModulePath);
   const runtime = await loadAgentRuntime({ modulePath });
   if (typeof runtime.runEngineeringReviewEvaluation !== 'function') {
@@ -306,7 +322,7 @@ async function runEngineeringReviewEvaluationCapability(hostContext, baselineCan
   const repairGeneration = runtime.v2RepairGenerationSettings(generationOptions);
   const modelCalls = [];
   const currentStudentQuestion = agentStudentQuestion(hostContext, config.workflowResume);
-  const taskSources = authorizedTaskSources(hostContext, config.workflowResume);
+  const taskSources = authorizedTaskSources(hostContext, config.workflowResume, config);
   const audited = await runtime.withModelCallAuditContext({
     runId,
     promptVersion: runtime.INTENT_ORCHESTRATOR_V2_PROMPT_VERSION,
@@ -353,16 +369,68 @@ async function runEngineeringReviewEvaluationCapability(hostContext, baselineCan
   });
 }
 
-function createAgentContext(hostContext) {
+function normalizeCourseRuleReferences(value) {
+  return (Array.isArray(value) ? value : [])
+    .map((rule) => {
+      if (!rule || typeof rule !== 'object' || Array.isArray(rule)) return null;
+      const id = String(rule.id || '').trim().slice(0, 160);
+      const type = String(rule.type || '').trim().slice(0, 120);
+      const message = String(rule.message || '').trim().slice(0, 2000);
+      if (!id || !type || !message) return null;
+      const severity = ['warning', 'info'].includes(String(rule.severity || '').toLowerCase())
+        ? String(rule.severity).toLowerCase()
+        : 'error';
+      return {
+        id,
+        type,
+        severity,
+        message,
+        ...(rule.selector && typeof rule.selector === 'object' && !Array.isArray(rule.selector)
+          ? { selector: { ...rule.selector } }
+          : {})
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 100);
+}
+
+function courseReferenceModelProjection(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const files = (Array.isArray(value.files) ? value.files : [])
+    .map((file) => {
+      if (!file || typeof file !== 'object' || Array.isArray(file)) return null;
+      const displayName = String(file.displayName || file.path || '').trim().slice(0, 240);
+      if (!displayName) return null;
+      const content = String(file.content || '').slice(0, 200000);
+      return {
+        displayName,
+        content,
+        contentHash: hashContent(content),
+        editable: file.editable !== false
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 20);
+  if (!files.length) return {};
+  return {
+    referenceModel: {
+      entryFile: nonEmptyText(value.entryFile, files[0].displayName, 240),
+      files
+    }
+  };
+}
+
+function createAgentContext(hostContext, lastValidatedCandidate) {
   const editorFiles = Array.isArray(hostContext.editor?.files) ? hostContext.editor.files : [];
   const fileMap = new Map();
   const files = editorFiles.map((file, index) => {
     const workspacePath = String(file.path || `model-${index + 1}.sysml`);
     const displayName = workspacePath.slice(0, 160);
-    const fileId = fileIdForPath(displayName);
+    const fileId = fileIdForPath(workspacePath);
     const mapped = {
       fileId,
       displayName,
+      workspacePath,
       content: String(file.content || ''),
       contentHash: hashContent(file.content || ''),
       editable: file.editable !== false
@@ -402,6 +470,7 @@ function createAgentContext(hostContext) {
   };
   Object.assign(model, mapEditorFocus(hostContext, active));
 
+  const trustedPreviousCandidate = normalizeLastValidatedCandidate(lastValidatedCandidate, files);
   const context = {
     tenantId: opaqueId('tenant', hostContext.tenant?.tenantId || 'local-dev'),
     userId: opaqueId('user', hostContext.tenant?.userId || 'unscoped-user'),
@@ -411,11 +480,47 @@ function createAgentContext(hostContext) {
       lessonId: opaqueId('lesson', hostContext.course?.lessonId || 'lesson'),
       title: nonEmptyText(hostContext.course?.lessonTitle, 'Current SysML v2 lesson', 240),
       objectives: textList(hostContext.course?.learningGoals, 20, 1000),
-      taskHints: textList((hostContext.courseContext?.todoItems || []).map((item) => item?.text || item), 20, 1000)
+      taskHints: textList((hostContext.courseContext?.todoItems || []).map((item) => item?.text || item), 20, 1000),
+      courseRules: normalizeCourseRuleReferences(hostContext.courseContext?.courseRules),
+      ...courseReferenceModelProjection(hostContext.courseContext?.referenceModel)
     },
-    model
+    model,
+    ...(trustedPreviousCandidate
+      ? { conversationSubjects: { lastValidatedCandidate: trustedPreviousCandidate } }
+      : {})
   };
   return { context, fileMap };
+}
+
+function normalizeLastValidatedCandidate(candidate, currentFiles) {
+  if (!candidate || typeof candidate !== 'object') return undefined;
+  const content = String(candidate.content || '');
+  const contentHash = String(candidate.contentHash || '');
+  if (!content || hashContent(content) !== contentHash) return undefined;
+  const fileId = String(candidate.fileId || '');
+  const sourceRunId = String(candidate.sourceRunId || '');
+  const candidateWorkspaceHash = String(candidate.candidateWorkspaceHash || '');
+  if (!fileId || !sourceRunId || !/^sha256:[a-f0-9]{64}$/u.test(candidateWorkspaceHash)) {
+    return undefined;
+  }
+  const sameFile = currentFiles.find((file) => file.fileId === fileId);
+  const displayName = nonEmptyText(
+    candidate.displayName || sameFile?.displayName,
+    'generated_architecture.sysml',
+    160
+  );
+  return {
+    sourceRunId,
+    candidateWorkspaceHash,
+    fileId,
+    displayName,
+    content,
+    contentHash,
+    currentWorkspaceMatches: Boolean(
+      sameFile?.contentHash === contentHash
+      || currentFiles.some((file) => file.contentHash === contentHash)
+    )
+  };
 }
 
 function mapEditorFocus(hostContext, activeFile) {
@@ -508,13 +613,13 @@ function deriveAgentTaskPolicy(hostContext) {
 }
 
 function createExecutionCheckpointDependencies({ hostContext, runId, conversation }) {
-  if (!conversation
-    || typeof conversation.appendExecutionCheckpoint !== 'function'
-    || typeof conversation.loadLatestExecutionCheckpoint !== 'function'
-    || typeof conversation.findReusableValidationArtifact !== 'function') return {};
+  if (!conversation) return {};
   const currentHashes = deriveExecutionInputHashes(hostContext);
   const validationIdentity = executionValidationIdentity(hostContext);
-  return {
+  const dependencies = {};
+  if (typeof conversation.appendExecutionCheckpoint === 'function'
+    && typeof conversation.loadLatestExecutionCheckpoint === 'function'
+    && typeof conversation.findReusableValidationArtifact === 'function') Object.assign(dependencies, {
     async persistExecutionCheckpoint(boundary) {
       const validation = boundary?.validation
         ? checkpointValidationArtifact(boundary.validation, validationIdentity)
@@ -542,7 +647,99 @@ function createExecutionCheckpointDependencies({ hostContext, runId, conversatio
     async findReusableValidationArtifact(input) {
       return conversation.findReusableValidationArtifact({ runId, ...input });
     }
+  });
+  if (typeof conversation.ensureTaskLifecycleContract === 'function'
+    && typeof conversation.loadTaskLifecycleContract === 'function'
+    && typeof conversation.appendTaskLifecycleContractEvent === 'function'
+    && typeof conversation.listTaskLifecycleContractEvents === 'function') Object.assign(dependencies, {
+    async ensureTaskLifecycleContract(input) {
+      return conversation.ensureTaskLifecycleContract({ runId, ...input });
+    },
+    async loadTaskLifecycleContract() {
+      return conversation.loadTaskLifecycleContract(runId);
+    },
+    async appendTaskLifecycleContractEvent(input) {
+      return conversation.appendTaskLifecycleContractEvent({ runId, ...input });
+    },
+    async listTaskLifecycleContractEvents() {
+      return conversation.listTaskLifecycleContractEvents(runId);
+    }
+  });
+  return dependencies;
+}
+
+async function loadTaskContractContextForAgent(conversation, runId) {
+  if (!conversation || typeof conversation.loadTaskLifecycleContract !== 'function') return undefined;
+  const current = await conversation.loadTaskLifecycleContract(runId);
+  if (current) return requiredTaskContractContext('same_lineage', current);
+  if (typeof conversation.loadLatestTaskLifecycleContractForThread !== 'function') return undefined;
+  const previous = await conversation.loadLatestTaskLifecycleContractForThread(runId);
+  return previous ? requiredTaskContractContext('prior_dialogue', previous) : undefined;
+}
+
+function requiredTaskContractContext(relation, value) {
+  const projected = projectTaskContractContext(relation, value);
+  if (projected) return projected;
+  const error = new Error('Stored task lifecycle contract cannot be projected safely.');
+  error.code = 'TASK_CONTRACT_CONTEXT_INVALID';
+  error.statusCode = 409;
+  throw error;
+}
+
+function projectTaskContractContext(relation, value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const goals = (Array.isArray(value.goals) ? value.goals : []).slice(0, 64).flatMap((goal) => {
+    if (!goal || typeof goal !== 'object' || Array.isArray(goal)) return [];
+    const statement = optionalText(goal.statement, 4_000);
+    const goalId = optionalText(goal.goalId, 200);
+    if (!statement || !goalId) return [];
+    return [{
+      goalId,
+      statement,
+      required: goal.required !== false,
+      status: ['open', 'in_progress', 'covered', 'blocked', 'waived'].includes(goal.status)
+        ? goal.status
+        : 'open'
+    }];
+  });
+  const contractId = optionalText(value.contractId, 200);
+  if (!contractId || goals.length === 0) return undefined;
+  const selectedDeliveryKind = ['direct_answer', 'validated_candidate'].includes(value.selectedDelivery?.deliveryKind)
+    ? value.selectedDelivery.deliveryKind
+    : undefined;
+  return {
+    relation,
+    contract: {
+      contractId,
+      revision: nonNegativeInteger(value.revision) ?? 0,
+      status: ['provisional', 'active', 'waiting_user', 'executing', 'sealed_for_finalization', 'finalizing', 'delivery_pending', 'delivered', 'cancelled', 'superseded'].includes(value.status)
+        ? value.status
+        : 'provisional',
+      taskProfile: ['direct_answer', 'model_authoring', 'model_refinement', 'validation_repair', 'analysis'].includes(value.taskProfile)
+        ? value.taskProfile
+        : 'analysis',
+      predecessorContractId: optionalText(value.predecessorContractId, 200) || '',
+      taskRelation: ['new_task', 'contextual_reference', 'continue', 'amend', 'supersede'].includes(value.taskRelation)
+        ? value.taskRelation
+        : 'new_task',
+      objectiveSummary: optionalText(value.objectiveSummary, 4_000) || '',
+      goals,
+      assumptions: boundedStringList(value.assumptions, 32, 1_000),
+      exclusions: boundedStringList(value.exclusions, 32, 1_000),
+      openQuestions: boundedStringList(value.openQuestions, 32, 1_000),
+      preservationConstraints: boundedStringList(value.preservationConstraints, 32, 1_000),
+      deliveryStatus: ['not_started', 'sealed', 'pending', 'delivered', 'cancelled', 'superseded'].includes(value.deliveryStatus)
+        ? value.deliveryStatus
+        : 'not_started',
+      ...(selectedDeliveryKind ? { selectedDeliveryKind } : {})
+    }
   };
+}
+
+function boundedStringList(value, maxItems, maxLength) {
+  return [...new Set((Array.isArray(value) ? value : [])
+    .map((item) => optionalText(item, maxLength))
+    .filter(Boolean))].slice(0, maxItems);
 }
 
 function executionValidationIdentity(hostContext) {
@@ -585,14 +782,23 @@ function checkpointValidationArtifact(validation, identity) {
 function createAgentDependencies({ hostContext, agentContext, fileMap, config, knowledgeMode = 'legacy' }) {
   const publicActivity = createPublicActivityReporter(config);
   return {
+    async reportRepairProgress(progress) {
+      await publicActivity.emit(projectPublicRepairActivity(progress));
+    },
     async inspectLessonContext({ input, abortSignal }) {
       abortSignal?.throwIfAborted();
+      const includeRules = input.detail === 'rules' || input.detail === 'full';
+      const includeReferenceModel = input.detail === 'reference_model' || input.detail === 'full';
       return {
         courseId: agentContext.lesson.courseId,
         lessonId: agentContext.lesson.lessonId,
         title: agentContext.lesson.title,
         objectives: input.includeObjectives ? agentContext.lesson.objectives : [],
-        taskHints: agentContext.lesson.taskHints
+        taskHints: agentContext.lesson.taskHints,
+        ...(includeRules ? { courseRules: agentContext.lesson.courseRules } : {}),
+        ...(includeReferenceModel && agentContext.lesson.referenceModel
+          ? { referenceModel: agentContext.lesson.referenceModel }
+          : {})
       };
     },
     async inspectCurrentModel({ input, grounding, abortSignal }) {
@@ -603,22 +809,37 @@ function createAgentDependencies({ hostContext, agentContext, fileMap, config, k
       }, async () => {
         abortSignal?.throwIfAborted();
         const includeAllContent = input.detail === 'full';
-        const focusFileId = grounding.fileId;
+        const previousCandidate = input.source === 'last_validated_candidate'
+          ? agentContext.conversationSubjects?.lastValidatedCandidate
+          : undefined;
+        if (input.source === 'last_validated_candidate' && !previousCandidate) {
+          throw new Error('Last validated Candidate is unavailable');
+        }
+        const selectedFiles = previousCandidate
+          ? [{
+            fileId: previousCandidate.fileId,
+            displayName: previousCandidate.displayName,
+            contentHash: previousCandidate.contentHash,
+            editable: true,
+            content: previousCandidate.content
+          }]
+          : agentContext.model.files;
         return {
-          files: agentContext.model.files.map((file) => compactObject({
+          source: input.source,
+          files: selectedFiles.map((file) => compactObject({
             fileId: file.fileId,
             displayName: file.displayName,
             contentHash: file.contentHash,
             editable: file.editable,
             characterCount: file.content.length,
-            content: includeAllContent || (input.detail === 'selection' && file.fileId === focusFileId)
-              ? file.content
-              : undefined
+            content: includeAllContent ? file.content : undefined
           })),
-          activeFileId: agentContext.model.activeFileId,
-          focus: grounding,
-          diagnostics: agentContext.model.diagnostics,
-          activeDiagnosticId: agentContext.model.activeDiagnosticId
+          activeFileId: previousCandidate?.fileId || agentContext.model.activeFileId,
+          focus: previousCandidate
+            ? { kind: 'none', reason: 'active_file_only', fileId: previousCandidate.fileId }
+            : grounding,
+          diagnostics: previousCandidate ? [] : agentContext.model.diagnostics,
+          activeDiagnosticId: previousCandidate ? undefined : agentContext.model.activeDiagnosticId
         };
       }, (result) => ({ count: result.files.length }));
     },
@@ -656,10 +877,12 @@ function createAgentDependencies({ hostContext, agentContext, fileMap, config, k
         completeMessage: '已找到与问题相关的已审核知识。'
       }, async () => {
         abortSignal?.throwIfAborted();
+        const exampleLimit = Math.max(1, nonNegativeInteger(input.limit) ?? 5);
         const normalizedInput = {
           ...input,
           limit: nonNegativeInteger(input.limit) ?? 5,
-          selectedPatternIds: textList(input.selectedPatternIds, 8, 128)
+          selectedPatternIds: textList(input.selectedPatternIds, 8, 128),
+          exampleLimit
         };
         const queryPlan = buildKnowledgeQueryPlan({
           requestedQuery: normalizedInput.query,
@@ -667,31 +890,20 @@ function createAgentDependencies({ hostContext, agentContext, fileMap, config, k
           agentContext,
           requestedLimit: normalizedInput.limit
         });
-        if (normalizedInput.selectedPatternIds.length === 0
-          && knowledgeMode === 'repair_progressive'
-          && typeof config.knowledge?.searchAnchors === 'function'
-          && typeof config.knowledge?.expandClaims === 'function') {
-          try {
-            return await searchProgressiveReviewedKnowledge({
-              knowledge: config.knowledge,
-              queryPlan,
-              input: normalizedInput,
-              hostContext,
-              abortSignal
-            });
-          } catch (error) {
-            if (typeof config.knowledge?.search !== 'function') throw error;
-          }
-        }
         const hits = typeof config.knowledge?.search === 'function'
           ? await config.knowledge.search(queryPlan.effectiveQuery, hostContext, {
             limit: normalizedInput.limit,
+            exampleLimit: normalizedInput.exampleLimit,
+            offset: normalizedInput.offset,
+            exampleIds: normalizedInput.exampleIds,
+            claimIds: normalizedInput.claimIds,
+            evidenceIds: normalizedInput.evidenceIds,
             queryPlan,
             selectedPatternIds: normalizedInput.selectedPatternIds
           })
           : [];
         abortSignal?.throwIfAborted();
-        const graph = (hits || []).find((hit) => hit?.graph)?.graph;
+        const graph = hits?.graph ?? (hits || []).find((hit) => hit?.graph)?.graph;
         const items = (hits || [])
           .filter((hit) => hit.card?.reviewStatus === 'reviewed')
           // items 是兼容展示摘要，仍保持 8 条；规范 Claim 闭包通过 graph.claims 独立返回。
@@ -711,8 +923,49 @@ function createAgentDependencies({ hostContext, agentContext, fileMap, config, k
                 || hashContent(card.content || excerpt)
             };
           });
-        return adaptReviewedKnowledgeResult({ graph, items, input: normalizedInput, queryPlan });
+        return adaptReviewedKnowledgeResult({
+          graph,
+          items,
+          input: normalizedInput,
+          queryPlan,
+          exampleMaxPerQuery: exampleLimit
+        });
       }, summarizePublicKnowledgeActivity);
+    },
+    async listActiveExampleCatalog({ abortSignal } = {}) {
+      abortSignal?.throwIfAborted();
+      if (typeof config.knowledge?.listExampleCatalog !== 'function') return [];
+      try {
+        return await config.knowledge.listExampleCatalog(hostContext, {});
+      } catch {
+        return [];
+      }
+    },
+    async searchReviewedKnowledgeExamples({ query, constructTags, exampleLimit, abortSignal }) {
+      abortSignal?.throwIfAborted();
+      if (typeof config.knowledge?.searchExamples !== 'function') {
+        return { coverage: 'PARTIAL', requestedQuery: query, examples: undefined };
+      }
+      const queryPlan = buildKnowledgeQueryPlan({
+        requestedQuery: query,
+        hostContext,
+        agentContext,
+        requestedLimit: 8
+      });
+      const graph = await config.knowledge.searchExamples(queryPlan.effectiveQuery, hostContext, {
+        limit: 8,
+        exampleLimit,
+        constructTags,
+        queryPlan
+      });
+      abortSignal?.throwIfAborted();
+      return adaptReviewedKnowledgeResult({
+        graph,
+        items: [],
+        input: { query, limit: 8, exampleLimit, selectedPatternIds: [] },
+        queryPlan,
+        exampleMaxPerQuery: exampleLimit
+      });
     },
     async searchDomainEvidence({ input, abortSignal }) {
       return publicActivity.run({
@@ -722,7 +975,12 @@ function createAgentDependencies({ hostContext, agentContext, fileMap, config, k
       }, async () => {
         abortSignal?.throwIfAborted();
         const result = await searchDeepSeekDomainEvidence(
-          config.domainWebSearch,
+          {
+            ...config.domainWebSearch,
+            maxUses: config.run06?.domainEvidenceMaxSearchUsesPerQuery,
+            maxContinuations: config.run06?.domainEvidenceMaxProviderStepsPerQuery,
+            maxOutputTokens: config.run06?.domainEvidenceMaxOutputTokensPerQuery
+          },
           input,
           { signal: abortSignal, fetch: config.domainWebSearchFetch }
         );
@@ -799,6 +1057,7 @@ function createPublicActivityReporter(config) {
     }
   };
   return {
+    emit,
     async run(definition, task, summarize = () => ({})) {
       const activityId = `${definition.kind}-${++sequence}`;
       await emit({
@@ -864,16 +1123,60 @@ function summarizePublicWebActivity(result) {
 
 function summarizePublicValidatorActivity(result) {
   const validation = result?.validation || {};
-  const diagnostics = Array.isArray(validation.diagnostics) ? validation.diagnostics : [];
+  const diagnosticCount = publicValidationDiagnosticCount(validation);
+  const official = validation.official || validation;
+  const unavailable = official.syntax === 'unavailable' || official.semantic === 'unavailable';
   const passed = validation.valid === true
-    || (validation.syntax === 'passed' && validation.semantic === 'passed')
+    || (official.syntax === 'passed' && official.semantic === 'passed')
     || validation.status === 'passed';
   return {
-    count: diagnostics.length,
-    message: passed
-      ? '官方 Validator 检查通过。'
-      : diagnostics.length ? `官方 Validator 发现 ${diagnostics.length} 个需要处理的问题。` : '官方 Validator 检查已完成。'
+    count: diagnosticCount,
+    message: unavailable
+      ? '官方 Validator 暂不可用，未形成验证结论。'
+      : passed
+        ? '官方 Validator 检查通过。'
+        : diagnosticCount > 0
+          ? `官方 Validator 检查未通过，发现 ${diagnosticCount} 个问题。`
+          : '官方 Validator 检查未通过。'
   };
+}
+
+function publicValidationDiagnosticCount(validation) {
+  const declared = Number(validation?.diagnosticSummary?.total);
+  if (Number.isInteger(declared) && declared >= 0) return Math.min(999, declared);
+  const official = Array.isArray(validation?.official?.diagnostics)
+    ? validation.official.diagnostics.length
+    : Array.isArray(validation?.diagnostics) ? validation.diagnostics.length : 0;
+  const courseRules = Array.isArray(validation?.courseRules?.diagnostics)
+    ? validation.courseRules.diagnostics.length
+    : 0;
+  return Math.min(999, official + courseRules);
+}
+
+function projectPublicRepairActivity(progress) {
+  const maxRounds = Math.max(1, Math.min(99, positiveInteger(progress?.maxRounds, 1)));
+  const round = Math.max(1, Math.min(maxRounds, positiveInteger(progress?.round, 1)));
+  const diagnosticCount = nonNegativeInteger(progress?.diagnosticCount);
+  const count = diagnosticCount === undefined ? undefined : Math.min(999, diagnosticCount);
+  const phase = ['started', 'validation_failed', 'validation_passed', 'stopped'].includes(progress?.phase)
+    ? progress.phase
+    : 'stopped';
+  const message = phase === 'started'
+    ? `正在进行第 ${round}/${maxRounds} 轮修复。`
+    : phase === 'validation_passed'
+      ? `第 ${round}/${maxRounds} 轮修复已完成，官方 Validator 检查通过。`
+      : phase === 'validation_failed'
+        ? count === undefined
+          ? `第 ${round}/${maxRounds} 轮修复已完成，官方 Validator 检查仍未通过。`
+          : `第 ${round}/${maxRounds} 轮修复已完成，剩余 ${count} 个问题。`
+        : `第 ${round}/${maxRounds} 轮修复未完成，本轮运行已结束。`;
+  return compactObject({
+    activityId: `repair-${round}`,
+    kind: 'repair',
+    status: phase === 'stopped' ? 'error' : phase === 'started' ? 'running' : 'complete',
+    message,
+    count
+  });
 }
 
 function publicActivityItems(items) {
@@ -902,7 +1205,7 @@ function publicEngineeringPreviousVersion(value) {
   }
   const files = value.files.slice(0, 20).flatMap((file) => {
     const filePath = String(file?.filePath || '').trim().slice(0, 160);
-    const content = typeof file?.content === 'string' ? file.content.slice(0, 200_000) : '';
+    const content = typeof file?.content === 'string' ? file.content : '';
     return filePath && content ? [{ filePath, content }] : [];
   });
   return files.length === value.files.length
@@ -1053,156 +1356,10 @@ function expandedAstContextIdsForOperator(operator) {
   return contexts[operator] || [];
 }
 
-async function searchProgressiveReviewedKnowledge({
-  knowledge,
-  queryPlan,
-  input,
-  hostContext,
-  abortSignal
-}) {
-  const requestedLimit = nonNegativeInteger(input.limit);
-  const anchorLimit = Math.min(4, Math.max(1, requestedLimit || 4));
-  const anchorsResult = await knowledge.searchAnchors(
-    queryPlan.effectiveQuery,
-    hostContext,
-    { limit: anchorLimit, queryPlan }
-  );
-  abortSignal?.throwIfAborted();
-
-  const anchors = (Array.isArray(anchorsResult?.anchors) ? anchorsResult.anchors : [])
-    .slice(0, anchorLimit);
-  const closure = anchorsResult?.closure && typeof anchorsResult.closure === 'object'
-    ? anchorsResult.closure
-    : {};
-  const closureClaimIds = textList(closure.closureClaimIds, 25, 128);
-  const knowledgeAnswerRequiredClaimIds = textList(closure.knowledgeAnswerRequiredClaimIds, 25, 128);
-  const knowledgeSupportingClaimIds = textList(closure.knowledgeSupportingClaimIds, 25, 128);
-  const claimIds = [...new Set([
-    ...closureClaimIds,
-    ...anchors.map((claim) => optionalText(claim?.claimId, 128)).filter(Boolean)
-  ])].slice(0, 6);
-  const expansion = claimIds.length > 0
-    ? await knowledge.expandClaims(claimIds, hostContext)
-    : undefined;
-  abortSignal?.throwIfAborted();
-
-  const claimSources = [
-    ...anchors,
-    ...(Array.isArray(expansion?.claims) ? expansion.claims : [])
-  ];
-  const seenClaimIds = new Set();
-  const disclosedClaims = claimSources.flatMap((claim) => {
-    const claimId = optionalText(claim?.claimId, 128);
-    const claimText = optionalText(claim?.summary || claim?.claimText, 4_000);
-    if (!claimId || !claimText || seenClaimIds.has(claimId)) return [];
-    seenClaimIds.add(claimId);
-    return [{
-      claimId,
-      claimText,
-      authorityLevel: claim.authorityLevel === 'A2' ? 'A2' : 'A1',
-      operators: textList(claim.operators, 16, 16),
-      astContextIds: textList(claim.astContextIds, 16, 128),
-      evidenceIds: textList(claim.evidenceIds, 16, 128),
-      selectionRole: knowledgeAnswerRequiredClaimIds.includes(claimId)
-        ? 'required'
-        : knowledgeSupportingClaimIds.includes(claimId)
-          ? 'supporting'
-          : 'additional_supporting'
-    }];
-  });
-  const evidenceBlocks = (Array.isArray(expansion?.evidenceBlocks) ? expansion.evidenceBlocks : [])
-    .flatMap((evidence) => {
-      const evidenceId = optionalText(evidence?.evidenceId, 128);
-      const excerpt = fullText(evidence?.excerpt || evidence?.textContent);
-      if (!evidenceId || !excerpt) return [];
-      return [{
-        evidenceId,
-        sourceId: optionalText(evidence?.sourceId, 128),
-        sectionPath: nonEmptyText(evidence?.sectionPath, 'Unknown section', 500),
-        excerpt,
-        textHash: normalizeContentHash(evidence?.textHash) || hashContent(excerpt),
-        authorityLevel: evidence?.authorityLevel === 'A2' ? 'A2' : 'A1'
-      }];
-    });
-  const bundle = expansion?.bundle || anchorsResult?.bundle || {};
-  const closureClaimIdSet = new Set(closureClaimIds);
-  const additionalSupportingBudget = Math.min(input.limit, Math.max(0, 25 - closureClaimIds.length));
-  const closureClaims = closureClaimIds
-    .map((claimId) => disclosedClaims.find((claim) => claim.claimId === claimId))
-    .filter(Boolean);
-  const additionalClaims = disclosedClaims
-    .filter((claim) => !closureClaimIdSet.has(claim.claimId))
-    .slice(0, additionalSupportingBudget);
-  const claims = [...closureClaims, ...additionalClaims];
-  const returnedClaimIds = new Set(claims.map((claim) => claim.claimId));
-  const missingClosureClaimIds = [...new Set([
-    ...textList(closure.missingClosureClaimIds, 25, 128),
-    ...closureClaimIds.filter((claimId) => !returnedClaimIds.has(claimId))
-  ])];
-  const returnedEvidenceIds = new Set(evidenceBlocks.map((evidence) => evidence.evidenceId));
-  const missingEvidenceClaimIds = closureClaims
-    .filter((claim) => claim.evidenceIds.length === 0
-      || claim.evidenceIds.some((evidenceId) => !returnedEvidenceIds.has(evidenceId)))
-    .map((claim) => claim.claimId);
-  const closureGaps = [...new Set([
-    ...textList(closure.closureGaps, 32, 240),
-    ...missingClosureClaimIds.map((claimId) => `missing_claim:${claimId}`),
-    ...missingEvidenceClaimIds.map((claimId) => `missing_evidence:${claimId}`)
-  ])];
-  const closureRequirement = closureClaimIds.length > 0 || closureGaps.length > 0
-    ? 'required'
-    : 'not_applicable';
-  const closureStatus = closureRequirement === 'not_applicable'
-    ? 'not_applicable'
-    : closureGaps.length === 0 ? 'complete' : 'incomplete';
-  const closureEvidenceComplete = missingClosureClaimIds.length === 0 && missingEvidenceClaimIds.length === 0;
-  const progressiveGraph = {
-    coverage: !bundle.bundleId || claims.length === 0
-      ? 'NONE'
-      : closureRequirement === 'required'
-        && closureStatus === 'complete'
-        && closureEvidenceComplete ? 'COMPLETE' : 'PARTIAL',
-    bundleId: optionalText(bundle.bundleId, 128),
-    baselineId: optionalText(bundle.baselineId, 128),
-    bundleVersion: optionalText(bundle.bundleVersion, 120),
-    sourceRegistryHash: normalizeContentHash(bundle.sourceRegistryHash) || undefined,
-    bundleContentHash: normalizeContentHash(bundle.bundleContentHash) || undefined,
-    closureProfileId: optionalText(closure.closureProfileId, 128),
-    closureProfileHash: normalizeContentHash(closure.closureProfileHash) || undefined,
-    closureRequirement,
-    closureStatus,
-    candidateKnowledgePatterns: normalizeKnowledgePatternCandidates(closure.candidateKnowledgePatterns),
-    selectedKnowledgePatternIds: textList(closure.selectedKnowledgePatternIds, 8, 128),
-    selectedPatternClosureClaimIds: textList(closure.selectedPatternClosureClaimIds, 25, 128),
-    patternSelectionWarnings: textList(closure.patternSelectionWarnings, 16, 240),
-    closureGaps,
-    closureClaimIds,
-    knowledgeAnswerRequiredClaimIds,
-    knowledgeSupportingClaimIds,
-    mandatorySupportingCount: knowledgeSupportingClaimIds.length,
-    additionalSupportingClaimIds: additionalClaims.map((claim) => claim.claimId),
-    missingClosureClaimIds,
-    requestedLimit: input.limit,
-    additionalSupportingBudget,
-    selectionLimit: Math.min(25, closureClaimIds.length + additionalSupportingBudget),
-    claims,
-    evidenceBlocks,
-    guardrails: Array.isArray(closure.guardrails) ? closure.guardrails : [],
-    conflicts: [],
-    excludedCandidates: {
-      count: nonNegativeInteger(anchorsResult?.retrieval?.excludedCandidateCount) ?? 0,
-      claimIds: []
-    }
-  };
-  return adaptReviewedKnowledgeResult({
-    graph: progressiveGraph,
-    items: [],
-    input,
-    queryPlan
-  });
-}
-
-function adaptReviewedKnowledgeResult({ graph, items, input, queryPlan }) {
+function adaptReviewedKnowledgeResult({ graph, items, input, queryPlan, exampleMaxPerQuery }) {
+  const exampleCap = nonNegativeInteger(exampleMaxPerQuery)
+    ?? nonNegativeInteger(input?.exampleLimit)
+    ?? 2;
   if (!graph) {
     const emptyGraphResult = {
       requestedQuery: queryPlan.requestedQuery,
@@ -1240,16 +1397,18 @@ function adaptReviewedKnowledgeResult({ graph, items, input, queryPlan }) {
       excludedCandidates: { count: 0, claimIds: [] },
       items: []
     };
+    const examples = adaptReviewedKnowledgeExamples(null, exampleCap);
+    if (examples) emptyGraphResult.examples = examples;
     return { ...emptyGraphResult, resultHash: hashContent(canonicalJson(emptyGraphResult)) };
   }
 
-  const closureClaimIds = textList(graph.closureClaimIds, 25, 128);
-  const knowledgeAnswerRequiredClaimIds = textList(graph.knowledgeAnswerRequiredClaimIds, 25, 128);
-  const knowledgeSupportingClaimIds = textList(graph.knowledgeSupportingClaimIds, 25, 128);
-  const missingClosureClaimIds = textList(graph.missingClosureClaimIds, 25, 128);
+  const closureClaimIds = textList(graph.closureClaimIds, Number.MAX_SAFE_INTEGER, 128);
+  const knowledgeAnswerRequiredClaimIds = textList(graph.knowledgeAnswerRequiredClaimIds, Number.MAX_SAFE_INTEGER, 128);
+  const knowledgeSupportingClaimIds = textList(graph.knowledgeSupportingClaimIds, Number.MAX_SAFE_INTEGER, 128);
+  const missingClosureClaimIds = textList(graph.missingClosureClaimIds, Number.MAX_SAFE_INTEGER, 128);
   const candidateKnowledgePatterns = normalizeKnowledgePatternCandidates(graph.candidateKnowledgePatterns);
   const selectedKnowledgePatternIds = textList(graph.selectedKnowledgePatternIds, 8, 128);
-  const selectedPatternClosureClaimIds = textList(graph.selectedPatternClosureClaimIds, 25, 128);
+  const selectedPatternClosureClaimIds = textList(graph.selectedPatternClosureClaimIds, Number.MAX_SAFE_INTEGER, 128);
   const patternSelectionWarnings = textList(graph.patternSelectionWarnings, 16, 240);
   const closureGaps = textList(graph.closureGaps, 32, 240);
   const closureRequirement = graph.closureRequirement === 'required'
@@ -1261,9 +1420,9 @@ function adaptReviewedKnowledgeResult({ graph, items, input, queryPlan }) {
   const closureStatus = closureRequirement === 'not_applicable'
     ? 'not_applicable'
     : closureGaps.length > 0 || missingClosureClaimIds.length > 0 ? 'incomplete' : 'complete';
-  const claims = (graph.claims || []).slice(0, 25).map((claim) => ({
+  const claims = (graph.claims || []).map((claim) => ({
     claimId: nonEmptyText(claim.claimId, 'missing-claim', 128),
-    claimText: nonEmptyText(claim.claimText, 'Missing claim text.', 4000),
+    claimText: fullText(claim.claimText, 'Missing claim text.'),
     authorityLevel: claim.authorityLevel === 'A2' ? 'A2' : 'A1',
     operators: textList(claim.operators, 16, 16),
     astContextIds: textList(claim.astContextIds, 16, 128),
@@ -1298,7 +1457,7 @@ function adaptReviewedKnowledgeResult({ graph, items, input, queryPlan }) {
     queryExpansion: normalizeQueryExpansion(graph.queryExpansion, queryPlan.queryExpansion),
     coverage: graph.coverage,
     no_new_evidence: graph.no_new_evidence === true
-      || (graph.coverage === 'NONE' && claims.length === 0 && (graph.evidenceBlocks || []).length === 0),
+      || (graph.coverage === 'NONE' && claims.length === 0 && (graph.evidenceBlocks || []).length === 0 && (graph.examples || []).length === 0),
     bundleId: nonEmptyText(graph.bundleId, 'missing-bundle', 128),
     baselineId: nonEmptyText(graph.baselineId, 'missing-baseline', 128),
     bundleVersion: nonEmptyText(graph.bundleVersion, 'unversioned', 120),
@@ -1314,7 +1473,7 @@ function adaptReviewedKnowledgeResult({ graph, items, input, queryPlan }) {
     knowledgeSupportingClaimIds,
     mandatorySupportingCount: nonNegativeInteger(graph.mandatorySupportingCount)
       ?? knowledgeSupportingClaimIds.length,
-    additionalSupportingClaimIds: textList(graph.additionalSupportingClaimIds, 25, 128),
+    additionalSupportingClaimIds: textList(graph.additionalSupportingClaimIds, Number.MAX_SAFE_INTEGER, 128),
     missingClosureClaimIds,
     requestedLimit: nonNegativeInteger(graph.requestedLimit) ?? input.limit,
     additionalSupportingBudget,
@@ -1339,17 +1498,72 @@ function adaptReviewedKnowledgeResult({ graph, items, input, queryPlan }) {
       patternSpec: normalizeGuardrailPatternSpec(guardrail.patternSpec),
       patternHash: normalizeContentHash(guardrail.patternHash)
         || hashContent(JSON.stringify(guardrail.patternSpec || [])),
-      supportedByClaimIds: textList(guardrail.supportedByClaimIds, 25, 128),
+      supportedByClaimIds: textList(guardrail.supportedByClaimIds, Number.MAX_SAFE_INTEGER, 128),
       counterexampleIds: textList(guardrail.counterexampleIds, 32, 128)
     })),
-    conflicts: textList(graph.conflicts, 25, 128),
+    conflicts: textList(graph.conflicts, Number.MAX_SAFE_INTEGER, 128),
     excludedCandidates: normalizeExcludedCandidates(graph.excludedCandidates),
     items
   };
+  const examples = adaptReviewedKnowledgeExamples(graph.examples, exampleCap);
+  if (examples) { adapted.examples = examples; adapted.no_new_evidence = false; }
+  if (graph.hasMore !== undefined) adapted.hasMore = graph.hasMore;
+  if (graph.nextOffset !== undefined) adapted.nextOffset = graph.nextOffset;
   return {
     ...adapted,
     resultHash: hashContent(canonicalJson(adapted))
   };
+}
+
+function adaptReviewedKnowledgeExamples(rawExamples, exampleMaxPerQuery) {
+  try {
+    const maxExamples = Array.isArray(rawExamples) ? rawExamples.length : 0;
+    if (maxExamples <= 0) return undefined;
+    if (!Array.isArray(rawExamples) || rawExamples.length === 0) return undefined;
+
+    const adapted = rawExamples
+      .filter((example) => example && typeof example === 'object' && !Array.isArray(example))
+      .filter((example) => knowledgeExampleValidatorPassed(example))
+      .map((example) => {
+        const modelTextRaw = fullText(example.modelText, '');
+        if (!modelTextRaw) return null;
+
+        const exampleAuthority = example.exampleAuthority === 'community-example'
+          ? 'community-example'
+          : example.exampleAuthority === 'official-example'
+            ? 'official-example'
+            : '';
+        if (!exampleAuthority) return null;
+        return {
+          exampleId: nonEmptyText(example.exampleId, '', 128),
+          title: nonEmptyText(example.title, 'SysML v2 example', 240),
+          intentText: nonEmptyText(example.intentText, example.title || 'SysML v2 example', 2000),
+          modelText: modelTextRaw,
+          relatedClaimIds: Array.isArray(example.relatedClaimIds) ? example.relatedClaimIds : [],
+          source: example.source ?? {},
+          properties: example.properties ?? {},
+          constructTags: textList(example.constructTags, 32, 64),
+          exampleAuthority,
+          languageVersionTrack: nonEmptyText(example.languageVersionTrack, 'community', 64),
+          validatorPassed: true,
+        };
+      })
+      .filter((example) => example && example.exampleId)
+
+      .slice(0, maxExamples);
+
+    return adapted.length > 0 ? adapted : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function knowledgeExampleValidatorPassed(example) {
+  if (example.validatorPassed === true) return true;
+  if (example.reviewStatus === 'machine_validated') return true;
+  const attestation = example.validatorAttestation;
+  if (!attestation || typeof attestation !== 'object' || Array.isArray(attestation)) return false;
+  return attestation.syntax === 'passed' && attestation.semantic === 'passed';
 }
 
 function normalizeExcludedCandidates(value) {
@@ -1401,7 +1615,6 @@ function normalizeGuardrailPatternSpec(value) {
 
 async function callValidatorTool({ input, abortSignal, hostContext, fileMap, config, validatorObservations = [] }) {
   const baseUrl = String(config.platformApiUrl || process.env.PLATFORM_API_URL || 'http://localhost:8080').replace(/\/+$/, '');
-  const retryMax = validatorTransientRetryMax(config.validatorTransientRetryMax);
   const callerTimeoutSignal = AbortSignal.timeout(
     positiveInteger(
       config.agentValidatorToolTimeoutMs,
@@ -1417,51 +1630,46 @@ async function callValidatorTool({ input, abortSignal, hostContext, fileMap, con
   const requestBody = JSON.stringify({ context: hostContext, candidate: input });
   let response;
   let payload = {};
-  for (let attempt = 0; attempt <= retryMax; attempt += 1) {
-    const attemptStartedAt = Date.now();
-    try {
-      response = await fetch(validatorUrl, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-ai-teacher-tool-token': String(config.toolToken || '')
-        },
-        body: requestBody,
-        signal: requestSignal
-      });
-    } catch (error) {
-      validatorObservations.push(Object.freeze({
-        attempt: attempt + 1,
-        admissionOutcome: callerTimeoutSignal.aborted ? 'execution_timeout' : 'backend_unavailable',
-        queueWaitMs: 0,
-        executionMs: Math.max(0, Date.now() - attemptStartedAt),
-        retryableBeforeStart: false,
-        abortedAfterStart: abortSignal?.aborted === true
-      }));
-      if (abortSignal?.aborted) throw error;
-      if (callerTimeoutSignal.aborted) return unavailableValidation('VALIDATOR_TOOL_CALL_TIMEOUT');
-      return unavailableValidation('VALIDATOR_TOOL_UNREACHABLE');
-    }
-    const text = await response.text();
-    try {
-      payload = text ? JSON.parse(text) : {};
-    } catch {
-      payload = {};
-    }
-    const fallbackObservation = payload?.validatorObservation || {
-      admissionOutcome: validatorAdmissionOutcomeFromCode(payload?.code || payload?.error?.code),
-      retryableBeforeStart: payload?.retryableBeforeStart === true
-    };
-    validatorObservations.push(normalizeValidatorObservation(
-      fallbackObservation,
-      attempt + 1,
-      response.ok ? 'admitted' : 'backend_unavailable',
-      Date.now() - attemptStartedAt
-    ));
-    const retryableBeforeStart = payload?.retryableBeforeStart === true;
-    if (response.ok || !retryableBeforeStart || attempt >= retryMax) break;
-    await waitForAbortableDelay(150, requestSignal);
+  const attemptStartedAt = Date.now();
+  try {
+    response = await fetch(validatorUrl, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-ai-teacher-tool-token': String(config.toolToken || '')
+      },
+      body: requestBody,
+      signal: requestSignal
+    });
+  } catch (error) {
+    validatorObservations.push(Object.freeze({
+      attempt: 1,
+      admissionOutcome: callerTimeoutSignal.aborted ? 'execution_timeout' : 'backend_unavailable',
+      queueWaitMs: 0,
+      executionMs: Math.max(0, Date.now() - attemptStartedAt),
+      retryableBeforeStart: false,
+      abortedAfterStart: abortSignal?.aborted === true
+    }));
+    if (abortSignal?.aborted) throw error;
+    if (callerTimeoutSignal.aborted) return unavailableValidation('VALIDATOR_TOOL_CALL_TIMEOUT');
+    return unavailableValidation('VALIDATOR_TOOL_UNREACHABLE');
   }
+  const text = await response.text();
+  try {
+    payload = text ? JSON.parse(text) : {};
+  } catch {
+    payload = {};
+  }
+  const fallbackObservation = payload?.validatorObservation || {
+    admissionOutcome: validatorAdmissionOutcomeFromCode(payload?.code || payload?.error?.code),
+    retryableBeforeStart: payload?.retryableBeforeStart === true
+  };
+  validatorObservations.push(normalizeValidatorObservation(
+    fallbackObservation,
+    1,
+    response.ok ? 'admitted' : 'backend_unavailable',
+    Date.now() - attemptStartedAt
+  ));
   if (!response?.ok) {
     if ([429, 502, 503, 504].includes(response?.status)) {
       return unavailableValidation(payload?.code || payload?.error?.code || `VALIDATOR_TOOL_HTTP_${response?.status}`);
@@ -1532,22 +1740,6 @@ function normalizeValidatorObservation(value, attempt, fallbackOutcome, fallback
       : nonNegativeInteger(record.executionMs) ?? Math.max(0, Math.round(fallbackExecutionMs || 0)),
     retryableBeforeStart: record.retryableBeforeStart === true,
     abortedAfterStart: record.abortedAfterStart === true
-  });
-}
-
-function waitForAbortableDelay(delayMs, signal) {
-  if (signal?.aborted) return Promise.reject(signal.reason);
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort);
-      resolve();
-    }, delayMs);
-    const onAbort = () => {
-      clearTimeout(timer);
-      signal?.removeEventListener('abort', onAbort);
-      reject(signal.reason);
-    };
-    signal?.addEventListener('abort', onAbort, { once: true });
   });
 }
 
@@ -1899,9 +2091,6 @@ function ledgerProjection(entry) {
     ? entry.output
     : null;
   const officialPassed = validation?.official?.syntax === 'passed' && validation?.official?.semantic === 'passed';
-  const coursePassed = validation?.courseRuleApplicability === 'not_applicable'
-    || (validation?.courseRuleApplicability === 'applicable'
-      && validation?.courseRules?.status === 'passed');
   const evidenceIds = entry.toolName === 'search_skill_guidance'
     ? (entry.output?.items || []).map((item) => item.sourceId)
     : entry.toolName === 'search_reviewed_knowledge'
@@ -1935,7 +2124,7 @@ function ledgerProjection(entry) {
     taskRevision: entry.executionContext?.taskRevision,
     roundEpoch: entry.executionContext?.roundEpoch,
     validatorStatus: validation
-      ? (officialPassed && coursePassed && validation.completeness === 'complete' ? 'validated_passed' : 'validated_failed')
+      ? (officialPassed && validation.completeness === 'complete' ? 'validated_passed' : 'validated_failed')
       : '',
     ...(validation ? {
       validatorObservations: (entry.validatorObservations || []).slice(0, 2).map((observation) => ({
@@ -2013,7 +2202,8 @@ function trustedOutcomeToTeacherResponse(outcome, hostContext, fileMap, options 
     ...(trusted.warnings || []),
     ...(trusted.patches?.length ? ['validated_candidate_available_as_copy_only_text'] : []),
     ...(safelyDegraded ? ['post_validation_answer_safely_degraded'] : []),
-    ...(answerSafety.recovered ? ['validated_candidate_recovered_from_terminal_ledger'] : []),
+    ...(answerSafety.rendered ? ['validated_candidate_rendered_from_delivery'] : []),
+    ...(answerSafety.recovered ? ['validated_candidate_recovered_from_delivery'] : []),
     ...(answerSafety.withheld ? ['unvalidated_or_unbound_code_withheld'] : []),
     ...(answerSafety.withheldReason ? [`code_withheld_reason:${answerSafety.withheldReason}`] : [])
   ])];
@@ -2037,13 +2227,10 @@ function trustedOutcomeToTeacherResponse(outcome, hostContext, fileMap, options 
     : (trusted.validatorStatus === 'validated_passed' ? 'not_validated' : trusted.validatorStatus);
   // 安全检查已经给出可交付的确定性结果时，必须交付该结果并在内部标记降级，
   // 不能把“内容被安全收敛”升级成整轮 503。
-  const directAnswer = answerSafety.answer;
   const answerMode = 'result_bound_v2';
-  const candidateRenderMode = warnings.includes('validated_candidate_rendered_from_terminal_ledger')
-    ? 'terminal_ledger'
-    : warnings.includes('validated_candidate_recovered_from_terminal_ledger') ? 'recovered' : 'none';
-  const renderedCodeCharacters = [...String(directAnswer || '').matchAll(/```(?:sysml|sysmlv2)\s*\n([\s\S]*?)```/giu)]
-    .reduce((total, match) => total + String(match[1] || '').length, 0);
+  const candidateRenderMode = warnings.includes('validated_candidate_rendered_from_delivery')
+    ? 'delivery'
+    : warnings.includes('validated_candidate_recovered_from_delivery') ? 'recovered' : 'none';
   const answerCompletionStatus = candidateDelivery.status === 'incomplete'
     && trusted.answerCompletionStatus === 'complete'
     ? 'incomplete'
@@ -2051,6 +2238,30 @@ function trustedOutcomeToTeacherResponse(outcome, hostContext, fileMap, options 
   if (candidateDelivery.status === 'incomplete') {
     warnings.push(`candidate_delivery_incomplete:${candidateDelivery.reason}`);
   }
+  const terminalProjection = publicTerminalProjection({
+    outcome,
+    trusted,
+    answerCompletionStatus,
+    candidateDelivery,
+    candidateAttestation,
+    publicValidatorStatus
+  });
+  const directTeachingConflict = terminalProjection.kind === 'complete_direct'
+    && hasContradictoryDirectExecutionClaim(answerSafety.answer);
+  const directAnswer = composePublicTerminalAnswer(
+    terminalProjection,
+    directTeachingConflict ? '' : answerSafety.answer,
+    { directTeachingConflict }
+  );
+  warnings.push('server_terminal_projection_applied');
+  if (directTeachingConflict) {
+    warnings.push('direct_teaching_execution_claim_discarded');
+  }
+  if (!terminalProjection.retainTeachingExplanation && String(answerSafety.answer || '').trim()) {
+    warnings.push('model_terminal_narration_discarded');
+  }
+  const renderedCodeCharacters = sysmlCodeBlocks(directAnswer).map(block => [null, block.content])
+    .reduce((total, match) => total + String(match[1] || '').length, 0);
   const response = {
     contractVersion: CONTRACT_VERSION,
     responseId: `resp_agent_${opaqueId('id', hostContext.requestId || Date.now()).slice(3)}`,
@@ -2071,6 +2282,10 @@ function trustedOutcomeToTeacherResponse(outcome, hostContext, fileMap, options 
       engineeringCompletionStatus: trusted.engineeringReview.engineeringCompletionStatus,
       revisionDelivered: trusted.engineeringReview.revisionDelivered === true,
       engineeringResolution: trusted.engineeringReview.engineeringResolution || 'not_assessed',
+      scorecard: trusted.engineeringReview.scorecard ? { ...trusted.engineeringReview.scorecard } : undefined,
+      revisionScorecard: trusted.engineeringReview.revisionScorecard
+        ? { ...trusted.engineeringReview.revisionScorecard }
+        : undefined,
       openSuggestions: (trusted.engineeringReview.openSuggestions || []).slice(0, 4).map((item) => ({
         publicSuggestionId: String(item.publicSuggestionId || '').slice(0, 200),
         summary: String(item.summary || '').slice(0, 500)
@@ -2128,7 +2343,8 @@ function trustedOutcomeToTeacherResponse(outcome, hostContext, fileMap, options 
           assignmentChecksum: options.stageModelAssignment.assignmentChecksum,
           stages: Object.fromEntries(Object.entries(options.stageModelAssignment.stages || {}).map(([stageId, stage]) => [stageId, {
             modelAlias: String(stage?.modelAlias || ''),
-            reasoningMode: String(stage?.reasoningMode || '')
+            reasoningMode: String(stage?.reasoningMode || ''),
+            protocolMode: String(stage?.protocolMode || '')
           }]))
         } : undefined,
         fastGatePassThroughV2: trusted.fastGatePassThroughV2,
@@ -2149,6 +2365,10 @@ function trustedOutcomeToTeacherResponse(outcome, hostContext, fileMap, options 
           revisionDelivered: trusted.engineeringReview.revisionDelivered === true,
           revisionAdopted: trusted.engineeringReview.revisionAdopted === true,
           engineeringResolution: trusted.engineeringReview.engineeringResolution || 'not_assessed',
+          scorecard: trusted.engineeringReview.scorecard ? { ...trusted.engineeringReview.scorecard } : undefined,
+          revisionScorecard: trusted.engineeringReview.revisionScorecard
+            ? { ...trusted.engineeringReview.revisionScorecard }
+            : undefined,
           openSuggestions: (trusted.engineeringReview.openSuggestions || []).slice(0, 4).map((item) => ({
             publicSuggestionId: String(item.publicSuggestionId || '').slice(0, 200),
             summary: String(item.summary || '').slice(0, 500)
@@ -2159,7 +2379,8 @@ function trustedOutcomeToTeacherResponse(outcome, hostContext, fileMap, options 
           assessmentCallCount: nonNegativeInteger(trusted.engineeringReview.assessmentCallCount),
           mainReentryCallCount: nonNegativeInteger(trusted.engineeringReview.mainReentryCallCount),
           revisionCycleCount: nonNegativeInteger(trusted.engineeringReview.revisionCycleCount),
-          verificationCallCount: nonNegativeInteger(trusted.engineeringReview.verificationCallCount)
+          verificationCallCount: nonNegativeInteger(trusted.engineeringReview.verificationCallCount),
+          selectionCallCount: nonNegativeInteger(trusted.engineeringReview.selectionCallCount)
         } : undefined,
         engineeringImprovement: trusted.engineeringReview?.pendingImprovement === true ? {
           status: 'pending',
@@ -2418,7 +2639,7 @@ function knowledgeLedgerAudit(entry) {
       resultCharacters,
       estimatedQueryTokens: Math.ceil(queryCharacters / 4),
       estimatedResultTokens: Math.ceil(resultCharacters / 4),
-      backendExecuted: !entry.replayedFromRunId && entry.replayCount === 0 && entry.output?.auditStatus !== 'duplicate_query',
+      backendExecuted: entry.backendExecuted === true,
       duplicateQuery: entry.replayCount > 0 || entry.output?.auditStatus === 'duplicate_query',
       replayedFromRunId: entry.replayedFromRunId || ''
     }
@@ -2435,7 +2656,7 @@ function parseCanonicalJson(value) {
 
 function trustedCodeBlockValidations(answerSafety, trusted, fileMap) {
   if (answerSafety.withheld) return [];
-  const blocks = [...String(answerSafety.answer || '').matchAll(/```(?:sysml|sysmlv2)\s*\n([\s\S]*?)```/giu)];
+  const blocks = sysmlCodeBlocks(answerSafety.answer).map(block => [null, block.content]);
   if (trusted.validatorStatus !== 'validated_passed' || !trusted.validation) {
     return blocks.flatMap((match, index) => {
       const content = canonicalCodeBlockText(match[1]);
@@ -2516,26 +2737,27 @@ function candidateDeliveryContract(outcome, answerSafety, fileMap, codeBlockVali
   if (!candidateExpectedForOutcome(outcome)) {
     return { status: 'not_required', reason: 'candidate_not_expected' };
   }
-  const binding = terminalValidatedCandidateBinding(outcome, fileMap);
-  const target = singleFileDeliveryTarget(binding);
-  if (!target.ok) return { status: 'incomplete', reason: target.reason };
+  const delivery = deliveryFromOutcome(outcome);
+  if (!delivery) return { status: 'incomplete', reason: 'validated_delivery_missing' };
+  const target = delivery.deliveryTarget;
   if (answerSafety.withheld) {
     return { status: 'incomplete', reason: answerSafety.withheldReason || 'candidate_code_withheld' };
   }
-  const expectedContentHash = hashContent(canonicalCodeForBinding(target.candidate.content));
+  const expectedContentHash = hashContent(canonicalCodeForBinding(candidateContentFromArtifact(delivery.candidate)));
   const bindings = Array.isArray(answerSafety.codeBindings) ? answerSafety.codeBindings : [];
   if (bindings.length !== 1
-    || bindings[0]?.fileId !== target.candidate.fileId
+    || bindings[0]?.fileId !== target.fileId
     || bindings[0]?.contentHash !== expectedContentHash
     || codeBlockValidations.length !== 1
-    || codeBlockValidations[0]?.boundFileId !== target.candidate.fileId
+    || codeBlockValidations[0]?.boundFileId !== target.fileId
     || codeBlockValidations[0]?.contentHash !== expectedContentHash) {
     return { status: 'incomplete', reason: 'public_code_set_mismatch' };
   }
+  const changed = target.kind !== 'no_change';
   return {
-    status: target.changed ? 'changed_delivered' : 'no_change',
-    reason: target.changed ? 'single_changed_file_delivered' : 'single_file_unchanged',
-    fileId: target.candidate.fileId,
+    status: changed ? 'changed_delivered' : 'no_change',
+    reason: changed ? 'single_changed_file_delivered' : 'single_file_unchanged',
+    fileId: target.fileId,
     contentHash: expectedContentHash
   };
 }
@@ -2577,24 +2799,124 @@ function evidenceAuthority(item) {
   return 'D';
 }
 
+function deliveryFromOutcome(outcome) {
+  const delivery = outcome?.validatedCandidateDelivery;
+  if (!delivery || delivery.version !== 'validated-candidate-delivery-v1') return null;
+  if (!delivery.candidate || !delivery.validation || !delivery.deliveryTarget) return null;
+  return delivery;
+}
+
+function candidateContentFromArtifact(candidate) {
+  if (!candidate || typeof candidate !== 'object') return '';
+  if (candidate.mode === 'standalone_model' || candidate.mode === 'replace_entry') {
+    return String(candidate.content || '');
+  }
+  if (candidate.mode === 'workspace_files' && Array.isArray(candidate.files) && candidate.files.length === 1) {
+    return String(candidate.files[0]?.content || '');
+  }
+  if (candidate.mode === 'apply_edits' && Array.isArray(candidate.edits) && candidate.edits.length === 1) {
+    return String(candidate.edits[0]?.replacement || '');
+  }
+  return '';
+}
+
+const COPY_ONLY_CANDIDATE_NOTICE = '当前页面没有一键应用候选入口。候选尚未应用；如需写入编辑器，请复制下方候选代码并手动粘贴。';
+
+function stripUnsupportedCandidateApplicationGuidance(value) {
+  return String(value || '')
+    .split(/\n{2,}/u)
+    .filter((paragraph) => !/(?:应用入口|应用按钮|一键应用)/u.test(paragraph))
+    .join('\n\n')
+    .trim();
+}
+
+function stripCandidateDeliveryScaffolding(value) {
+  return String(value || '')
+    .split(/\n{2,}/u)
+    .filter((paragraph) => {
+      const text = paragraph.trim();
+      if (/^服务端验证状态[：:]/u.test(text)) return false;
+      if (/^以下代码由服务端从.*候选.*呈现。?$/u.test(text)) return false;
+      if (/^文件[：:][^\r\n]{1,160}$/u.test(text)) return false;
+      return true;
+    })
+    .join('\n\n')
+    .trim();
+}
+
+function renderDeliveryAnswer(delivery, originalAnswer, recoveryReason) {
+  const content = canonicalCodeForBinding(candidateContentFromArtifact(delivery.candidate));
+  const fileId = delivery.deliveryTarget.fileId;
+  if (!content) return null;
+  const displayName = String(delivery.deliveryTarget.displayName || fileId)
+    .replace(/[\r\n`]/gu, '')
+    .slice(0, 160);
+  const parsed = parseMarkdownFences(originalAnswer);
+  const modelCodeDiscarded = parsed.blocks.some((block) => (
+    ['sysml', 'sysmlv2'].includes(block.language) || fenceContainsSysmlStructure(block.content)
+  )) || [...String(originalAnswer || '').matchAll(/`([^`\r\n]+)`/gu)]
+    .some((match) => isSysmlStatementLine(String(match[1] || '').trim()))
+    || findBareSysmlStatementRanges(renderedInlineMarkdownText(parsed.proseOutside)).length > 0;
+  const explanation = stripCandidateDeliveryScaffolding(
+    stripUnsupportedCandidateApplicationGuidance(originalAnswer)
+  );
+  let sanitized = stripUntrustedSysmlFragments(explanation, { preserveInlineTeachingFragments: false });
+  if (!sanitized && explanation.trim()) {
+    // 个别段落含无法安全分离的代码时，仅保留其余通过同一检查的说明。
+    // 拼回后再次整体检查，跨段拼接的未绑定语句仍不可交付，不调用模型修复。
+    const safeParagraphs = explanation.split(/\n{2,}/u)
+      .map((paragraph) => stripUntrustedSysmlFragments(paragraph, { preserveInlineTeachingFragments: false }))
+      .filter(Boolean).join('\n\n');
+    sanitized = stripUntrustedSysmlFragments(safeParagraphs, { preserveInlineTeachingFragments: false });
+  }
+  const teachingText = substantiveTeachingText(sanitized)
+    ? sanitized.trim()
+    : '下面给出终末候选模型及其验证结果。';
+  const recoveredPrefix = recoveryReason
+    ? '【模型生成的代码格式未能安全绑定；以下内容由服务端从已验证候选中精确回填。】\n\n'
+    : '以下代码由服务端从已验证候选直接呈现。\n\n';
+  return {
+    answer: `${teachingText}\n\n${COPY_ONLY_CANDIDATE_NOTICE}\n\n${recoveredPrefix}文件：${displayName}\n\n${renderSysmlCode(content)}`,
+    withheld: false,
+    rendered: !recoveryReason,
+    recovered: Boolean(recoveryReason),
+    recoveryReason,
+    modelCodeDiscarded,
+    codeBindings: [{
+      fileId,
+      validationScope: 'candidate_file',
+      contentHash: hashContent(content)
+    }]
+  };
+}
+
 function enforceValidatedCodeAnswer(outcome, hostContext, fileMap) {
   const answer = String(outcome.response?.answer || '');
   const candidateExpected = candidateExpectedForOutcome(outcome);
+  const delivery = deliveryFromOutcome(outcome);
+  if (delivery) {
+    return renderDeliveryAnswer(delivery, answer)
+      || withheldCodeAnswer(answer, 'candidate_not_renderable', {
+        discloseToStudent: true,
+        fileMap
+      });
+  }
   const withhold = (reason) => withheldCodeAnswer(answer, reason, {
     discloseToStudent: candidateExpected,
     preserveCurrentModelFragments: !candidateExpected,
     preserveInlineTeachingFragments: outcome.response?.answerMode === 'result_bound_v2',
     fileMap
   });
+  if (candidateExpected) {
+    return withhold('validated_delivery_missing');
+  }
   const parsedMarkdown = parseMarkdownFences(answer);
   const fencedBlocks = parsedMarkdown.blocks;
   const allSysmlCodeBlocks = fencedBlocks
     .filter((block) => block.closed && (block.language === 'sysml' || block.language === 'sysmlv2'))
     .map((block) => block.content)
     .filter(Boolean);
-  const codeBlocks = candidateExpected
-    ? allSysmlCodeBlocks
-    : allSysmlCodeBlocks.filter((block) => !currentModelContainsExactFragment(block, fileMap));
+  const codeBlocks = allSysmlCodeBlocks.filter((block) => !currentModelContainsExactFragment(block, fileMap));
   const ambiguousSysmlFences = fencedBlocks.filter(
     (block) => !block.closed || (
       !['sysml', 'sysmlv2'].includes(block.language)
@@ -2606,80 +2928,21 @@ function enforceValidatedCodeAnswer(outcome, hostContext, fileMap) {
   const ambiguousInlineSysml = [...answer.matchAll(/`([^`\r\n]+)`/gu)]
     .map((match) => String(match[1] || '').trim())
     .filter((inline) => isSysmlStatementLine(inline));
-  const unboundInlineSysml = candidateExpected
-    ? ambiguousInlineSysml
-    : ambiguousInlineSysml.filter((inline) => !currentModelContainsExactFragment(inline, fileMap));
-  // 只检查 Markdown 代码标记之外的裸语句；已经识别出的 sysml fence 会在下方
-  // 通过 Validator 结果和候选工作区哈希进行绑定，不能再次被当成裸代码拦截。
+  const unboundInlineSysml = ambiguousInlineSysml.filter((inline) => (
+    !currentModelContainsExactFragment(inline, fileMap)
+  ));
   const proseOutsideCode = renderedInlineMarkdownText(parsedMarkdown.proseOutside);
   const bareSysmlStatements = findBareSysmlStatementRanges(proseOutsideCode)
-    .filter((range) => (
-      candidateExpected
-      || !currentModelContainsExactFragment(
-        proseOutsideCode.slice(range.start, range.end),
-        fileMap
-      )
+    .filter((range) => !currentModelContainsExactFragment(
+      proseOutsideCode.slice(range.start, range.end),
+      fileMap
     ));
   const requiresValidation = codeBlocks.length > 0
     || ambiguousSysmlFences.length > 0
     || unboundInlineSysml.length > 0
-    || bareSysmlStatements.length > 0
-    || candidateExpected;
+    || bareSysmlStatements.length > 0;
   if (!requiresValidation) return { answer, withheld: false };
-  if (ambiguousSysmlFences.length > 0
-    || unboundInlineSysml.length > 0
-    || bareSysmlStatements.length > 0) {
-    return recoverValidatedCandidateAnswer(
-      outcome,
-      fileMap,
-      answer,
-      'unfenced_or_ambiguous_sysml'
-    ) || withhold('unfenced_or_ambiguous_sysml');
-  }
-  if (outcome.response?.validatorStatus !== 'validated_passed') {
-    return withhold('validator_not_passed');
-  }
-
-  const terminalBinding = terminalValidatedCandidateBinding(outcome, fileMap);
-  if (!terminalBinding) {
-    return withhold('terminal_validation_not_bound');
-  }
-  const deliveryTarget = singleFileDeliveryTarget(terminalBinding);
-  if (!deliveryTarget.ok) return withhold(deliveryTarget.reason);
-  const candidateText = {
-    fileId: deliveryTarget.candidate.fileId,
-    content: canonicalCodeForBinding(deliveryTarget.candidate.content)
-  };
-  if (codeBlocks.length !== 1) {
-    return recoverValidatedCandidateAnswer(
-      outcome,
-      fileMap,
-      answer,
-      codeBlocks.length === 0 ? 'candidate_response_missing_code' : 'candidate_response_code_count_mismatch'
-    ) || withhold(codeBlocks.length === 0
-      ? 'candidate_response_missing_code'
-      : 'candidate_response_code_count_mismatch');
-  }
-  const codeBindings = codeBlocks.map((block) => {
-    if (candidateText.content === block) {
-      return {
-        fileId: candidateText.fileId,
-        validationScope: 'candidate_file',
-        contentHash: hashContent(block)
-      };
-    }
-    return null;
-  });
-  if (codeBindings.some((binding) => !binding)) {
-    return recoverValidatedCandidateAnswer(
-      outcome,
-      fileMap,
-      answer,
-      'code_block_not_bound'
-    ) || withhold('code_block_not_bound');
-  }
-
-  return { answer, withheld: false, codeBindings };
+  return withhold('unvalidated_code');
 }
 
 function candidateExpectedForOutcome(outcome) {
@@ -2715,69 +2978,6 @@ function enforceAnswerCodePolicy(outcome, hostContext, fileMap) {
     : { answer, withheld: false };
 }
 
-function parseMarkdownFences(value) {
-  const lines = String(value || '').replace(/\r\n|\r/g, '\n').split('\n');
-  const blocks = [];
-  const proseLines = [];
-  let open;
-  for (const line of lines) {
-    if (!open) {
-      const opening = fenceOpeningCandidate(line);
-      const match = /^([ \t]*)(`{3,}|~{3,})([^\r\n]*)$/.exec(opening.line);
-      if (!match) {
-        proseLines.push(line);
-        continue;
-      }
-      const indentation = match[1] || '';
-      const markerRun = match[2] || '';
-      const info = String(match[3] || '').trim();
-      open = {
-        marker: markerRun[0],
-        length: markerRun.length,
-        language: String(info.split(/\s+/)[0] || '').toLowerCase(),
-        content: [],
-        containerized: opening.containerized || indentation.includes('\t') || indentation.length > 3
-      };
-      proseLines.push('');
-      continue;
-    }
-    const close = open.containerized ? null : /^ {0,3}(`+|~+)[ \t]*$/.exec(line);
-    if (close && close[1]?.[0] === open.marker && close[1].length >= open.length) {
-      blocks.push({
-        language: open.language,
-        content: canonicalCodeForBinding(open.content.join('\n')),
-        closed: true
-      });
-      open = undefined;
-      proseLines.push('');
-      continue;
-    }
-    open.content.push(line);
-    proseLines.push('');
-  }
-  if (open) {
-    blocks.push({
-      language: open.language,
-      content: canonicalCodeForBinding(open.content.join('\n')),
-      closed: false
-    });
-  }
-  return { blocks, proseOutside: proseLines.join('\n') };
-}
-
-function fenceOpeningCandidate(value) {
-  let line = String(value || '');
-  let containerized = false;
-  while (true) {
-    const quote = /^[ \t]*>[ \t]?/.exec(line);
-    const list = /^[ \t]*(?:[-+*]|\d+[.)])[ \t]+/.exec(line);
-    const prefix = quote?.[0] || list?.[0];
-    if (!prefix) break;
-    line = line.slice(prefix.length);
-    containerized = true;
-  }
-  return { line, containerized };
-}
 
 function currentModelContainsExactFragment(fragment, fileMap) {
   const canonical = canonicalCodeForBinding(fragment).trim();
@@ -2821,153 +3021,16 @@ function containsWithIdentifierBoundaries(source, candidate) {
 }
 
 function recoverValidatedCandidateAnswer(outcome, fileMap, originalAnswer, reason) {
-  const binding = terminalValidatedCandidateBinding(outcome, fileMap);
-  const target = singleFileDeliveryTarget(binding);
-  if (!target.ok) return null;
-  const blocks = [{
-    fileId: target.candidate.fileId,
-    displayName: target.candidate.displayName,
-    content: canonicalCodeForBinding(target.candidate.content),
-    validationScope: 'candidate_file'
-  }];
-  const totalCodeLength = blocks.reduce((total, block) => total + block.content.length, 0);
-  if (!blocks.length
-    || totalCodeLength > 100_000
-    || blocks.some((block) => block.content.includes('```'))) return null;
-
-  const sanitized = stripUntrustedSysmlFragments(originalAnswer);
-  const teachingText = substantiveTeachingText(sanitized)
-    ? sanitized.trim()
-    : '下面给出与终末候选工作区精确绑定的已验证候选。';
-  const recoveredBlocks = blocks.map((block) => {
-    const displayName = String(block.displayName || block.fileId)
-      .replace(/[\r\n`]/gu, '')
-      .slice(0, 160);
-    return `文件：${displayName}\n\n\`\`\`sysml\n${block.content}\n\`\`\``;
-  }).join('\n\n');
-  return {
-    answer: `${teachingText}\n\n【模型生成的代码格式未能安全绑定；以下内容由服务端从终末已验证候选中精确回填。】\n\n${recoveredBlocks}`,
-    withheld: false,
-    recovered: true,
-    recoveryReason: reason,
-    codeBindings: blocks.map((block) => ({
-      fileId: block.fileId,
-      validationScope: block.validationScope,
-      contentHash: hashContent(block.content)
-    }))
-  };
+  const delivery = deliveryFromOutcome(outcome);
+  if (!delivery) return null;
+  return renderDeliveryAnswer(delivery, originalAnswer, reason);
 }
 
 function renderValidatedCandidateAnswer(outcome, fileMap, originalAnswer) {
   if (!candidateExpectedForOutcome(outcome)) return null;
-  const binding = terminalValidatedCandidateBinding(outcome, fileMap);
-  const target = singleFileDeliveryTarget(binding);
-  if (!target.ok) return null;
-  const blocks = [{
-    fileId: target.candidate.fileId,
-    displayName: target.candidate.displayName,
-    content: canonicalCodeForBinding(target.candidate.content),
-    validationScope: 'candidate_file'
-  }];
-  const totalCodeLength = blocks.reduce((total, block) => total + block.content.length, 0);
-  if (!blocks.length
-    || totalCodeLength > 100_000
-    || blocks.some((block) => block.content.includes('```'))) return null;
-
-  const parsed = parseMarkdownFences(originalAnswer);
-  const modelCodeDiscarded = parsed.blocks.some((block) => (
-    ['sysml', 'sysmlv2'].includes(block.language) || fenceContainsSysmlStructure(block.content)
-  )) || [...String(originalAnswer || '').matchAll(/`([^`\r\n]+)`/gu)]
-    .some((match) => isSysmlStatementLine(String(match[1] || '').trim()))
-    || findBareSysmlStatementRanges(renderedInlineMarkdownText(parsed.proseOutside)).length > 0;
-  const sanitized = stripUntrustedSysmlFragments(originalAnswer, {
-    preserveInlineTeachingFragments: false,
-    fileMap
-  });
-  const teachingText = substantiveTeachingText(sanitized)
-    ? sanitized.trim()
-    : '下面给出终末候选模型及其验证结果。';
-  const renderedBlocks = blocks.map((block) => {
-    const displayName = String(block.displayName || block.fileId)
-      .replace(/[\r\n`]/gu, '')
-      .slice(0, 160);
-    return `文件：${displayName}\n\n\`\`\`sysml\n${block.content}\n\`\`\``;
-  }).join('\n\n');
-  return {
-    answer: `${teachingText}\n\n以下代码由服务端从终末已验证候选工作区直接呈现。\n\n${renderedBlocks}`,
-    withheld: false,
-    rendered: true,
-    modelCodeDiscarded,
-    codeBindings: blocks.map((block) => ({
-      fileId: block.fileId,
-      validationScope: block.validationScope,
-      contentHash: hashContent(block.content)
-    }))
-  };
-}
-
-function terminalValidatedCandidateBinding(outcome, fileMap) {
-  const trusted = outcome.response;
-  const validation = trusted?.validation;
-  const officialPassed = validation?.official?.syntax === 'passed'
-    && validation?.official?.semantic === 'passed';
-  const coursePassed = validation?.courseRuleApplicability === 'not_applicable'
-    || (validation?.courseRuleApplicability === 'applicable'
-      && validation?.courseRules?.status === 'passed');
-  if (trusted?.validatorStatus !== 'validated_passed'
-    || trusted.stopReason !== 'completed'
-    || !officialPassed
-    || !coursePassed
-    || validation?.completeness !== 'complete'
-    || validation?.validator?.authority !== 'official-sysml-v2-validator'
-    || !String(validation?.validator?.version || '').startsWith(`${OFFICIAL_VALIDATOR_RELEASE}/${OFFICIAL_VALIDATOR_KERNEL}/sha256:`)
-    || !trusted.candidateWorkspaceHash
-    || validation.candidateWorkspaceHash !== trusted.candidateWorkspaceHash) {
-    return null;
-  }
-  const validationEntries = (outcome.ledger || []).filter(
-    (entry) => entry.toolName === 'validate_candidate_workspace'
-  );
-  const terminal = validationEntries.at(-1);
-  if (!terminal || terminal.status !== 'succeeded'
-    || terminal.output?.candidateWorkspaceHash !== trusted.candidateWorkspaceHash
-    || terminal.output?.validator?.evidenceHash !== validation.validator.evidenceHash) {
-    return null;
-  }
-  const candidates = candidateRecordsFromLedger(terminal, fileMap);
-  if (!candidates.length) return null;
-  if (candidateWorkspaceHashFromRecords(fileMap, candidates) !== trusted.candidateWorkspaceHash) return null;
-  const changedCandidates = candidates.filter(
-    (candidate) => canonicalCodeForBinding(candidate.base) !== canonicalCodeForBinding(candidate.content)
-  );
-  const patches = Array.isArray(terminal.output?.patches) ? terminal.output.patches : [];
-  const standaloneCandidates = candidates.filter((candidate) => candidate.kind === 'standalone_model');
-  if (standaloneCandidates.length > 0) {
-    return standaloneCandidates.length === 1 && candidates.length === 1 && patches.length === 0
-      ? { terminal, candidates, changedCandidates: standaloneCandidates }
-      : null;
-  }
-  if (!changedCandidates.length) {
-    return patches.length === 0 ? { terminal, candidates, changedCandidates } : null;
-  }
-  const uniqueFileIds = new Set(changedCandidates.map((candidate) => candidate.fileId));
-  const uniquePatchFileIds = new Set(patches.map((patch) => patch?.fileId));
-  if (uniqueFileIds.size !== changedCandidates.length
-    || uniquePatchFileIds.size !== patches.length
-    || patches.length !== changedCandidates.length) return null;
-  for (const candidate of changedCandidates) {
-    const current = fileMap.get(candidate.fileId);
-    const patch = patches.find((item) => item?.fileId === candidate.fileId);
-    if (!current
-      || current.editable === false
-      || !patch
-      || patch.baseHash !== current.contentHash
-      || patch.candidateHash !== hashContent(candidate.content)
-      || patch.kind !== candidate.kind) {
-      return null;
-    }
-  }
-  return { terminal, candidates, changedCandidates };
+  const delivery = deliveryFromOutcome(outcome);
+  if (!delivery) return null;
+  return renderDeliveryAnswer(delivery, originalAnswer);
 }
 
 function singleFileDeliveryTarget(binding) {
@@ -3176,16 +3239,6 @@ function substantiveTeachingText(value) {
   return plain.length >= 12;
 }
 
-function candidateRecordsFromLedger(entry, fileMap) {
-  let input;
-  try {
-    input = JSON.parse(String(entry.canonicalArgs || ''));
-  } catch {
-    return [];
-  }
-  return candidateRecordsFromInput(input, fileMap);
-}
-
 function candidateRecordsFromInput(input, fileMap) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return [];
   if (input.mode === 'standalone_model') {
@@ -3293,35 +3346,14 @@ function candidateRecordsFromInput(input, fileMap) {
 }
 
 function candidateWorkspaceHashFromRecords(fileMap, candidates) {
-  const standaloneCandidates = candidates.filter((candidate) => candidate.kind === 'standalone_model');
-  if (standaloneCandidates.length > 0) {
-    if (standaloneCandidates.length !== candidates.length) return '';
-    const canonicalStandalone = standaloneCandidates
-      .map((candidate) => ({
-        path: String(candidate.workspacePath || candidate.displayName || ''),
-        content: candidate.content
-      }))
-      .sort((left, right) => left.path.localeCompare(right.path))
-      .map((file) => `${file.path}\n${hashContent(String(file.content || ''))}`)
-      .join('\n');
-    return hashContent(canonicalStandalone);
-  }
-  const candidateByFileId = new Map(candidates.map((candidate) => [candidate.fileId, candidate.content]));
-  const uniqueFiles = new Map();
-  for (const file of fileMap.values()) {
-    if (!uniqueFiles.has(file.fileId)) uniqueFiles.set(file.fileId, file);
-  }
-  const canonical = [...uniqueFiles.values()]
-    .map((file) => ({
-      path: String(file.workspacePath || file.displayName || ''),
-      content: candidateByFileId.has(file.fileId)
-        ? candidateByFileId.get(file.fileId)
-        : file.content
-    }))
-    .sort((left, right) => left.path.localeCompare(right.path))
-    .map((file) => `${file.path}\n${hashContent(String(file.content || ''))}`)
-    .join('\n');
-  return hashContent(canonical);
+  const standalone = candidates.filter(candidate => candidate.kind === 'standalone_model');
+  if (standalone.length) return standalone.length === candidates.length
+    ? hashContent(canonicalWorkspaceText(standalone.map(file => ({path: file.workspacePath || file.displayName, content: file.content})))) : '';
+  const replacements = new Map(candidates.map(file => [file.fileId, file.content]));
+  const files = new Map([...fileMap.values()].map(file => [file.fileId, file]));
+  return hashContent(canonicalWorkspaceText([...files.values()].map(file => ({
+    path: file.workspacePath || file.displayName, content: replacements.has(file.fileId) ? replacements.get(file.fileId) : file.content
+  }))));
 }
 
 function recoverPersistedCompletedCandidateDelivery({
@@ -3349,13 +3381,13 @@ function recoverPersistedCompletedCandidateDelivery({
   }
   const changedCandidates = candidates.filter(
     (candidate) => candidate.kind === 'standalone_model'
-      || canonicalCodeForBinding(candidate.base) !== canonicalCodeForBinding(candidate.content)
+      || candidate.base !== candidate.content
   );
   const target = singleFileDeliveryTarget({ candidates, changedCandidates });
   if (!target.ok) return persistedDeliveryIncomplete(persistedAnswer, target.reason);
 
   const content = canonicalCodeForBinding(target.candidate.content);
-  if (!content || content.length > 100_000 || content.includes('```')) {
+  if (!content) {
     return persistedDeliveryIncomplete(persistedAnswer, 'candidate_not_renderable');
   }
   const contentHash = hashContent(content);
@@ -3379,7 +3411,7 @@ function recoverPersistedCompletedCandidateDelivery({
     const teachingText = substantiveTeachingText(sanitized)
       ? sanitized.trim()
       : '下面给出与历史检查点精确绑定的已验证候选。';
-    answer = `${teachingText}\n\n【历史回答缺少完整代码交付；以下内容由服务端从已验证检查点确定性重建。】\n\n文件：${displayName}\n\n\`\`\`sysml\n${content}\n\`\`\``;
+    answer = `${teachingText}\n\n【历史回答缺少完整代码交付；以下内容由服务端从已验证检查点确定性重建。】\n\n文件：${displayName}\n\n${renderSysmlCode(content)}`;
   }
   const validatorVersion = String(
     validationArtifact?.validator?.version
@@ -3485,30 +3517,132 @@ function stripSysmlComments(value) {
     .replace(/\/\/[^\r\n]*/gu, ' ');
 }
 
-function canonicalCodeForBinding(value) {
-  let text = String(value || '').replace(/\r\n|\r/g, '\n');
-  if (text.startsWith('\n')) text = text.slice(1);
-  if (text.endsWith('\n')) text = text.slice(0, -1);
-  return text;
-}
+
 
 function projectConversationMessagesForAgent(hostContext, currentQuestion) {
   const messages = Array.isArray(hostContext.conversation?.recentMessages)
-    ? hostContext.conversation.recentMessages.slice(-8)
+    ? hostContext.conversation.recentMessages
     : [];
   const projected = messages.flatMap((message) => {
-    const content = String(message?.content || '').trim().slice(0, 8_000);
+    const content = String(message?.content || '').trim();
     if (!content) return [];
     return [{
       role: message?.role === 'assistant' ? 'assistant' : 'user',
       content
     }];
   });
-  const current = String(currentQuestion || '').trim().slice(0, 8_000);
+  const current = String(currentQuestion || '').trim();
   if (current && !projected.some((message) => message.role === 'user' && message.content === current)) {
     projected.push({ role: 'user', content: current });
   }
-  return projected.slice(-8);
+  return projected;
+}
+
+/**
+ * 公开终态只使用服务端已有执行事实。它不持久化第二套状态，也不读取Finalizer
+ * 对“已完成、已验证或已应用”的自然语言自述。
+ */
+function publicTerminalProjection(input) {
+  const completion = String(input.answerCompletionStatus || 'not_required');
+  const stopReason = String(input.trusted?.stopReason || '');
+  if (completion === 'waiting_for_clarification') {
+    return {
+      kind: 'waiting_clarification',
+      statement: '',
+      retainTeachingExplanation: true
+    };
+  }
+  if (stopReason === 'cancelled') {
+    return {
+      kind: 'interrupted',
+      statement: '本轮处理已停止，未形成可交付候选。',
+      retainTeachingExplanation: false
+    };
+  }
+  if (input.candidateDelivery?.status === 'changed_delivered'
+    && input.publicValidatorStatus === 'validated_passed'
+    && input.candidateAttestation) {
+    return {
+      kind: 'complete_candidate',
+      statement: '',
+      retainTeachingExplanation: true
+    };
+  }
+  if (input.candidateDelivery?.status === 'no_change'
+    && input.publicValidatorStatus === 'validated_passed'
+    && input.candidateAttestation) {
+    return {
+      kind: 'complete_no_change',
+      statement: '',
+      retainTeachingExplanation: true
+    };
+  }
+  if (input.candidateDelivery?.status === 'not_required' && completion === 'complete') {
+    return {
+      kind: 'complete_direct',
+      statement: '',
+      retainTeachingExplanation: true
+    };
+  }
+  if (input.candidateDelivery?.status === 'not_required'
+    && completion === 'incomplete'
+    && input.outcome?.mainAgentOutcome?.type === 'finalize_requested') {
+    return {
+      kind: 'incomplete_direct',
+      statement: '',
+      retainTeachingExplanation: true
+    };
+  }
+  const validatorStatement = input.publicValidatorStatus === 'validated_failed'
+    ? '候选没有通过 Official Validator。'
+    : input.publicValidatorStatus === 'not_validated'
+      ? '本轮没有形成可绑定的 Official Validator PASS。'
+      : '本轮没有形成可作为成功交付的验证结论。';
+  return {
+    kind: ['provider_error', 'policy_violation'].includes(stopReason) ? 'error' : 'incomplete',
+    statement: `本轮未形成可交付候选。${validatorStatement}`,
+    retainTeachingExplanation: false
+  };
+}
+
+function composePublicTerminalAnswer(projection, teachingExplanation, options = {}) {
+  const statement = String(projection?.statement || '').trim();
+  const teaching = String(teachingExplanation || '').trim();
+  if (options.directTeachingConflict === true) {
+    return '当前回答仅提供教学解释，没有生成、验证或应用新的模型候选。';
+  }
+  if (!statement) return teaching;
+  if (!projection?.retainTeachingExplanation || !teaching) return statement;
+  return `${statement}\n\n${teaching}`;
+}
+
+/**
+ * Direct正文可以解释模型和Validator边界，但不能反向声明本轮已执行修改、应用或验证。
+ * 这里只做小范围fail-closed冲突门：命中时整段教学正文不展示，不改写、不修复，也不追加模型调用。
+ */
+function hasContradictoryDirectExecutionClaim(value) {
+  const text = String(value || '');
+  if (!text.trim()) return false;
+  const sentenceStart = '(?:^|[。！？\\r\\n])\\s*';
+  const currentRunAction = new RegExp(
+    `${sentenceStart}(?:我|我们|本轮|本次|当前运行)\\s*(?:已经|已|成功)\\s*(?:修改|新增|添加|生成|修复|更新|应用|写入|替换)`,
+    'u'
+  );
+  const currentRunValidation = new RegExp(
+    `${sentenceStart}(?:我|我们|本轮|本次|当前运行)\\s*(?:已经|已|成功)\\s*(?:通过|取得)[^。！？\\r\\n]{0,16}(?:Official\\s+Validator|Validator|PASS)`,
+    'iu'
+  );
+  const modelChangedAndValidated = new RegExp(
+    `${sentenceStart}(?:当前)?(?:模型|候选模型|候选)\\s*(?:修改|新增|生成|修复|更新|应用)(?:已)?(?:完成|成功)?\\s*(?:并|，并|且)\\s*(?:已经|已|成功)?\\s*(?:通过|取得)[^。！？\\r\\n]{0,16}(?:Official\\s+Validator|Validator|PASS)`,
+    'iu'
+  );
+  const englishCurrentRunAction = /(?:^|[.!?\r\n])\s*(?:I|we|this run|the current run)\s+(?:have|has|successfully)\s+(?:modified|added|generated|fixed|updated|applied|validated|passed)\b/iu;
+  const englishModelChangedAndValidated = /(?:^|[.!?\r\n])\s*(?:the\s+)?(?:model|candidate)\s+(?:was|has\s+been)\s+(?:modified|added|generated|fixed|updated|applied)\s+and\s+(?:has\s+)?passed\s+(?:the\s+)?(?:Official\s+)?Validator\b/iu;
+  return currentRunAction.test(text)
+    || currentRunValidation.test(text)
+    || modelChangedAndValidated.test(text)
+    || englishCurrentRunAction.test(text)
+    || englishModelChangedAndValidated.test(text);
 }
 
 function agentStudentQuestion(hostContext, workflowResume) {
@@ -3519,11 +3653,13 @@ function agentStudentQuestion(hostContext, workflowResume) {
   return String(hostContext.question?.text || workflowResume?.sourceStudentQuestion || '').trim();
 }
 
-function projectWorkflowResumeForAgent(workflowResume) {
+function projectWorkflowResumeForAgent(workflowResume, config = {}) {
   if (!workflowResume || typeof workflowResume !== 'object' || Array.isArray(workflowResume)) return undefined;
   const projected = { ...workflowResume };
   if (Array.isArray(workflowResume.taskSources)) {
-    projected.taskSources = workflowResume.taskSources.slice(0, 8).map((source) => ({
+    const maxEntries = config.run06?.taskSourceMaxEntries
+      || AGENT_RESOURCE_POLICY_BOOTSTRAP_PROJECTION.teacher.run06.taskSourceMaxEntries;
+    projected.taskSources = workflowResume.taskSources.slice(0, maxEntries).map((source) => ({
       sourceId: String(source?.sourceId || ''),
       relation: String(source?.relation || ''),
       text: String(source?.text || '').trim(),
@@ -3535,10 +3671,12 @@ function projectWorkflowResumeForAgent(workflowResume) {
 }
 
 /** 任务来源只由Teacher服务端已验证的当前请求与持久化续跑来源构造，不接受LLM或客户端自报GoalRef。 */
-function authorizedTaskSources(hostContext, workflowResume) {
+function authorizedTaskSources(hostContext, workflowResume, config = {}) {
+  const maxEntries = config.run06?.taskSourceMaxEntries
+    || AGENT_RESOURCE_POLICY_BOOTSTRAP_PROJECTION.teacher.run06.taskSourceMaxEntries;
   const persistedSources = workflowResume?.taskSources;
   if (Array.isArray(persistedSources) && persistedSources.length > 0) {
-    const normalized = persistedSources.slice(0, 8).map((source) => ({
+    const normalized = persistedSources.slice(0, maxEntries).map((source) => ({
       sourceId: String(source?.sourceId || ''),
       relation: String(source?.relation || ''),
       text: String(source?.text || '').trim(),
@@ -3553,16 +3691,14 @@ function authorizedTaskSources(hostContext, workflowResume) {
       && source.sourceHash === hashContent(source.text)
       && /^sha256:[a-f0-9]{64}$/u.test(source.taskAuthorizationRevisionHash)
     ));
-    if (!valid) return workflowResume?.continuationKind === 'engineering_improvement'
-      ? []
-      : fallbackTaskSources();
+    if (!valid) return workflowResume?.continuationKind === 'engineering_improvement' ? [] : fallbackTaskSources();
     if (workflowResume?.continuationKind) return normalized;
 
     const current = String(hostContext.question?.text || '').trim();
     if (!current || normalized.some((source) => source.text === current)) return normalized;
-    const retained = normalized.length < 8
+    const retained = normalized.length < maxEntries
       ? normalized
-      : [normalized[0], ...normalized.slice(-6)];
+      : [normalized[0], ...(maxEntries > 2 ? normalized.slice(-(maxEntries - 2)) : [])];
     return authorizeAdapterTaskSources([
       ...retained,
       {
@@ -3872,20 +4008,19 @@ function canonicalValue(value) {
   throw new TypeError('Canonical JSON value is not serializable.');
 }
 
-function agentPolicy(config) {
+function snapshotPolicyValues(config, hostContext) {
+  const snapshot = hostContext?.runtimeAssignment?.resourcePolicySnapshot || config.resourcePolicySnapshot;
+  return snapshot?.values && typeof snapshot.values === 'object' ? snapshot.values : {};
+}
+
+function agentPolicy(config, hostContext) {
   const defaults = AGENT_RESOURCE_POLICY_BOOTSTRAP_PROJECTION.teacher;
-  const maxOutputTokens = positiveInteger(
-    config.agentMaxOutputTokens,
-    defaults.agentMaxOutputTokens
-  );
-  const boundedOutput = (value, fallback) => Math.min(maxOutputTokens, positiveInteger(value, fallback));
   return compactObject({
     maxSteps: positiveInteger(config.agentMaxSteps, defaults.agentMaxSteps),
     maxDurationMs: positiveInteger(config.agentMaxDurationMs, defaults.agentMaxDurationMs),
     terminalReserveMs: positiveInteger(config.agentTerminalReserveMs, defaults.agentTerminalReserveMs),
     convergeLeadMs: positiveInteger(config.agentConvergeLeadMs, defaults.agentConvergeLeadMs),
     toolTimeoutMs: positiveInteger(config.agentToolTimeoutMs, defaults.agentToolTimeoutMs),
-    maxOutputTokens,
     contextWindowTokens: positiveInteger(config.agentContextWindowTokens, defaults.agentContextWindowTokens),
     scopeGateEnabled: booleanSetting(
       config.agentScopeGateEnabled,
@@ -3893,11 +4028,49 @@ function agentPolicy(config) {
     ),
     scopeGateInitialTimeoutMs: positiveInteger(config.agentScopeGateInitialTimeoutMs, defaults.agentScopeGateInitialTimeoutMs),
     scopeGateReviewTimeoutMs: positiveInteger(config.agentScopeGateReviewTimeoutMs, defaults.agentScopeGateReviewTimeoutMs),
-    scopeGateMaxOutputTokens: boundedOutput(
+    scopeGateHardInputTokenBudget: positiveInteger(
+      config.agentScopeGateHardInputTokenBudget,
+      defaults.agentScopeGateHardInputTokenBudget
+    ),
+    scopeGateMaxOutputTokens: positiveInteger(
       config.agentScopeGateMaxOutputTokens,
       defaults.agentScopeGateMaxOutputTokens
     ),
-    candidateRecoveryMaxAttempts: Number(config.agentCandidateRecoveryMaxAttempts ?? defaults.agentCandidateRecoveryMaxAttempts) === 0 ? 0 : 1,
+    inspectLessonContextMaxCallsPerRun: positiveInteger(
+      config.agentInspectLessonContextMaxCallsPerRun,
+      defaults.agentInspectLessonContextMaxCallsPerRun
+    ),
+    inspectCurrentModelMaxCallsPerRun: positiveInteger(
+      config.agentInspectCurrentModelMaxCallsPerRun,
+      defaults.agentInspectCurrentModelMaxCallsPerRun
+    ),
+    skillGuidanceMaxCallsPerRun: positiveInteger(
+      config.agentSkillGuidanceMaxCallsPerRun,
+      defaults.agentSkillGuidanceMaxCallsPerRun
+    ),
+    reviewedKnowledgeMaxCallsPerRun: positiveInteger(
+      config.agentReviewedKnowledgeMaxCallsPerRun,
+      defaults.agentReviewedKnowledgeMaxCallsPerRun
+    ),
+    domainEvidenceMaxCallsPerRun: nonNegativeInteger(config.agentDomainEvidenceMaxCallsPerRun)
+      ?? defaults.agentDomainEvidenceMaxCallsPerRun,
+    readOnlyToolMaxRetriesPerOperation: nonNegativeInteger(
+      config.agentReadOnlyToolMaxRetriesPerOperation
+    ) ?? defaults.agentReadOnlyToolMaxRetriesPerOperation,
+    readOnlyToolInputMaxBytes: positiveInteger(
+      config.agentReadOnlyToolInputMaxBytes,
+      defaults.agentReadOnlyToolInputMaxBytes
+    ),
+    readOnlyToolTimeoutMs: positiveInteger(
+      config.agentReadOnlyToolTimeoutMs,
+      defaults.agentReadOnlyToolTimeoutMs
+    ),
+    domainEvidenceToolTimeoutMs: positiveInteger(
+      config.agentDomainEvidenceToolTimeoutMs,
+      defaults.agentDomainEvidenceToolTimeoutMs
+    ),
+    candidateRecoveryMaxAttempts: nonNegativeInteger(config.agentCandidateRecoveryMaxAttempts)
+      ?? defaults.agentCandidateRecoveryMaxAttempts,
     candidateMaxAttemptMs: positiveInteger(
       config.agentCandidateMaxAttemptMs,
       defaults.agentCandidateMaxAttemptMs
@@ -3924,10 +4097,8 @@ function agentPolicy(config) {
       config.agentSemanticReviewShadowOnly,
       defaults.agentSemanticReviewShadowOnly
     ),
-    semanticReviewAssessmentMaxCalls: positiveInteger(
-      config.agentSemanticReviewAssessmentMaxCalls,
-      defaults.agentSemanticReviewAssessmentMaxCalls
-    ),
+    semanticReviewAssessmentMaxCalls: Math.min(1, nonNegativeInteger(config.agentSemanticReviewAssessmentMaxCalls)
+      ?? defaults.agentSemanticReviewAssessmentMaxCalls),
     semanticReviewAssessmentTimeoutMs: positiveInteger(
       config.agentSemanticReviewAssessmentTimeoutMs,
       defaults.agentSemanticReviewAssessmentTimeoutMs
@@ -3943,14 +4114,6 @@ function agentPolicy(config) {
     semanticReviewVerificationTimeoutMs: positiveInteger(
       config.agentSemanticReviewVerificationTimeoutMs,
       defaults.agentSemanticReviewVerificationTimeoutMs
-    ),
-    semanticReviewMaxOutputTokens: boundedOutput(
-      config.agentSemanticReviewMaxOutputTokens,
-      defaults.agentSemanticReviewMaxOutputTokens
-    ),
-    semanticReviewMaxIssues: positiveInteger(
-      config.agentSemanticReviewMaxIssues,
-      defaults.agentSemanticReviewMaxIssues
     ),
     semanticReviewMinimumCompleteChainMs: positiveInteger(
       config.agentSemanticReviewMinimumCompleteChainMs,
@@ -3994,27 +4157,21 @@ function agentPolicy(config) {
       config.agentValidatorToolTimeoutMs,
       defaults.agentValidatorToolTimeoutMs
     ),
-    reviewedKnowledgeMaxNewQueriesPerRun: nonNegativeInteger(config.agentReviewedKnowledgeMaxNewQueriesPerRun)
-      ?? defaults.agentReviewedKnowledgeMaxNewQueriesPerRun,
-    lowAnswerMaxOutputTokens: positiveInteger(
-      config.agentLowAnswerMaxOutputTokens,
-      defaults.agentLowAnswerMaxOutputTokens
+    mainContextExecutionReserveTokens: positiveInteger(
+      config.agentMainContextExecutionReserveTokens,
+      defaults.agentMainContextExecutionReserveTokens
     ),
-    mediumAnswerMaxOutputTokens: positiveInteger(
-      config.agentMediumAnswerMaxOutputTokens,
-      defaults.agentMediumAnswerMaxOutputTokens
-    ),
-    highAnswerMaxOutputTokens: positiveInteger(
-      config.agentHighAnswerMaxOutputTokens,
-      defaults.agentHighAnswerMaxOutputTokens
-    ),
-    temperature: 0
+    temperature: Number.isFinite(Number(config.agentTemperature))
+      ? Number(config.agentTemperature)
+      : defaults.agentTemperature
   });
 }
 
 function isDeliverableAgentOutcome(outcome) {
-  return String(outcome?.response?.stopReason || '') !== 'cancelled'
-    && String(outcome?.response?.answer || '').trim().length > 0;
+  if (String(outcome?.response?.stopReason || '') === 'cancelled') return false;
+  if (String(outcome?.response?.answer || '').trim().length > 0) return true;
+  return outcome?.response?.workflowVersion === 'intent-orchestrator-v2'
+    && outcome?.response?.answerCompletionStatus === 'incomplete';
 }
 
 const AGENT_STAGE_IDS = Object.freeze([
@@ -4038,15 +4195,7 @@ function resolvedStageModelAssignment(config, hostContext) {
       }
     : AGENT_RESOURCE_POLICY_BOOTSTRAP_PROJECTION.teacher.agentStageModelRoutes);
   const configuredReasoning = config.agentStageReasoningPolicies
-    || AGENT_RESOURCE_POLICY_BOOTSTRAP_PROJECTION.teacher.agentStageReasoningPolicies
-    || {
-      fastGate: 'disabled',
-      main: 'provider-managed',
-      candidate: 'provider-managed',
-      repair: 'provider-managed',
-      semanticReview: 'provider-managed',
-      finalizer: 'disabled'
-    };
+    || AGENT_RESOURCE_POLICY_BOOTSTRAP_PROJECTION.teacher.agentStageReasoningPolicies;
   const stages = Object.freeze(Object.fromEntries(AGENT_STAGE_IDS.map((stageId) => {
     const modelAlias = String(configuredRoutes?.[stageId] || '').trim();
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._/-]{1,199}$/.test(modelAlias)) {
@@ -4094,7 +4243,7 @@ function createStageModels(runtime, config, assignment) {
         ? 'gateway-thinking-tools-non-null-content'
         : 'generic-openai'
     });
-    models[stageId] = guardAgentModel(rawModel, config.providerGateway, config.abortSignal);
+    models[stageId] = rawModel;
   }
   return Object.freeze(models);
 }
@@ -4111,7 +4260,8 @@ function stageProtocolProfilesFromAssignment(assignment) {
 }
 
 function stageProtocolProfile(config, stageId) {
-  const configured = config.agentStageModelProtocols?.[stageId] || {};
+  const configured = config.agentStageModelProtocols?.[stageId]
+    || {};
   const mode = String(configured.protocolMode || '').trim();
   if (['gateway-chat-v1', 'generic-openai', 'deepseek-v4-litellm', 'glm-5.2-litellm'].includes(mode)) {
     return {
@@ -4141,26 +4291,11 @@ function agentReasoningModelAlias(config, reasoningMode = normalizeReasoningMode
   return String(config.llm?.model || '').trim();
 }
 
-function guardAgentModel(model, providerGateway, runSignal) {
-  if (!model || typeof model !== 'object' || typeof providerGateway?.step !== 'function') return model;
-  return new Proxy(model, {
-    get(target, property, receiver) {
-      if (property !== 'doGenerate' && property !== 'doStream') {
-        const value = Reflect.get(target, property, receiver);
-        return typeof value === 'function' ? value.bind(target) : value;
-      }
-      const invokeModel = Reflect.get(target, property, target);
-      if (typeof invokeModel !== 'function') return invokeModel;
-      return async (options) => {
-        const signal = runSignal && options?.abortSignal
-          ? AbortSignal.any([runSignal, options.abortSignal])
-          : (runSignal || options?.abortSignal);
-        return providerGateway.step({
-          signal,
-          invoke: async () => await invokeModel.call(target, options)
-        });
-      };
-    }
+async function withProviderRunAdmission(config, invoke) {
+  if (typeof config.providerGateway?.run !== 'function') return await invoke();
+  return await config.providerGateway.run({
+    signal: config.abortSignal,
+    invoke
   });
 }
 
@@ -4250,15 +4385,6 @@ function nonNegativeInteger(value) {
   return Number.isInteger(number) && number >= 0 ? number : undefined;
 }
 
-function validatorTransientRetryMax(value) {
-  if (value === undefined || value === null || value === '') return 1;
-  const number = Number(value);
-  if (!Number.isInteger(number) || number < 0 || number > 1) {
-    throw new RangeError('AI_TEACHER_VALIDATOR_TRANSIENT_RETRY_MAX must be 0 or 1.');
-  }
-  return number;
-}
-
 function positiveIntegerOrUndefined(value) {
   const number = Number(value);
   return Number.isInteger(number) && number > 0 ? number : undefined;
@@ -4328,6 +4454,7 @@ function resetAgentRuntimeForTests() {
 
 module.exports = {
   TOOL_SCHEMA_VERSION,
+  agentPolicyForTests: agentPolicy,
   agentRuntimeReadiness,
   authoritativeKnowledgeQuery,
   buildKnowledgeQueryPlan,
@@ -4349,6 +4476,7 @@ module.exports = {
   loadAgentRuntime,
   mapValidationOutputForTests: mapValidationOutput,
   recoverPersistedCompletedCandidateDelivery,
+  deliveryFromOutcomeForTests: deliveryFromOutcome,
   runAgentCapability,
   runEngineeringReviewEvaluationCapability,
   frozenAgentWorkflowVersion,
@@ -4358,5 +4486,10 @@ module.exports = {
   resolvedStageModelAssignmentForTests: resolvedStageModelAssignment,
   projectConversationMessagesForAgentForTests: projectConversationMessagesForAgent,
   authorizedTaskSourcesForTests: authorizedTaskSources,
-  projectWorkflowResumeForAgentForTests: projectWorkflowResumeForAgent
+  projectWorkflowResumeForAgentForTests: projectWorkflowResumeForAgent,
+  projectPublicRepairActivityForTests: projectPublicRepairActivity,
+  loadTaskContractContextForAgentForTests: loadTaskContractContextForAgent,
+  summarizePublicValidatorActivityForTests: summarizePublicValidatorActivity,
+  adaptReviewedKnowledgeResultForTests: adaptReviewedKnowledgeResult,
+  agentPolicyForTests: agentPolicy
 };

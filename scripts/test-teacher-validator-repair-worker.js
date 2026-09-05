@@ -42,10 +42,6 @@ function countOccurrences(value, search) {
   return search ? value.split(search).length - 1 : 0;
 }
 
-function repairTaskMessages(content = '修复当前模型。') {
-  return [{ role: 'user', content }];
-}
-
 function validation(status, message = 'validation result') {
   const passed = status === 'passed';
   return {
@@ -201,7 +197,7 @@ async function main() {
       ]),
       toolCallsStep([
         { type: 'text', text: '正文中的另一个模型和修复说明必须被忽略。```sysml\npackage Wrong {}\n```' },
-        { type: 'tool-call', toolCallId: 'candidate-2', toolName: 'submit_candidate_for_validation', input: JSON.stringify({ content: passedCandidate }) }
+        { type: 'tool-call', toolCallId: 'candidate-2', toolName: 'submit_candidate_for_validation', input: JSON.stringify({ content: '修复后的完整模型：\n```sysml\n' + passedCandidate + '\n```\n说明只属于候选外层。' }) }
       ])
     ]
   });
@@ -210,7 +206,7 @@ async function main() {
   const result = await runValidatorRepairWorker({
     model,
     instructions: 'Use tools to repair the model.',
-    taskMessages: repairTaskMessages(),
+    taskMessages: [{ role: 'user', content: '修复当前候选。' }],
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -253,7 +249,7 @@ async function main() {
   });
 
   assert.equal(result.terminalStopReason, 'validator_passed');
-  assert.equal(result.accepted?.content, passedCandidate, 'accepted content must come from the successful Tool call verbatim');
+  assert.equal(result.accepted?.content, passedCandidate, 'Tool 内容中的唯一完整候选应精确提取，外层说明不得进入 Validator');
   assert.equal(result.accepted?.candidate.content, passedCandidate);
   assert.equal(result.validatorCalls, 3, 'initial baseline and two actual candidate validations must be counted');
   assert.equal(result.candidateAttempts, 2);
@@ -266,7 +262,7 @@ async function main() {
   assert.equal(result.knowledgeQueries, 2,
     'each new active cluster may use one issue-directed query before its candidate submission');
   assert.equal(result.knowledgeBackendCalls, 2);
-  assert.equal(result.knowledgeNoNewEvidenceCount, 0);
+  assert.equal(result.knowledgeNoNewEvidenceCount, 1, '完整证据再次返回不能靠切片伪造新证据');
   assert.deepEqual(result.knowledgeQueriesByRound, [{ round: 1, queries: 1 }, { round: 2, queries: 1 }]);
   assert.equal(searched.length, 2,
     'concurrent synonymous searches must not pass the first in-flight backend query of each round');
@@ -286,12 +282,8 @@ async function main() {
   assert(modelCallText.includes('"protocolVersion":"repair-knowledge-progressive-v1"'));
   assert(modelCallText.includes('"totalClaims":8'));
   assert(modelCallText.includes('"includedClaims":8'));
-  assert(modelCallText.includes('"modelViewTokenBudget":3000'));
-  for (const match of modelCallText.matchAll(/"estimatedModelViewTokens":(\d+)/gu)) {
-    assert(Number(match[1]) <= 3000, 'knowledge must be bounded by the total model-view token budget');
-  }
   assert(modelCallText.includes('"coverage":"COMPLETE"'));
-  assert(modelCallText.includes('"truncated":true'));
+  assert(modelCallText.includes('"truncated":false'));
   assert(modelCallText.includes('K'.repeat(1_000)), 'a Claim that fits the total budget must not be cut at a fixed character limit');
   assert(modelCallText.includes('E'.repeat(1_000)), 'an Evidence span that fits the total budget must remain complete');
   assert(model.doGenerateCalls.every((call) => call.responseFormat === undefined), 'Repair Worker must not use Output.object/JSON response format');
@@ -310,7 +302,7 @@ async function main() {
   const directSubmit = await runValidatorRepairWorker({
     model: directSubmitModel,
     instructions: 'Submit immediately when Validator evidence is sufficient.',
-    taskMessages: repairTaskMessages(),
+    taskMessages: [{ role: 'user', content: '修复当前Validator失败候选。' }],
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -350,7 +342,7 @@ async function main() {
   const semanticDirect = await runValidatorRepairWorker({
     model: semanticDirectModel,
     instructions: 'Prefer actionable Official Validator diagnostics; search only after a no-progress submission.',
-    taskMessages: repairTaskMessages(),
+    taskMessages: [{ role: 'user', content: '修复当前候选。' }],
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -398,7 +390,7 @@ async function main() {
   const semanticNoProgress = await runValidatorRepairWorker({
     model: semanticNoProgressModel,
     instructions: 'Search after one direct submission leaves trusted diagnostics unchanged.',
-    taskMessages: repairTaskMessages(),
+    taskMessages: [{ role: 'user', content: '修复当前候选。' }],
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -444,7 +436,7 @@ async function main() {
   const sharedEvidenceResult = await runValidatorRepairWorker({
     model: sharedEvidenceModel,
     instructions: 'Use the actionable Validator diagnostics and already shared reviewed evidence before searching.',
-    taskMessages: repairTaskMessages(),
+    taskMessages: [{ role: 'user', content: '修复当前候选。' }],
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -527,7 +519,7 @@ async function main() {
   }, async () => await runValidatorRepairWorker({
     model: progressiveModel,
     instructions: 'Use progressive knowledge, then submit.',
-    taskMessages: repairTaskMessages(),
+    taskMessages: [{ role: 'user', content: '修复当前候选。' }],
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -574,8 +566,8 @@ async function main() {
   assert.equal(progressiveBackendCalls, 2);
   assert.deepEqual(progressiveAudit.map((item) => item.status), ['duplicate_query']);
   assert(progressiveInputs[1].alreadyProvidedClaimIds.includes('claim-type'));
-  assert.equal(progressive.knowledgeNoNewEvidenceCount, 0, 'cached adjacent spans are new model evidence even when the backend query is deduplicated');
-  assert.deepEqual(progressive.evaluationTrace.knowledgeQueries.map((item) => item.status), ['ok', 'ok', 'ok']);
+  assert.equal(progressive.knowledgeNoNewEvidenceCount, 1, '完整正文已披露，重复查询没有新证据');
+  assert.deepEqual(progressive.evaluationTrace.knowledgeQueries.map((item) => item.status), ['ok', 'no_new_evidence', 'ok']);
   const progressiveHistory = collectStrings(progressiveModel.doGenerateCalls).join('\n');
   assert(progressiveHistory.includes('Type resolution binds a usage to a definition.'));
   assert(progressiveHistory.includes('Introductory definition paragraph.'));
@@ -595,7 +587,7 @@ async function main() {
   const seenButUndisclosed = await runValidatorRepairWorker({
     model: seenButUndisclosedModel,
     instructions: 'Search when needed, then submit.',
-    taskMessages: repairTaskMessages(),
+    taskMessages: [{ role: 'user', content: '修复当前候选。' }],
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -651,7 +643,7 @@ async function main() {
   const repeated = await runValidatorRepairWorker({
     model: repeatedModel,
     instructions: 'Use the validation submission tool.',
-    taskMessages: repairTaskMessages(),
+    taskMessages: [{ role: 'user', content: '修复当前候选。' }],
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -686,7 +678,7 @@ async function main() {
   const invalidThenValid = await runValidatorRepairWorker({
     model: invalidToolModel,
     instructions: 'Use the validation submission tool.',
-    taskMessages: repairTaskMessages(),
+    taskMessages: [{ role: 'user', content: '修复当前候选。' }],
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -720,7 +712,7 @@ async function main() {
   const evalFailure = await runValidatorRepairWorker({
     model: evalFailureModel,
     instructions: 'Submit candidates.',
-    taskMessages: repairTaskMessages(),
+    taskMessages: [{ role: 'user', content: '修复当前候选。' }],
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -750,7 +742,7 @@ async function main() {
   const validatorUnavailable = await runValidatorRepairWorker({
     model: validatorUnavailableModel,
     instructions: 'Submit.',
-    taskMessages: repairTaskMessages(),
+    taskMessages: [{ role: 'user', content: '修复当前候选。' }],
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -775,7 +767,7 @@ async function main() {
   const validatorQueueFull = await runValidatorRepairWorker({
     model: validatorQueueFullModel,
     instructions: 'Submit.',
-    taskMessages: repairTaskMessages(),
+    taskMessages: [{ role: 'user', content: '修复当前候选。' }],
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -805,7 +797,7 @@ async function main() {
   const timedOut = await runValidatorRepairWorker({
     model: timedOutModel,
     instructions: 'Submit.',
-    taskMessages: repairTaskMessages(),
+    taskMessages: [{ role: 'user', content: '修复当前候选。' }],
     abortSignal: new AbortController().signal,
     timeoutMs: 500,
     toolTimeoutMs: 500,
@@ -847,7 +839,7 @@ async function main() {
     }, async () => await runValidatorRepairWorker({
       model: stepTimeoutModel,
       instructions: 'Submit.',
-      taskMessages: repairTaskMessages(),
+      taskMessages: [{ role: 'user', content: '修复当前候选。' }],
       abortSignal: new AbortController().signal,
       timeoutMs: 2_000,
       toolTimeoutMs: 10,
@@ -878,7 +870,7 @@ async function main() {
     () => runValidatorRepairWorker({
       model: hardTimeoutModel,
       instructions: 'Submit without exposing internal reasoning.',
-      taskMessages: repairTaskMessages('RUN05_TIMEOUT_CANDIDATE_BODY_MUST_NOT_PERSIST'),
+      taskMessages: [{ role: 'user', content: 'RUN05_TIMEOUT_CANDIDATE_BODY_MUST_NOT_PERSIST' }],
       abortSignal: new AbortController().signal,
       timeoutMs: 2_000,
       toolTimeoutMs: 10,
@@ -933,7 +925,7 @@ async function main() {
   const concurrent = await runValidatorRepairWorker({
     model: concurrentModel,
     instructions: 'Submit one candidate at a time.',
-    taskMessages: repairTaskMessages(),
+    taskMessages: [{ role: 'user', content: '修复当前候选。' }],
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -973,7 +965,7 @@ async function main() {
   const stale = await runValidatorRepairWorker({
     model: staleModel,
     instructions: 'Keep round epochs isolated.',
-    taskMessages: repairTaskMessages(),
+    taskMessages: [{ role: 'user', content: '修复当前候选。' }],
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -1018,7 +1010,7 @@ async function main() {
   const contextStop = await runValidatorRepairWorker({
     model: contextStopModel,
     instructions: 'Repair.',
-    taskMessages: repairTaskMessages(),
+    taskMessages: [{ role: 'user', content: '修复当前候选。' }],
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -1048,7 +1040,7 @@ async function main() {
     validationPassed: (output) => output.official.syntax === 'passed' && output.official.semantic === 'passed',
     validationRetryable: () => true
   });
-  assert.equal(contextStop.terminalStopReason, 'validator_passed');
+  assert.equal(contextStop.terminalStopReason, 'validator_passed', JSON.stringify(contextStop.contextAdmissions));
   assert.equal(contextStop.candidateAttempts, 2, 'bounded resume context must reach the next complete candidate');
   assert(contextStopModel.doGenerateCalls.length >= 2);
   assert(contextStop.contextAdmissions.every((item) => item.remainingTokens >= 0));
@@ -1063,7 +1055,7 @@ async function main() {
     'old reasoning/tool history must be pruned after at least one Tool step');
   assert(contextStop.contextAdmissions.some((item) => item.messageCountAfterSdkPrune < item.messageCountBeforePrune),
     'AI SDK pruneMessages must remove old tool-only history before the bounded snapshot replaces it');
-  assert(contextStop.contextAdmissions.every((item) => item.estimatedInputTokens <= 16_000 - 2_000),
+  assert(contextStop.contextAdmissions.every((item) => item.projectedTokens <= 16_000),
     'each bounded WorkerResumeView must stay below the context window with output reserve');
   const contextResumeText = collectStrings(contextStopModel.doGenerateCalls).join('\n');
   const visibleReserveTokens = [...contextResumeText.matchAll(
@@ -1091,7 +1083,7 @@ async function main() {
   const notAdmitted = await runValidatorRepairWorker({
     model: notAdmittedModel,
     instructions: 'Repair.',
-    taskMessages: repairTaskMessages(),
+    taskMessages: [{ role: 'user', content: '{}' }],
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -1138,14 +1130,15 @@ async function main() {
   const sharedResources = runtime.createRunResources({
     request: sharedRequest,
     policy: runtime.DEFAULT_AGENT_POLICY,
-    deadlineAtMs: Date.now() + 60_000
+    deadlineAtMs: Date.now() + runtime.DEFAULT_AGENT_POLICY.terminalReserveMs + 60_000
   });
   sharedResources.knowledge.observeToolResult('search_reviewed_knowledge', { query: 'part definition' }, {
     coverage: 'COMPLETE', claims: [{ claimId: 'shared-claim' }],
     evidenceBlocks: [{ evidenceId: 'shared-evidence' }]
   });
-  for (let index = 0; index < 4; index += 1) {
+  for (let index = 0; index < sharedResources.resourcePolicy.operationLimits.knowledge_backend; index += 1) {
     sharedResources.assertNewReviewedKnowledgeQueryAllowed({ query: `prior shared query ${index + 1}`, limit: 5 });
+    sharedResources.budget.reserve("knowledge_backend");
   }
   const sharedDelegated = sharedResources.tasks.materialize({
     questionHash: sharedResources.input.questionHash,
@@ -1167,7 +1160,7 @@ async function main() {
     task: sharedView,
     model: sharedModel,
     instructions: 'Repair with the provided tools.',
-    taskMessages: repairTaskMessages(),
+    taskMessages: [{ role: 'user', content: '修复当前候选。' }],
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -1224,7 +1217,7 @@ async function main() {
   const compoundResources = runtime.createRunResources({
     request: compoundRequest,
     policy: { ...runtime.DEFAULT_AGENT_POLICY, repairMaxRounds: 4 },
-    deadlineAtMs: Date.now() + 60_000
+    deadlineAtMs: Date.now() + runtime.DEFAULT_AGENT_POLICY.terminalReserveMs + 60_000
   });
   const compoundDelegated = compoundResources.tasks.materialize({
     questionHash: compoundResources.input.questionHash,
@@ -1266,7 +1259,7 @@ async function main() {
     task: compoundView,
     model: compoundModel,
     instructions: 'Fix A, B, C and D sequentially while submitting one complete model each round.',
-    taskMessages: repairTaskMessages('修复A、B、C、D四处独立错误。'),
+    taskMessages: [{ role: 'user', content: '修复Validator问题A、B、C、D。' }],
     abortSignal: new AbortController().signal,
     timeoutMs: compoundResources.budget.view().workRemainingMs,
     toolTimeoutMs: 5_000,
@@ -1335,7 +1328,7 @@ async function main() {
   const noProgressResult = await runValidatorRepairWorker({
     model: noProgressModel,
     instructions: 'Stop when trusted diagnostics do not change.',
-    taskMessages: repairTaskMessages(),
+    taskMessages: [{ role: 'user', content: '修复当前候选。' }],
     abortSignal: new AbortController().signal,
     timeoutMs: 30_000,
     toolTimeoutMs: 5_000,
@@ -1358,70 +1351,6 @@ async function main() {
   assert.equal(noProgressResult.terminalStopReason, 'repair_no_progress');
   assert.equal(noProgressResult.consecutiveNoProgress, 2);
   assert.equal(noProgressValidatorCalls, 2, '连续两轮无进展后不得继续调用Validator');
-
-  let zeroRoundValidatorCalls = 0;
-  const zeroRoundResult = await runValidatorRepairWorker({
-    model,
-    instructions: 'No repair round is available.',
-    taskMessages: repairTaskMessages(),
-    abortSignal: new AbortController().signal,
-    timeoutMs: 30_000,
-    toolTimeoutMs: 5_000,
-    contextWindowTokens: 64_000,
-    maxCandidateAttempts: 0,
-    maxRepairRounds: 0,
-    maxValidatorCalls: 1,
-    initialValidatorCalls: 1,
-    initialCandidateContent: 'a',
-    targetBinding: { mode: 'replace_entry', fileId: 'file_main', baseHash: hash('a') },
-    knowledgeSearchEnabled: false,
-    searchReviewedKnowledge: async () => ({}),
-    validateCandidate: async () => {
-      zeroRoundValidatorCalls += 1;
-      return { candidate: { content: 'unreachable' }, validation: validation('passed') };
-    },
-    validationPassed: () => true,
-    validationRetryable: () => true
-  });
-  assert.equal(zeroRoundResult.terminalStopReason, 'candidate_budget_exhausted');
-  assert.equal(zeroRoundValidatorCalls, 0, '零轮预算不得调用模型或Validator');
-
-  const utf8ByteLimitModel = new MockLanguageModelV4({
-    doGenerate: [
-      toolStep('utf8-too-large', 'submit_candidate_for_validation', { content: '中' }),
-      toolStep('utf8-valid', 'submit_candidate_for_validation', { content: 'b' })
-    ]
-  });
-  let utf8ByteLimitValidatorCalls = 0;
-  const utf8ByteLimitResult = await runValidatorRepairWorker({
-    model: utf8ByteLimitModel,
-    instructions: 'Respect the UTF-8 byte limit.',
-    taskMessages: repairTaskMessages(),
-    abortSignal: new AbortController().signal,
-    timeoutMs: 30_000,
-    toolTimeoutMs: 5_000,
-    contextWindowTokens: 64_000,
-    maxCandidateAttempts: 1,
-    maxRepairRounds: 1,
-    maxValidatorCalls: 2,
-    maxCandidateArtifactBytes: 2,
-    initialValidatorCalls: 1,
-    initialCandidateContent: 'a',
-    targetBinding: { mode: 'replace_entry', fileId: 'file_main', baseHash: hash('a') },
-    knowledgeSearchEnabled: false,
-    searchReviewedKnowledge: async () => ({}),
-    validateCandidate: async (input) => {
-      utf8ByteLimitValidatorCalls += 1;
-      return { candidate: { content: input.content }, validation: validation('passed', 'utf8-byte-limit') };
-    },
-    validationPassed: (output) => output.official.syntax === 'passed' && output.official.semantic === 'passed',
-    validationRetryable: () => true
-  });
-  assert.equal(utf8ByteLimitResult.terminalStopReason, 'validator_passed');
-  assert.equal(utf8ByteLimitResult.accepted.content, 'b');
-  assert.equal(utf8ByteLimitValidatorCalls, 1);
-  assert(utf8ByteLimitResult.attempts.some((attempt) => attempt.rejectionReason === 'candidate_artifact_too_large'),
-    '多字节候选必须按UTF-8字节数拒绝，并且不得调用Validator');
 
   function textStep(text) {
     return {

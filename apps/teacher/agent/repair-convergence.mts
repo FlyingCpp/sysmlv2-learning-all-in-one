@@ -158,15 +158,6 @@ export function createRepairIssueSet(
       diagnostic: { severity: "error", code: "OFFICIAL_SEMANTIC_FAILED", message: "Official semantic validation failed." },
     });
   }
-  for (const diagnostic of validation.courseRules?.diagnostics ?? []) {
-    sources.push({ category: "course", diagnostic });
-  }
-  if (validation.courseRules?.status === "failed" && validation.courseRules.diagnostics.length === 0) {
-    sources.push({
-      category: "course",
-      diagnostic: { severity: "error", code: "COURSE_RULES_FAILED", message: "Course rule validation failed." },
-    });
-  }
   const occurrenceByBaseIdentity = new Map<string, number>();
   const issues = sources
     .sort(compareDiagnosticSources)
