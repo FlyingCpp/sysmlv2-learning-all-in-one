@@ -1,3 +1,6 @@
+import { extractCandidateContent } from "./candidate-content.mjs";
+import { selectKnowledgeContent, knowledgeTokens } from "./knowledge-content.mjs";
+import { isTimeoutError } from "./runtime-error.mjs";
 import { createHash } from "node:crypto";
 
 import {
@@ -39,7 +42,6 @@ import {
   type RepairRoundTrace,
 } from "./repair-convergence.mjs";
 
-const KNOWLEDGE_MODEL_VIEW_TOKEN_BUDGET = 3_000;
 const CONTEXT_SAFETY_TOKENS = 4_000;
 const REPAIR_RESUME_VIEW_RESERVE_TOKENS = 8_000;
 const CHECKPOINT_ISSUE_SAMPLE_LIMIT = 8;
@@ -99,6 +101,10 @@ export interface ValidatorRepairWorkerOptions<CANDIDATE> {
   taskView?: WorkerTaskView;
   searchReviewedKnowledge: (input: {
     query: string;
+    offset?: number;
+    exampleIds?: string[];
+    claimIds?: string[];
+    evidenceIds?: string[];
     toolCallId: string;
     roundEpoch: number;
     queryOrdinalThisRound: number;
@@ -242,7 +248,6 @@ class RepairWorkerControlledStop extends Error {
 export async function runValidatorRepairWorker<CANDIDATE>(
   options: ValidatorRepairWorkerOptions<CANDIDATE>,
 ): Promise<ValidatorRepairWorkerResult<CANDIDATE>> {
-  const taskMessages = [...options.taskMessages];
   const sharedTask = resolveSharedRepairTask(options);
   const initialKnowledge = options.initialKnowledge
     ?? options.taskView?.knowledge;
@@ -257,12 +262,7 @@ export async function runValidatorRepairWorker<CANDIDATE>(
   const maxCandidateArtifactBytes = Math.max(1, options.maxCandidateArtifactBytes ?? Number.MAX_SAFE_INTEGER);
   const maxToolLoopSteps = options.maxValidatorCalls + maxKnowledgeQueries + 1;
   const candidateCharLimit = deriveRepairCandidateCharLimit(options, maxCandidateArtifactBytes);
-  if (maxRepairRounds < 1 || options.maxCandidateAttempts < 1) {
-    return emptyResult(options, candidateCharLimit, "candidate_budget_exhausted");
-  }
-  if (candidateCharLimit < 1
-    || options.initialCandidateContent.length > candidateCharLimit
-    || Buffer.byteLength(options.initialCandidateContent, "utf8") > maxCandidateArtifactBytes) {
+  if (candidateCharLimit < 1 || options.initialCandidateContent.length > candidateCharLimit) {
     return emptyResult(options, candidateCharLimit, "repair_context_not_admitted");
   }
   const initialCandidateHash = hashContent(options.initialCandidateContent);
@@ -296,12 +296,6 @@ export async function runValidatorRepairWorker<CANDIDATE>(
     searchInFlightByEpoch: new Set<number>(),
     queriesByEpoch: new Map<number, number>([[1, 0]]),
     queryHashesByEpoch: new Map<number, Set<string>>([[1, new Set<string>()]]),
-    searchClosedByEpoch: new Set<number>(
-      hasActionableValidationDiagnostics(options.initialValidation)
-        && shouldCloseRepairSearch(initialIssueSet, initialKnowledge, 0)
-        ? [1]
-        : [],
-    ),
     providedClaimIds: new Set<string>(
       initialSharedKnowledgeBodiesAdmitted ? initialKnowledge?.disclosedClaimIds ?? [] : [],
     ),
@@ -311,7 +305,6 @@ export async function runValidatorRepairWorker<CANDIDATE>(
     providedEvidenceSpanIds: new Set<string>(
       initialSharedKnowledgeBodiesAdmitted ? initialKnowledge?.disclosedEvidenceSpanIds ?? [] : [],
     ),
-    evidenceCache: new Map<string, CachedEvidence>(),
     contextAdmissions: [] as ValidatorRepairWorkerResult<CANDIDATE>["contextAdmissions"],
     evaluationKnowledgeQueries: [] as NonNullable<ValidatorRepairWorkerResult<CANDIDATE>["evaluationTrace"]>["knowledgeQueries"],
     evaluationFailedCandidates: [] as NonNullable<ValidatorRepairWorkerResult<CANDIDATE>["evaluationTrace"]>["failedCandidates"],
@@ -387,9 +380,6 @@ export async function runValidatorRepairWorker<CANDIDATE>(
       if (!options.runResources && session.knowledgeQueries >= maxKnowledgeQueries) {
         return { status: "budget_exhausted", roundEpoch: callEpoch };
       }
-      if (session.searchClosedByEpoch.has(callEpoch)) {
-        return { status: "evidence_sufficient", roundEpoch: callEpoch };
-      }
       if (session.searchInFlightByEpoch.has(callEpoch)) {
         return { status: "search_in_flight", roundEpoch: callEpoch };
       }
@@ -401,7 +391,7 @@ export async function runValidatorRepairWorker<CANDIDATE>(
       session.queriesByEpoch.set(callEpoch, used + 1);
       session.knowledgeQueries += 1;
       const queryOrdinalThisRound = used + 1;
-      const normalizedQueryHash = hashContent(normalizeKnowledgeQuery(input.query));
+      const normalizedQueryHash = hashContent(JSON.stringify([normalizeKnowledgeQuery(input.query), input.offset, input.exampleIds, input.claimIds, input.evidenceIds]));
       const roundQueryHashes = session.queryHashesByEpoch.get(callEpoch) ?? new Set<string>();
       session.queryHashesByEpoch.set(callEpoch, roundQueryHashes);
       const duplicateQuery = roundQueryHashes.has(normalizedQueryHash);
@@ -422,7 +412,7 @@ export async function runValidatorRepairWorker<CANDIDATE>(
           input.query,
           session.providedClaimIds,
           session.providedEvidenceIds,
-          session.evidenceCache,
+
           session.providedEvidenceSpanIds,
         );
         status = projection.modelResult.no_new_evidence ? "no_new_evidence" : "ok";
@@ -432,6 +422,10 @@ export async function runValidatorRepairWorker<CANDIDATE>(
           session.knowledgeBackendCalls += 1;
           const result = await options.searchReviewedKnowledge({
             query: input.query,
+            offset: input.offset,
+            exampleIds: input.exampleIds,
+            claimIds: input.claimIds,
+            evidenceIds: input.evidenceIds,
             toolCallId: execution.toolCallId,
             roundEpoch: callEpoch,
             queryOrdinalThisRound,
@@ -445,7 +439,7 @@ export async function runValidatorRepairWorker<CANDIDATE>(
             input.query,
             session.providedClaimIds,
             session.providedEvidenceIds,
-            session.evidenceCache,
+
             session.providedEvidenceSpanIds,
           );
           status = callEpoch === session.roundEpoch
@@ -457,7 +451,7 @@ export async function runValidatorRepairWorker<CANDIDATE>(
             input.query,
             session.providedClaimIds,
             session.providedEvidenceIds,
-            session.evidenceCache,
+
             session.providedEvidenceSpanIds,
           );
           status = "knowledge_unavailable";
@@ -466,14 +460,12 @@ export async function runValidatorRepairWorker<CANDIDATE>(
       for (const claimId of projection.newClaimIds) session.providedClaimIds.add(claimId);
       for (const evidenceId of projection.newEvidenceIds) session.providedEvidenceIds.add(evidenceId);
       for (const spanId of projection.newEvidenceSpanIds) session.providedEvidenceSpanIds.add(spanId);
-      if (projection.newClaimIds.length > 0 || projection.newEvidenceSpanIds.length > 0) {
+      if (!projection.modelResult.no_new_evidence) {
         // prepareStep会清理旧Tool消息；只把最新一次、已经按Token预算投影的证据带入续跑视图。
-        session.resumeKnowledgeEvidence.splice(0, session.resumeKnowledgeEvidence.length, projection.modelResult);
+        session.resumeKnowledgeEvidence.push(projection.modelResult);
       }
       if (projection.modelResult.no_new_evidence) session.knowledgeNoNewEvidenceCount += 1;
-      if (projection.modelResult.no_new_evidence || projection.modelResult.coverage === "COMPLETE") {
-        session.searchClosedByEpoch.add(callEpoch);
-      }
+
       if (options.evaluationMode === "local_benchmark") {
         session.evaluationKnowledgeQueries.push({
           round: callEpoch,
@@ -512,6 +504,12 @@ export async function runValidatorRepairWorker<CANDIDATE>(
         session.knowledgeQueriesBeforeFirstCandidateSubmission = session.knowledgeQueries;
       }
       session.candidateSubmissionCalls += 1;
+      const extracted = extractCandidateContent({ text: input.content });
+      if (!extracted.success) {
+        return candidateActionResult("candidate_invalid", "候选围栏不完整或不唯一，请提交一份完整模型。", session, callEpoch);
+      }
+      input = { ...input, content: extracted.content };
+
       if (!input.content.trim()) {
         session.attempts.push({
           round: callEpoch,
@@ -521,21 +519,6 @@ export async function runValidatorRepairWorker<CANDIDATE>(
           ...targetAudit(options.targetBinding),
         });
         return candidateActionResult("candidate_invalid", "候选内容为空。", session, callEpoch);
-      }
-      if (Buffer.byteLength(input.content, "utf8") > maxCandidateArtifactBytes) {
-        session.attempts.push({
-          round: callEpoch,
-          status: "rejected",
-          rejectionReason: "candidate_artifact_too_large",
-          toolCallId: execution.toolCallId,
-          ...targetAudit(options.targetBinding),
-        });
-        return candidateActionResult(
-          "candidate_invalid",
-          "候选内容超过 UTF-8 Artifact 字节上限。",
-          session,
-          callEpoch,
-        );
       }
       if (session.validationInFlight) {
         return candidateActionResult("validation_in_flight", "已有候选正在验证。", session, callEpoch);
@@ -690,10 +673,6 @@ export async function runValidatorRepairWorker<CANDIDATE>(
         session.roundEpoch += 1;
         session.queriesByEpoch.set(session.roundEpoch, 0);
         session.queryHashesByEpoch.set(session.roundEpoch, new Set<string>());
-        if (hasActionableValidationDiagnostics(observation.validation)
-          && shouldCloseRepairSearch(nextIssueSet, initialKnowledge, session.consecutiveNoProgress)) {
-          session.searchClosedByEpoch.add(session.roundEpoch);
-        }
         if (session.terminalStopReason === "repair_no_progress") {
           // 相同可信诊断连续两轮没有变化时停止，避免为了用满上限继续消耗Validator。
         } else if (session.roundEpoch > maxRepairRounds) {
@@ -798,7 +777,8 @@ export async function runValidatorRepairWorker<CANDIDATE>(
       });
       const resumeMessages = pruneMessages({
         messages: createWorkerResumeMessages({
-          taskMessages,
+          contextWindowTokens: options.contextWindowTokens - knowledgeTokens(options.instructions),
+          taskMessages: options.taskMessages,
           taskContext: options.taskContext,
           targetBinding: options.targetBinding,
           roundEpoch: session.roundEpoch,
@@ -827,8 +807,7 @@ export async function runValidatorRepairWorker<CANDIDATE>(
       const searchAvailable = options.knowledgeSearchEnabled
         && (options.runResources
           ? options.runResources.isNewReviewedKnowledgeQueryAllowed()
-          : session.knowledgeQueries < maxKnowledgeQueries)
-        && !session.searchClosedByEpoch.has(session.roundEpoch);
+          : session.knowledgeQueries < maxKnowledgeQueries);
       const activeTools: Array<keyof typeof tools> = searchAvailable
         ? ["search_reviewed_knowledge", "submit_candidate_for_validation"]
         : ["submit_candidate_for_validation"];
@@ -924,7 +903,7 @@ export async function runValidatorRepairWorker<CANDIDATE>(
   try {
     generated = await agent.generate({
       messages: createWorkerResumeMessages({
-        taskMessages,
+        taskMessages: options.taskMessages,
         taskContext: options.taskContext,
         targetBinding: options.targetBinding,
         roundEpoch: session.roundEpoch,
@@ -969,7 +948,7 @@ export async function runValidatorRepairWorker<CANDIDATE>(
       phase: "validator_repair_worker",
       request: {
         instructions: options.instructions,
-        messages: taskMessages,
+        messages: options.taskMessages,
         maxRetries: 0,
         temperature: options.temperature ?? 0,
         reasoning: options.reasoning,
@@ -990,7 +969,7 @@ export async function runValidatorRepairWorker<CANDIDATE>(
         phase: "validator_repair_worker",
         request: {
           instructions: options.instructions,
-          messages: taskMessages,
+          messages: options.taskMessages,
           maxRetries: 0,
           temperature: options.temperature ?? 0,
           reasoning: options.reasoning,
@@ -1009,7 +988,7 @@ export async function runValidatorRepairWorker<CANDIDATE>(
         phase: "validator_repair_worker",
         request: {
           instructions: options.instructions,
-          messages: taskMessages,
+          messages: options.taskMessages,
           maxRetries: 0,
           temperature: options.temperature ?? 0,
           reasoning: options.reasoning,
@@ -1034,7 +1013,7 @@ export async function runValidatorRepairWorker<CANDIDATE>(
       });
     }
     if (!(error instanceof RepairWorkerControlledStop)) {
-      if (isStepTimeoutError(error)) {
+      if (isTimeoutError(error)) {
         const repairTimeout = new Error("repair_step_timeout");
         repairTimeout.name = "RepairStepTimeoutError";
         throw repairTimeout;
@@ -1105,6 +1084,7 @@ export async function runValidatorRepairWorker<CANDIDATE>(
 }
 
 function createWorkerResumeMessages(input: {
+  contextWindowTokens?: number;
   taskMessages: readonly ModelMessage[];
   taskContext?: unknown;
   targetBinding: ValidatorRepairWorkerOptions<unknown>["targetBinding"];
@@ -1158,13 +1138,29 @@ function createWorkerResumeMessages(input: {
     resultPriority,
     requiredNextAction: "修复active cluster并通过submit_candidate_for_validation提交一份完整候选；不要提交Patch、diff或业务状态。",
   };
-  return [
-    ...input.taskMessages,
-    {
-      role: "user",
-      content: `Repair Worker续跑状态（服务端可信投影）：\n${JSON.stringify(resumeView)}`,
-    },
-  ];
+  const baseTokens = knowledgeTokens({ ...resumeView, necessaryEvidence: { admission: evidenceAdmission, latestRepairQuery: [] } }) + knowledgeTokens(input.taskMessages)
+    + requiredVisibleOutputReserveTokens(input.latestCandidateContent) + CONTEXT_SAFETY_TOKENS;
+  const entries = [evidenceAdmission.sharedContent === "bounded_body" ? input.initialKnowledge : undefined, ...input.resumeKnowledgeEvidence];
+  let selectionBudget = Math.max(0, (input.contextWindowTokens ?? 64000) - baseTokens);
+  let messages: ModelMessage[] = [];
+  while (true) {
+    const selection = selectKnowledgeContent(entries, selectionBudget);
+    resumeView.necessaryEvidence = {
+      admission: evidenceAdmission, shared: input.initialKnowledge ? knowledgeForResume(input.initialKnowledge, false) : undefined,
+      latestRepairQuery: [{ protocolVersion: "repair-knowledge-progressive-v1",
+        newClaims: selection.claims, newEvidenceBlocks: selection.evidenceBlocks,
+        examples: selection.examples, deferredContent: selection.deferredContent,
+        totalClaims: selection.claims.length, includedClaims: selection.claims.length,
+        coverage: (input.resumeKnowledgeEvidence.at(-1) as Record<string, unknown> | undefined)?.coverage ?? "PARTIAL",
+        truncated: selection.deferredContent.length > 0 }],
+    };
+    messages = [...input.taskMessages, { role: "user", content: "Repair Worker续跑状态（服务端可信投影）：\n" + JSON.stringify(resumeView) }];
+    const excess = knowledgeTokens(messages) + requiredVisibleOutputReserveTokens(input.latestCandidateContent) + CONTEXT_SAFETY_TOKENS - (input.contextWindowTokens ?? 64000);
+    if (excess <= 0 || selectionBudget === 0) break;
+    // 仅收缩本次正文选择，完整Ledger不变；不增加LLM调用或裁切语法。
+    selectionBudget = Math.max(0, selectionBudget - excess);
+  }
+  return messages;
 }
 
 function requiredVisibleOutputReserveTokens(latestCandidateContent: string): number {
@@ -1487,12 +1483,6 @@ function validationAudit(validation: ValidationOutput) {
   };
 }
 
-interface CachedEvidence {
-  evidenceId: string;
-  sectionPath: string;
-  authorityLevel: string;
-  spans: string[];
-}
 
 function validationFailureSignature(validation: ValidationOutput): string {
   const diagnosticKey = (diagnostic: ValidationOutput["official"]["diagnostics"][number]) => ({
@@ -1548,10 +1538,12 @@ function knowledgeResultForModel(
   query: string,
   providedClaimIds: ReadonlySet<string>,
   providedEvidenceIds: ReadonlySet<string>,
-  evidenceCache: Map<string, CachedEvidence>,
   providedEvidenceSpanIds: ReadonlySet<string>,
 ): {
   modelResult: {
+    examples?: Array<Record<string, unknown>>;
+    hasMore?: boolean;
+    nextOffset?: number;
     protocolVersion: "repair-knowledge-progressive-v1";
     coverage: string;
     closureStatus: string;
@@ -1565,7 +1557,6 @@ function knowledgeResultForModel(
     includedClaims: number;
     totalEvidenceBlocks: number;
     includedEvidenceBlocks: number;
-    modelViewTokenBudget: number;
     estimatedModelViewTokens: number;
     expansionAvailable: boolean;
     oversizedEvidenceSpanCount: number;
@@ -1575,151 +1566,25 @@ function knowledgeResultForModel(
   newEvidenceIds: string[];
   newEvidenceSpanIds: string[];
 } {
-  if (!value || typeof value !== "object") {
-    return emptyKnowledgeProjection();
-  }
+  if (!value || typeof value !== "object") return emptyKnowledgeProjection();
   const source = value as Record<string, unknown>;
-  const rawClaims = Array.isArray(source.newClaims)
-    ? source.newClaims
-    : Array.isArray(source.claims) ? source.claims : [];
-  const rawEvidence = Array.isArray(source.newEvidenceBlocks)
-    ? source.newEvidenceBlocks
-    : Array.isArray(source.evidenceBlocks) ? source.evidenceBlocks : [];
-  const declaredAlreadyProvidedClaimIds = new Set(textList(source.alreadyProvidedClaimIds, 128, 128));
-  const declaredAlreadyProvidedEvidenceIds = new Set(textList(source.alreadyProvidedEvidenceIds, 128, 128));
-  for (const item of rawEvidence) {
-    if (!item || typeof item !== "object") continue;
-    const evidence = item as Record<string, unknown>;
-    const evidenceId = boundedText(evidence.evidenceId, 128);
-    const excerpt = String(evidence.excerpt ?? evidence.textContent ?? "").trim();
-    if (!evidenceId || !excerpt) continue;
-    evidenceCache.set(evidenceId, {
-      evidenceId,
-      sectionPath: boundedText(evidence.sectionPath, 500),
-      authorityLevel: boundedText(evidence.authorityLevel, 16),
-      spans: semanticEvidenceSpans(excerpt),
-    });
-  }
-
-  let remainingTokens = KNOWLEDGE_MODEL_VIEW_TOKEN_BUDGET;
-  let estimatedModelViewTokens = 0;
-  const duplicateClaimIds: string[] = [];
-  const claimCandidates = rawClaims.flatMap((item) => {
-    if (!item || typeof item !== "object") return [];
-    const claim = item as Record<string, unknown>;
-    const claimId = boundedText(claim.claimId, 128);
-    const claimText = String(claim.claimText ?? "").trim();
-    if (!claimId || !claimText) return [];
-    if (providedClaimIds.has(claimId) || declaredAlreadyProvidedClaimIds.has(claimId)) {
-      duplicateClaimIds.push(claimId);
-      return [];
-    }
-    return [{
-      claimId,
-      claimText,
-      authorityLevel: boundedText(claim.authorityLevel, 16),
-      evidenceIds: (Array.isArray(claim.evidenceIds) ? claim.evidenceIds : [])
-        .slice(0, 8)
-        .map((item) => boundedText(item, 128))
-        .filter(Boolean),
-    }];
-  });
-  const claims: Array<Record<string, unknown>> = [];
-  for (const claim of claimCandidates) {
-    const tokens = estimatedJsonTokens(claim);
-    if (tokens > remainingTokens) continue;
-    claims.push(claim);
-    remainingTokens -= tokens;
-    estimatedModelViewTokens += tokens;
-  }
-
-  const requestedEvidenceIds = evidenceIdsMentionedInQuery(query, evidenceCache.keys());
-  const rawEvidenceIds = rawEvidence.flatMap((item) => {
-    const evidenceId = item && typeof item === "object"
-      ? boundedText((item as Record<string, unknown>).evidenceId, 128)
-      : "";
-    return evidenceId ? [evidenceId] : [];
-  });
-  const evidenceIdsToConsider = [...new Set([
-    ...requestedEvidenceIds,
-    ...rawEvidenceIds,
-    ...providedEvidenceIds,
-  ])];
-  const evidenceBlocks: Array<Record<string, unknown>> = [];
-  const newEvidenceSpanIds: string[] = [];
-  for (const evidenceId of evidenceIdsToConsider) {
-    const cached = evidenceCache.get(evidenceId);
-    if (!cached) continue;
-    if (providedEvidenceSpanIds.has(`${evidenceId}:all`)) continue;
-    const spanIndex = selectEvidenceSpanIndex(cached, query, providedEvidenceSpanIds, remainingTokens);
-    if (spanIndex < 0) continue;
-    const spanId = `${evidenceId}:${spanIndex}`;
-    const block = {
-      evidenceId,
-      spanId,
-      spanIndex,
-      spanCount: cached.spans.length,
-      sectionPath: cached.sectionPath,
-      excerpt: cached.spans[spanIndex],
-      authorityLevel: cached.authorityLevel,
-      expansionAvailable: cached.spans.some((_, index) => !providedEvidenceSpanIds.has(`${evidenceId}:${index}`)
-        && index !== spanIndex),
-    };
-    const tokens = estimatedJsonTokens(block);
-    if (tokens > remainingTokens) continue;
-    evidenceBlocks.push(block);
-    newEvidenceSpanIds.push(spanId);
-    remainingTokens -= tokens;
-    estimatedModelViewTokens += tokens;
-  }
-  const newClaimIds = claims.map((item) => String(item.claimId));
-  const newEvidenceIds = [...new Set(evidenceBlocks.map((item) => String(item.evidenceId)))];
-  const oversizedEvidenceSpanCount = [...evidenceCache.values()].reduce((count, evidence) => (
-    count + evidence.spans.filter((span) => estimatedTextTokens(span) + 100 > KNOWLEDGE_MODEL_VIEW_TOKEN_BUDGET).length
-  ), 0);
-  const expansionAvailable = [...evidenceCache.values()].some((evidence) => evidence.spans.some(
-    (_, index) => !providedEvidenceSpanIds.has(`${evidence.evidenceId}:all`)
-      && !providedEvidenceSpanIds.has(`${evidence.evidenceId}:${index}`)
-      && !newEvidenceSpanIds.includes(`${evidence.evidenceId}:${index}`)
-      && estimatedTextTokens(evidence.spans[index]!) + 100 <= KNOWLEDGE_MODEL_VIEW_TOKEN_BUDGET,
-  ));
-  const noNewEvidence = newClaimIds.length === 0
-    && newEvidenceIds.length === 0
-    && !expansionAvailable;
-  return {
-    modelResult: {
-      protocolVersion: "repair-knowledge-progressive-v1",
-      coverage: ["COMPLETE", "PARTIAL", "NONE"].includes(String(source.coverage))
-        ? String(source.coverage)
-        : "NONE",
-      closureStatus: boundedText(source.closureStatus, 32),
-      resultHash: boundedText(source.resultHash, 80),
-      newClaims: claims,
-      newEvidenceBlocks: evidenceBlocks,
-      alreadyProvidedClaimIds: [...new Set([
-        ...providedClaimIds,
-        ...declaredAlreadyProvidedClaimIds,
-        ...duplicateClaimIds,
-      ])].slice(0, 128),
-      alreadyProvidedEvidenceIds: [...new Set([
-        ...providedEvidenceIds,
-        ...declaredAlreadyProvidedEvidenceIds,
-      ])].slice(0, 128),
-      no_new_evidence: noNewEvidence,
-      totalClaims: numericCount(source.totalClaims, rawClaims.length),
-      includedClaims: claims.length,
-      totalEvidenceBlocks: numericCount(source.totalEvidenceBlocks, rawEvidence.length),
-      includedEvidenceBlocks: evidenceBlocks.length,
-      modelViewTokenBudget: KNOWLEDGE_MODEL_VIEW_TOKEN_BUDGET,
-      estimatedModelViewTokens,
-      expansionAvailable,
-      oversizedEvidenceSpanCount,
-      truncated: claimCandidates.length > claims.length || expansionAvailable || oversizedEvidenceSpanCount > 0,
-    },
-    newClaimIds,
-    newEvidenceIds,
-    newEvidenceSpanIds,
+  const rows = (key: string, alternate: string) => (Array.isArray(source[key]) ? source[key] : Array.isArray(source[alternate]) ? source[alternate] : []) as Array<Record<string, unknown>>;
+  const claims = rows("claims", "newClaims").filter(row => row.claimId && !providedClaimIds.has(String(row.claimId)));
+  const evidence = rows("evidenceBlocks", "newEvidenceBlocks").filter(row => row.evidenceId && !providedEvidenceSpanIds.has(String(row.evidenceId) + ":all"));
+  const examples = rows("examples", "examples").filter(row => row.validatorPassed === true && row.modelText);
+  const result = emptyKnowledgeProjection();
+  result.newClaimIds = claims.map(row => String(row.claimId));
+  result.newEvidenceIds = evidence.map(row => String(row.evidenceId));
+  result.newEvidenceSpanIds = result.newEvidenceIds.map(id => id + ":all");
+  result.modelResult = {
+    ...result.modelResult, coverage: String(source.coverage ?? "NONE"), closureStatus: String(source.closureStatus ?? ""), resultHash: String(source.resultHash ?? ""),
+    newClaims: claims, newEvidenceBlocks: evidence, examples,
+    ...(source.hasMore === true ? { hasMore: true, nextOffset: Number(source.nextOffset) } : {}),
+    no_new_evidence: claims.length === 0 && evidence.length === 0 && examples.length === 0,
+    totalClaims: claims.length, includedClaims: claims.length, totalEvidenceBlocks: evidence.length, includedEvidenceBlocks: evidence.length,
+    estimatedModelViewTokens: estimatedJsonTokens({claims, evidence, examples}),
   };
+  return result;
 }
 
 function emptyKnowledgeProjection(): ReturnType<typeof knowledgeResultForModel> {
@@ -1738,7 +1603,6 @@ function emptyKnowledgeProjection(): ReturnType<typeof knowledgeResultForModel> 
       includedClaims: 0,
       totalEvidenceBlocks: 0,
       includedEvidenceBlocks: 0,
-      modelViewTokenBudget: KNOWLEDGE_MODEL_VIEW_TOKEN_BUDGET,
       estimatedModelViewTokens: 0,
       expansionAvailable: false,
       oversizedEvidenceSpanCount: 0,
@@ -1750,109 +1614,8 @@ function emptyKnowledgeProjection(): ReturnType<typeof knowledgeResultForModel> 
   };
 }
 
-function hasActionableValidationDiagnostics(validation: ValidationOutput | undefined): boolean {
-  if (!validation) return false;
-  return validation.official.diagnostics.some((diagnostic) => diagnostic.severity === "error")
-    || (validation.courseRules?.diagnostics.some((diagnostic) => diagnostic.severity === "error") ?? false);
-}
-
-function hasSharedReviewedEvidence(knowledge: KnowledgeView | undefined): boolean {
-  if (!knowledge) return false;
-  return knowledge.claims.length > 0 || knowledge.evidenceBlocks.length > 0;
-}
-
-function shouldCloseRepairSearch(
-  issueSet: RepairIssueSet | undefined,
-  knowledge: KnowledgeView | undefined,
-  _consecutiveNoProgress: number,
-): boolean {
-  // Active Cluster只限制当前修复范围，不代表Validator诊断已经提供可执行的SysML v2语法证据。
-  // 保持Search Tool可选，由Repair根据Prompt对明显词法/定界符错误直接修复，其他问题簇优先检索。
-  // 共享Run预算、COMPLETE/no_new_evidence和当轮Search Guard仍由服务端硬性关闭。
-  if (issueSet?.activeCluster) return false;
-  // 没有服务端问题分类时保留旧兼容行为；已有共享审核证据则不重复查询。
-  return !issueSet?.activeCluster && hasSharedReviewedEvidence(knowledge);
-}
-
-function isStepTimeoutError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  return /step timeout(?: of)?(?: \d+ms)? exceeded/iu.test(error.message)
-    || error.name === "StepTimeoutError";
-}
-
 function boundedRepairOutputTokens(value: number | undefined, fallback: number): number {
   return Math.min(64_000, Math.max(256, Number.isInteger(value) ? Number(value) : fallback));
-}
-
-function semanticEvidenceSpans(value: string): string[] {
-  const normalized = value.replace(/\r\n?/gu, "\n").trim();
-  if (!normalized) return [];
-  const chunks: string[] = [];
-  const fencePattern = /```[\s\S]*?```/gu;
-  let cursor = 0;
-  for (const match of normalized.matchAll(fencePattern)) {
-    const index = match.index ?? cursor;
-    chunks.push(...proseEvidenceSpans(normalized.slice(cursor, index)));
-    chunks.push(String(match[0]).trim());
-    cursor = index + String(match[0]).length;
-  }
-  chunks.push(...proseEvidenceSpans(normalized.slice(cursor)));
-  return chunks.filter(Boolean);
-}
-
-function proseEvidenceSpans(value: string): string[] {
-  return value.split(/\n\s*\n/gu).flatMap((paragraph) => {
-    const text = paragraph.trim();
-    if (!text) return [];
-    if (estimatedTextTokens(text) <= KNOWLEDGE_MODEL_VIEW_TOKEN_BUDGET) return [text];
-    const sentences = text.match(/[^。！？.!?\n]+[。！？.!?]+|[^。！？.!?\n]+$/gu)
-      ?.map((item) => item.trim()).filter(Boolean) ?? [];
-    if (sentences.length > 1) return sentences;
-    const lines = text.split(/\n+/gu).map((line) => line.trim()).filter(Boolean);
-    return lines.length > 1 ? lines : [text];
-  });
-}
-
-function evidenceIdsMentionedInQuery(query: string, evidenceIds: Iterable<string>): string[] {
-  const normalized = query.toLowerCase();
-  return [...evidenceIds].filter((evidenceId) => normalized.includes(evidenceId.toLowerCase()));
-}
-
-function selectEvidenceSpanIndex(
-  evidence: CachedEvidence,
-  query: string,
-  providedEvidenceSpanIds: ReadonlySet<string>,
-  remainingTokens: number,
-): number {
-  const disclosed = evidence.spans.flatMap((_, index) => (
-    providedEvidenceSpanIds.has(`${evidence.evidenceId}:${index}`) ? [index] : []
-  ));
-  const undisclosed = evidence.spans.flatMap((_, index) => (
-    providedEvidenceSpanIds.has(`${evidence.evidenceId}:${index}`)
-      || estimatedTextTokens(evidence.spans[index]!) + 100 > remainingTokens ? [] : [index]
-  ));
-  if (!undisclosed.length) return -1;
-  if (disclosed.length > 0) {
-    const adjacent = undisclosed
-      .filter((index) => disclosed.some((prior) => Math.abs(prior - index) === 1))
-      .sort((left, right) => left - right);
-    if (adjacent.length > 0) return adjacent[0]!;
-  }
-  const terms = relevanceTerms(query);
-  return undisclosed.sort((left, right) => (
-    evidenceSpanScore(evidence.spans[right]!, terms) - evidenceSpanScore(evidence.spans[left]!, terms)
-      || left - right
-  ))[0] ?? -1;
-}
-
-function relevanceTerms(value: string): string[] {
-  return [...new Set(value.toLowerCase().split(/[^\p{L}\p{N}:._-]+/gu)
-    .map((term) => term.trim()).filter((term) => term.length >= 2))];
-}
-
-function evidenceSpanScore(value: string, terms: readonly string[]): number {
-  const normalized = value.toLowerCase();
-  return terms.reduce((score, term) => score + (normalized.includes(term) ? 1 : 0), 0);
 }
 
 function estimatedTextTokens(value: string): number {

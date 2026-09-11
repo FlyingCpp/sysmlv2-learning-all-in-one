@@ -8,7 +8,6 @@ const DEFAULT_MAX_USES = 2;
 const DEFAULT_MAX_CONTINUATIONS = 4;
 const DEFAULT_TIMEOUT_MS = 60000;
 const DEFAULT_MAX_OUTPUT_TOKENS = 4800;
-const MAX_QUESTIONS = 3;
 const MAX_SOURCES = 10;
 const MAX_SUMMARY_CHARS = 4000;
 const MIN_BODY_EXCERPT_LENGTH = 40;
@@ -430,7 +429,7 @@ function normalizeQuestions(value) {
   return [...new Set((Array.isArray(value) ? value : [])
     .map((item) => boundedText(item, 500))
     .filter((item) => item.length >= 2))]
-    .slice(0, MAX_QUESTIONS);
+    .slice(0, 3);
 }
 
 function normalizePublicHttpUrl(value) {

@@ -107,6 +107,25 @@ assert.equal(disabledMain.stages.main.protocolStatus, 'incompatible',
   'always-thinking GLM standard profile must reject an explicitly disabled Main policy');
 assert.equal(validateModelCapabilitySnapshot(disabledMain).ok, false);
 
+const independentFinalizer = modelCapabilitySnapshotFromLiteLlmVersion({
+  versionId: 'litellm_independent_worker_review',
+  checksum: `sha256:${'8'.repeat(64)}`,
+  config: providerAwareConfig()
+}, { main: 'alias-glm', finalizer: 'alias-deepseek' }, { main: 'provider-managed', finalizer: 'disabled' });
+assert.equal(validateModelCapabilitySnapshot(independentFinalizer).ok, true);
+assert.equal(independentFinalizer.stages.main.executionPolicy.reasoning.disabled.supported, false);
+assert.equal(independentFinalizer.stages.finalizer.aliasId, 'alias-deepseek');
+assert.equal(independentFinalizer.stages.finalizer.executionPolicy.reasoning.disabled.supported, true);
+assert.equal(independentFinalizer.stages.finalizer.protocolStatus, 'ready');
+const incompatibleFinalizer = modelCapabilitySnapshotFromLiteLlmVersion({
+  versionId: 'litellm_incompatible_worker_review',
+  checksum: `sha256:${'9'.repeat(64)}`,
+  config: providerAwareConfig()
+}, { main: 'alias-deepseek', finalizer: 'alias-glm' }, { main: 'disabled', finalizer: 'disabled' });
+assert.equal(incompatibleFinalizer.stages.main.protocolStatus, 'ready');
+assert.equal(incompatibleFinalizer.stages.finalizer.protocolStatus, 'incompatible');
+assert.equal(validateModelCapabilitySnapshot(incompatibleFinalizer).ok, false);
+
 const ambiguous = modelCapabilitySnapshotFromLiteLlmVersion({
   versionId: 'litellm_model_protocol_ambiguous',
   checksum: `sha256:${'4'.repeat(64)}`,
@@ -146,6 +165,7 @@ function providerAwareConfig() {
     ]
   };
 }
+
 function deployment(deploymentId, contextWindowTokens) {
   return {
     deploymentId,

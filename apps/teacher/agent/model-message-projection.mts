@@ -11,8 +11,8 @@ export type AuthorizedTaskSourceText = Readonly<{
 }>;
 
 /**
- * 只把客户可见对话和授权任务原文投影给 Provider。业务 ID、Hash、权限和运行状态
- * 继续留在服务端对象中；Main 内部 Tool/Reasoning 消息也不会跨 Worker 复用。
+ * 只把客户可见对话和授权任务原文投影给Provider。业务ID、Hash、权限和运行状态
+ * 继续留在服务端对象中；Main内部Tool/Reasoning消息也不会跨Worker复用。
  */
 export function projectConversationModelMessages(
   conversation: readonly PublicConversationMessage[],
@@ -21,10 +21,14 @@ export function projectConversationModelMessages(
 ): ModelMessage[] {
   const projected: ModelMessage[] = [];
   const userTexts = new Set<string>();
+  const fallback = String(fallbackUserText ?? "").trim();
   for (const message of conversation) {
     const content = String(message.content ?? "").trim();
     if (!content) continue;
     const role = message.role === "assistant" ? "assistant" : "user";
+    // 当前请求由调用方单独传入，并且必须是最终一条user消息。若先保留历史中的
+    // 同文消息，后补的旧TaskSource可能排到其后，Provider会把旧目标误判为当前任务。
+    if (role === "user" && fallback && content === fallback) continue;
     projected.push({ role, content });
     if (role === "user") userTexts.add(content);
   }
@@ -32,7 +36,7 @@ export function projectConversationModelMessages(
     const source = taskSources[sourceIndex];
     if (!source) continue;
     const text = String(source.text ?? "").trim();
-    if (!text || userTexts.has(text)) continue;
+    if (!text || text === fallback || userTexts.has(text)) continue;
     const laterSourceTexts = new Set(taskSources.slice(sourceIndex + 1)
       .map((entry) => String(entry.text ?? "").trim())
       .filter(Boolean));
@@ -46,12 +50,14 @@ export function projectConversationModelMessages(
     else projected.push(sourceMessage);
     userTexts.add(text);
   }
-  const fallback = String(fallbackUserText ?? "").trim();
-  if (fallback && !userTexts.has(fallback)) projected.push({ role: "user", content: fallback });
+  if (fallback) projected.push({ role: "user", content: fallback });
   return projected;
 }
 
-/** Final Answer 只接收本任务的授权原文；历史 Assistant 叙述不作为终末事实复用。 */
+/**
+ * Final Answer只解释当前任务和当前Run终末事实。历史Transcript已由Main用于理解追问，
+ * 不再把旧Assistant叙述传给Finalizer；终末事实由独立System Instructions承载。
+ */
 export function projectFinalAnswerModelMessages(
   taskSources: readonly AuthorizedTaskSourceText[] = [],
   currentUserText = "",
@@ -59,7 +65,7 @@ export function projectFinalAnswerModelMessages(
   return projectConversationModelMessages([], taskSources, currentUserText);
 }
 
-/** 服务端可信执行投影走 AI SDK 原生 System Instructions，不伪装成学生消息。 */
+/** 服务端可信执行投影走AI SDK原生System Instructions，不伪装成学生消息。 */
 export function systemInstructions(
   base: string,
   label: string,
@@ -69,4 +75,11 @@ export function systemInstructions(
     { role: "system", content: base },
     { role: "system", content: `[${label}]\n${JSON.stringify(projection)}` },
   ];
+}
+
+export function appendUserModelMessage(
+  messages: readonly ModelMessage[],
+  content: string,
+): ModelMessage[] {
+  return [...messages, { role: "user", content }];
 }

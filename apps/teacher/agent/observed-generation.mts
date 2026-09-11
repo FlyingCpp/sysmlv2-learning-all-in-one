@@ -55,7 +55,8 @@ interface ObservedTextOptionsBase {
 
 type ObservedPromptInput =
   | { prompt: string; messages?: never }
-  | { messages: ModelMessage[]; prompt?: never };
+  | { messages: ModelMessage[]; prompt?: never }
+;
 
 export type ObservedTextOptions = ObservedTextOptionsBase & ObservedPromptInput;
 

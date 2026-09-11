@@ -12,19 +12,16 @@ replace those terms.
 ## 1. Inventory baseline / 清单基线
 
 - SynFeld release: `0.1.0`
-- Source baseline reviewed before this notice-only commit:
-  `5c8a90a818a1f9d6132df102d204fb215b611a41`
+- 本次功能迁移的公开基线：
+  `b221839dda638a6689703964df33d7630ac5c11c`
 - `package-lock.json` SHA-256:
-  `1a51881bbe59817b2c70ac0093394bc82df4e5457bb743959e2d53fd8e79c35c`
-- Last verified: 2026-08-30
+  `972042024e29e69c83033c5b354773965d50823545353037f9a5a84cbf5f94fc`
+- Last verified: 2026-09-05
 - Project license: [Eclipse Public License 2.0](LICENSE)
 
-This refresh found no changes to locked dependency versions, license metadata
-coverage, the official Validator pin, redistributed asset provenance, or
-external image digests since the 2026-08-11 inventory.
-
-本次刷新确认：与 2026-08-11 清单相比，锁定依赖版本、许可证元数据覆盖、官方
-Validator 固定版本、再分发资产来源和外部镜像 digest 均未变化。
+本次新增 `undici@7.16.0`（MIT），供业务截止控制的 HTTP Dispatcher 使用。
+与上述公开基线相比，其余锁定依赖版本、官方 Validator 固定版本、已公开资产
+和外部镜像 digest 未变化。新增包的许可证声明来自 lockfile 与安装包元数据。
 
 Regenerate and review this inventory whenever `package-lock.json`, a Docker
 base image, a Compose image, the official Validator release, or a bundled asset
@@ -136,6 +133,7 @@ retain their own license files, copyright notices, and warranty disclaimers.
 | `react-markdown` | 10.1.0 | MIT |
 | `remark-gfm` | 4.0.1 | MIT |
 | `three` | 0.179.1 | MIT |
+| `undici` | 7.16.0 | MIT |
 | `zod` | 4.4.3 | MIT |
 | `zustand` | 5.0.14 | MIT |
 
@@ -156,8 +154,8 @@ retain their own license files, copyright notices, and warranty disclaimers.
 
 ### 4.3 Transitive dependency snapshot
 
-The locked tree contains 512 `node_modules` package entries. At this baseline,
-511 entries declare license metadata in `package-lock.json`. The remaining
+The locked tree contains 513 `node_modules` package entries. At this baseline,
+512 entries declare license metadata in `package-lock.json`. The remaining
 entry is `khroma@2.1.0`; its distributed package contains a `license` file
 identifying the MIT License even though that field is absent from the lockfile
 metadata.
@@ -168,7 +166,7 @@ MPL-2.0-or-Apache-2.0 components. The exact dependency graph is authoritative
 in `package-lock.json`; license texts and copyright notices in installed
 package archives remain authoritative for each package.
 
-锁定依赖树包含 512 个 `node_modules` 软件包条目，其中 511 个在 lockfile 中声明
+锁定依赖树包含 513 个 `node_modules` 软件包条目，其中 512 个在 lockfile 中声明
 了许可证元数据。唯一缺少该字段的是 `khroma@2.1.0`，其发布包内的 `license`
 文件明确采用 MIT License。精确依赖图以 `package-lock.json` 为准，每个安装包内
 的许可证正文和版权声明是该组件的最终依据。

@@ -8,6 +8,9 @@ SynFeld 是一个面向 SysML v2 初学者、系统工程师和 MBSE 实践者�
 
 当前公开版本为 **v0.1.0**，包含一个示例课程包和一个示例知识包，并提供可复现的 Core 与 Full 本地部署契约。
 
+AI Teacher 的任务生命周期、候选恢复、资源策略应用与验收边界见
+[AI Teacher 执行与管理架构](AI_TEACHER_ARCHITECTURE.md)。
+
 ### 在线体验
 
 **[打开 SynFeld 在线体验](https://www.sysforgeai.com/)**

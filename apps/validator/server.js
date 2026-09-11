@@ -1,7 +1,15 @@
 'use strict';
 
 const http = require('http');
-const { validateWorkspace, generatePlantUml, validatorHealth, SOURCE } = require('./validator');
+const crypto = require('crypto');
+const {
+  applyValidatorResourcePolicy,
+  validatorResourcePolicyState,
+  validateWorkspace,
+  generatePlantUml,
+  validatorHealth,
+  SOURCE
+} = require('./validator');
 
 const PORT = Number(process.env.PORT || 9090);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -59,6 +67,20 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && req.url === '/health') {
     return send(res, 200, validatorHealth());
   }
+  if (req.url === '/internal/resource-policy' && ['GET', 'PUT'].includes(req.method)) {
+    const authorization = authorizeResourcePolicyRequest(req);
+    if (!authorization.ok) return send(res, authorization.status, { code: authorization.code });
+    try {
+      if (req.method === 'GET') return send(res, 200, validatorResourcePolicyState());
+      const payload = await readJson(req);
+      return send(res, 200, applyValidatorResourcePolicy(payload));
+    } catch (error) {
+      return send(res, Number(error?.status || 400), {
+        code: String(error?.code || 'VALIDATOR_RESOURCE_POLICY_APPLY_FAILED'),
+        message: String(error?.message || 'Validator resource policy apply failed.')
+      });
+    }
+  }
   if (req.method === 'GET' && req.url === '/validate/self-test') {
     return send(res, 200, await validateWorkspace({ content: 'package SelfTest { part def Vehicle; part car : Vehicle; }' }));
   }
@@ -95,6 +117,21 @@ const server = http.createServer(async (req, res) => {
   }
   return send(res, 404, { error: 'Not found', source: SOURCE });
 });
+
+function authorizeResourcePolicyRequest(req) {
+  const expected = String(process.env.AI_TEACHER_INTERNAL_TOKEN || '');
+  if (!expected) {
+    return { ok: false, status: 503, code: 'VALIDATOR_RESOURCE_POLICY_AUTH_NOT_CONFIGURED' };
+  }
+  const actual = String(req.headers['x-ai-teacher-token'] || '');
+  const expectedBuffer = Buffer.from(expected, 'utf8');
+  const actualBuffer = Buffer.from(actual, 'utf8');
+  const matches = expectedBuffer.length === actualBuffer.length
+    && crypto.timingSafeEqual(expectedBuffer, actualBuffer);
+  return matches
+    ? { ok: true }
+    : { ok: false, status: 401, code: 'VALIDATOR_RESOURCE_POLICY_TOKEN_INVALID' };
+}
 
 function createRequestLifetime(req, res) {
   const controller = new AbortController();

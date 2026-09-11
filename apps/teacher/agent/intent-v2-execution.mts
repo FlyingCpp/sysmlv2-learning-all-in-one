@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto";
 
-import { assembleTrustedResponse } from "./agent-response.mjs";
+import { assembleTrustedResponse, stripInternalSourceMarkers } from "./agent-response.mjs";
 import { deriveEditorGrounding } from "./agent-policy.mjs";
+import { runReadOnlyEngineeringAdvice } from "./engineering-semantic-advisory.mjs";
 import {
-  runEngineeringSemanticAdvisory,
-  type EngineeringReviewIssue,
-} from "./engineering-semantic-advisory.mjs";
-import { finalizeDelegatedAnswer } from "./main-finalizer.mjs";
+  createProductionFinalAnswerWorker,
+  dispatchFinalAnswerWorker,
+  type FinalAnswerEngineeringAdvisory,
+} from "./final-answer-worker.mjs";
 import {
   createProductionWorkerHandlers,
   runResumedProductionExecution,
@@ -16,6 +17,7 @@ import { bindFinalAnswer, bindWorkerResult } from "./result-binding.mjs";
 import { createRunResources } from "./run-resources.mjs";
 import {
   runIntentOrchestratorV2,
+  type MainWorkerObservation,
   v2GenerationSettings,
   v2RepairGenerationSettings,
 } from "./intent-orchestrator-v2.mjs";
@@ -24,11 +26,26 @@ import type {
   AgentPolicy,
   AgentRunOutcome,
   AgentRunRequest,
+  MainAgentDelegation,
   MainAgentOutcome,
   RunStopCause,
   RunTeacherAgentOptions,
   TrustedTeacherResponse,
 } from "./types.mjs";
+import {
+  createCurrentValidatedCandidateBinding,
+  type TaskIterationDirectiveBinding,
+  type TaskWorkingState,
+} from "./task-working-state.mjs";
+import {
+  bindValidatedCandidateTaskContract,
+  loadTaskFinalizationDecision,
+  markTaskContractDeliveryPending,
+  prepareCandidateTaskContract,
+  prepareClarificationTaskContract,
+  sealCandidateTaskContract,
+  sealDirectTaskContract,
+} from "./task-contract-runtime.mjs";
 import {
   validateCandidateInputSchema,
   validationOutputSchema,
@@ -48,6 +65,7 @@ import {
   validationPassed,
 } from "./worker-result.mjs";
 import { projectRepairTelemetryCheckpointState } from "./validator-repair-worker.mjs";
+import { createValidatedCandidateDelivery } from "./validated-candidate-delivery.mjs";
 
 export async function runIntentV2Execution(input: {
   options: RunTeacherAgentOptions;
@@ -130,18 +148,110 @@ export async function runIntentV2Execution(input: {
   let outcome = preflight;
   const mainOutcome = preflight.mainAgentOutcome;
 
-  if (mainOutcome?.type === "direct_answer") {
+  if (mainOutcome?.type === "finalize_requested") {
     const obligation = resources.obligations.freeze({ outcome: mainOutcome });
+    const sealedTaskContract = await sealDirectTaskContract({
+      dependencies: stageDependencies,
+      finalizationRequestId: mainOutcome.finalizationRequestId,
+      answerSource: stripInternalSourceMarkers(preflight.response.answer).trim() ? "main_draft" : "finalizer",
+      taskContractContext: request.taskContractContext,
+    });
+    sealedTaskContract.warnings.forEach((warning) => resources.recordOperationalWarning(warning));
+    const finalAnswerGeneration = v2GenerationSettings(options, true, "finalizer");
+    const finalAnswerStartedAt = Date.now();
+    const serverBoundMainDraftCandidate = stripInternalSourceMarkers(preflight.response.answer).trim();
+    const finalAnswerBudget = finalAnswerTimeoutBudget({
+      terminalReserveMs: policy.terminalReserveMs,
+      hardRemainingMs: resources.budget.view().hardRemainingMs,
+      hasSafeFallback: Boolean(serverBoundMainDraftCandidate),
+    });
+    const finalAnswer = await dispatchFinalAnswerWorker({
+      resources,
+      obligation,
+      source: {
+        kind: "direct_answer",
+        mainDraft: mainOutcome.mainDraft,
+        evidence: mainOutcome.finalizerEvidence,
+      },
+      ...(sealedTaskContract.view ? { taskContract: sealedTaskContract.view } : {}),
+      abortSignal: finalizationSignal,
+      worker: createProductionFinalAnswerWorker({
+        model: options.finalizerModel ?? options.nonThinkingModel ?? options.model,
+        timeoutMs: finalAnswerBudget.totalMs,
+        reasoning: finalAnswerGeneration.reasoning,
+        providerOptions: finalAnswerGeneration.providerOptions,
+      }),
+    });
+    const budget = resources.budget.view();
+    const callerCancelled = Boolean(options.abortSignal?.aborted);
+    const serverBoundMainDraft = !callerCancelled
+      && finalAnswer.finalization === "deterministic_fallback"
+      && isFinalAnswerTimeout(finalAnswer.finishReason)
+      ? serverBoundMainDraftCandidate
+      : "";
+    const effectiveFinalization = serverBoundMainDraft
+      ? "server_bound_main_draft" as const
+      : finalAnswer.finalization;
+    const finalAnswerCompleted = effectiveFinalization === "final_answer_worker"
+      || effectiveFinalization === "server_bound_main_draft";
+    const directResponse: TrustedTeacherResponse = {
+      ...preflight.response,
+      answer: serverBoundMainDraft || stripInternalSourceMarkers(finalAnswer.answer),
+      stepCount: preflight.response.stepCount + finalAnswer.workerResult.attemptCount,
+      stopReason: callerCancelled
+        ? "cancelled"
+        : finalAnswerCompleted
+          ? preflight.response.stopReason
+          : classifyFinalAnswerFailureStopReason(finalAnswer.finishReason, hardDeadlineSignal),
+      answerCompletionStatus: finalAnswerCompleted ? "complete" : "incomplete",
+      phaseTimings: appendFinalAnswerTiming(
+        preflight.response.phaseTimings,
+        Date.now() - finalAnswerStartedAt,
+        finalAnswer.workerResult.attemptCount,
+      ),
+      modelCalls: appendFinalAnswerModelCall(
+        preflight.response.modelCalls,
+        finalAnswer.workerResult,
+      ),
+      usage: {
+        inputTokens: budget.modelInputTokens,
+        outputTokens: budget.modelOutputTokens,
+        reasoningTokens: budget.modelReasoningTokens,
+        totalTokens: budget.modelTotalTokens,
+      },
+      warnings: [...new Set([
+        ...preflight.response.warnings,
+        ...resources.operationalWarnings(),
+        ...(finalAnswer.finalization === "deterministic_fallback"
+          ? [`final_answer_worker_fallback:${finalAnswer.finishReason}`]
+          : []),
+        ...(serverBoundMainDraft
+          ? ["final_answer_worker_timeout_server_bound_main_draft_used"]
+          : []),
+        ...(finalAnswerBudget.borrowed
+          ? ["final_answer_worker_borrowed_run_budget"]
+          : []),
+      ])],
+    };
     outcome = await projectVisibleAnswer(options, {
       ...preflight,
-      mainAgentOutcome: { type: "direct_answer", text: preflight.response.answer },
+      ok: !callerCancelled,
+      response: directResponse,
+      mainAgentOutcome: mainOutcome,
     });
-    bindFinalAnswer({
-      obligation,
-      finalAnswer: outcome.response.answer,
-      finalization: "direct_main_answer",
-    });
-    outcome.mainAgentOutcome = { type: "direct_answer", text: outcome.response.answer };
+    if (!callerCancelled) {
+      bindFinalAnswer({
+        obligation,
+        finalAnswerWorkerResult: finalAnswer.workerResult,
+        finalAnswer: outcome.response.answer,
+        finalization: effectiveFinalization,
+      });
+    }
+    if (!finalAnswerCompleted || callerCancelled) {
+      const pendingWarnings = await markTaskContractDeliveryPending({ dependencies: stageDependencies });
+      pendingWarnings.forEach((warning) => resources.recordOperationalWarning(warning));
+    }
+    outcome.mainAgentOutcome = mainOutcome;
   } else if (mainOutcome?.type === "delegate_candidate"
     || mainOutcome?.type === "delegate_repair"
     || mainOutcome?.type === "resume_execution") {
@@ -150,10 +260,20 @@ export async function runIntentV2Execution(input: {
     const taskOutcome = mainOutcome.type === "resume_execution"
       ? resumedTaskOutcome(mainOutcome, request)
       : mainOutcome;
+    const initialTaskContract = taskOutcome.type === "delegate_candidate"
+      ? await prepareCandidateTaskContract({
+        dependencies: stageDependencies,
+        runId: request.runId,
+        outcome: taskOutcome,
+        taskContractContext: request.taskContractContext,
+      })
+      : undefined;
+    initialTaskContract?.warnings.forEach((warning) => resources.recordOperationalWarning(warning));
     const task = resources.tasks.materialize({
       questionHash: resources.input.questionHash,
       outcome: taskOutcome,
       context: request.context,
+      ...(initialTaskContract ? { iterationDirective: initialTaskContract.directive } : {}),
     });
     const projectedTask = projectWorkerTaskView(resources, task);
     const parsedEngineeringBaseline = engineeringContinuation
@@ -247,150 +367,69 @@ export async function runIntentV2Execution(input: {
         ? dispatch.result
         : settleRejectedDispatch(resources, task.taskId, dispatch.reason);
     }
-    let selectedTask = task;
-    let selectedTaskOutcome = taskOutcome;
-    let advisoryWarnings: string[] = [];
-    let finalizerAdvisory: Parameters<typeof finalizeDelegatedAnswer>[0]["advisory"];
-    let engineeringReviewProjection: TrustedTeacherResponse["engineeringReview"];
-    if (workerResult.status === "validated_passed"
-      && (taskOutcome.type === "delegate_candidate" || engineeringContinuation)
-      && (mainOutcome.type !== "resume_execution"
-        || mainOutcome.action === "engineering_resume"
-        || engineeringContinuation)) {
-      const baselineWorkerResult = workerResult;
-      const assessmentGeneration = v2GenerationSettings(options, false, "semanticReview");
-      const verificationGeneration = v2GenerationSettings(options, true, "semanticReview");
-      const mainDecisionGeneration = v2GenerationSettings(options, true, "main");
-      let revisionTask: typeof task | undefined;
-      let revisionOutcome: Extract<MainAgentOutcome, { type: "delegate_candidate" }> | undefined;
-      const advisory = await runEngineeringSemanticAdvisory({
-        resources,
-        baselineWorkerResult,
-        taskSources: engineeringTaskSources(request),
-        priorSuggestions: request.resumeContext?.execution?.engineering?.previousSuggestions,
-        assessmentModel: options.semanticReviewModel ?? options.thinkingModel ?? options.model,
-        assessmentModelId: options.semanticReviewModelId ?? options.thinkingModelId ?? options.modelId ?? "",
-        mainModel: options.mainModel ?? options.model,
-        mainModelId: options.mainModelId ?? options.modelId ?? "",
-        assessmentProviderOptions: assessmentGeneration.providerOptions,
-        verificationProviderOptions: verificationGeneration.providerOptions,
-        mainProviderOptions: mainDecisionGeneration.providerOptions,
-        abortSignal: workSignal,
-        policy: {
-          enabled: policy.semanticReviewEnabled && Boolean(options.semanticReviewModel),
-          shadowOnly: policy.semanticReviewShadowOnly,
-          assessmentMaxCalls: policy.semanticReviewAssessmentMaxCalls,
-          assessmentTimeoutMs: policy.semanticReviewAssessmentTimeoutMs,
-          mainDecisionTimeoutMs: policy.semanticReviewMainDecisionTimeoutMs,
-          verificationMaxCalls: policy.semanticReviewVerificationMaxCalls,
-          verificationTimeoutMs: policy.semanticReviewVerificationTimeoutMs,
-          maxOutputTokens: policy.semanticReviewMaxOutputTokens,
-          maxIssues: policy.semanticReviewMaxIssues,
-          minimumCompleteChainMs: policy.semanticReviewMinimumCompleteChainMs,
-          domainSearchReserveMs: policy.semanticReviewDomainSearchReserveMs,
-        },
-        reviseCandidate: async (issues: readonly EngineeringReviewIssue[]) => {
-          const baselineContent = workerCandidateContent(baselineWorkerResult);
-          const candidateMode = baselineWorkerResult.candidate.mode === "standalone_model"
-            ? "milestone" as const
-            : "refine" as const;
-          revisionOutcome = {
-            type: "delegate_candidate",
-            mode: candidateMode,
-            acceptedToolCallId: `${task.acceptedToolCallId}:engineering-revision`,
-          };
-          revisionTask = resources.tasks.materialize({
-            questionHash: resources.input.questionHash,
-            outcome: revisionOutcome,
-            context: request.context,
-          });
-          const revisionDispatch = await dispatchWorker({
-            resources,
-            taskId: revisionTask.taskId,
-            expectedRevision: revisionTask.revision,
-            abortSignal: workSignal,
-            workers: createProductionWorkerHandlers({
-              ...workerOptions,
-              engineeringRevision: {
-                baselineCandidateContent: baselineContent,
-                issues: issues.map((issue) => ({
-                  issueId: issue.issueId,
-                  goalRefId: issue.goalRef.goalRefId,
-                  sourceId: issue.goalRef.sourceId,
-                  goalQuote: issue.goalRef.quote,
-                  sourceHash: issue.goalRef.sourceHash,
-                  taskAuthorizationRevisionHash: issue.goalRef.taskAuthorizationRevisionHash,
-                  start: issue.goalRef.start,
-                  end: issue.goalRef.end,
-                  issue: issue.issue,
-                  suggestion: issue.suggestion,
-                })),
-              },
-            }),
-          });
-          return revisionDispatch.type === "completed"
-            ? revisionDispatch.result
-            : settleRejectedDispatch(resources, revisionTask.taskId, revisionDispatch.reason);
-        },
-        onCheckpoint: async ({ phase, candidate, validation, metadata }) => await persistRunCheckpoint(
-          resources,
-          stageDependencies,
-          { phase, candidate, validation, metadata },
-        ),
+    const selectedTask = task;
+    const selectedTaskOutcome = taskOutcome;
+    const resumingFinalization = mainOutcome.type === "resume_execution"
+      && ["finalizer", "return_persisted"].includes(mainOutcome.action);
+    const restoredDecision = resumingFinalization
+      ? await loadTaskFinalizationDecision(stageDependencies, workerResult.validation?.candidateWorkspaceHash ?? "")
+      : undefined;
+    let resultBindingCompleted = restoredDecision?.completed ?? false;
+    let restoredLimitations = restoredDecision?.limitations ?? "";
+    if (!resumingFinalization && workerResult.status === "validated_passed") {
+      const checkpoint = await persistRunCheckpoint(resources, stageDependencies, {
+        phase: "main_review_pending", candidate: workerResult.candidate, validation: workerResult.validation,
+        repairRound: repairRoundFromWorkerResult(workerResult, request.resumeContext?.execution?.decision.repairRound ?? 0),
+        repairState: projectRepairCheckpointState(workerResult),
       });
-      workerResult = advisory.selectedWorkerResult;
-      advisoryWarnings = [...advisory.warnings];
-      finalizerAdvisory = {
-        recommendation: advisory.recommendation,
-        verification: advisory.verification,
-        revisionDelivered: advisory.revisionDelivered,
-        revisionAdopted: advisory.revisionAdopted,
-        engineeringResolution: advisory.engineeringResolution,
-        openSuggestions: advisory.openSuggestions.map((item) => ({ summary: item.summary })),
-        issues: advisory.issues.map((issue) => ({
-          goalQuote: issue.goalRef.quote,
-          issue: issue.issue,
-          suggestion: issue.suggestion,
-        })),
+      const binding = await bindValidatedCandidateTaskContract({
+        dependencies: stageDependencies, checkpoint,
+        candidateWorkspaceHash: workerResult.validation.candidateWorkspaceHash ?? "",
+        candidateContent: workerCandidateContent(workerResult),
+      });
+      binding.warnings.forEach((warning) => resources.recordOperationalWarning(warning));
+      // Validator与交付绑定由服务端完成；普通任务直接进入一次终末解释。
+      resultBindingCompleted = true;
+    }
+    // 只有既有工程改进续跑显式启用的只读评议保留独立调用；普通代码与评估问题由 Finalizer 一次解释。
+    let engineeringAdvisory: FinalAnswerEngineeringAdvisory | undefined;
+    if (engineeringContinuation && policy.semanticReviewEnabled
+      && policy.semanticReviewAssessmentMaxCalls > 0 && workerResult.status === "validated_passed") {
+      const generation = v2GenerationSettings(options, false, "semanticReview");
+      const advice = await runReadOnlyEngineeringAdvice({
+        resources, baseline: workerResult, taskSummary: request.question,
+        candidateText: workerCandidateContent(workerResult),
+        model: options.semanticReviewModel ?? options.thinkingModel ?? options.model,
+        providerOptions: generation.providerOptions,
+        timeoutMs: policy.semanticReviewAssessmentTimeoutMs, abortSignal: workSignal,
+      });
+      if (advice.status !== "completed") resources.recordOperationalWarning("engineering_review_unavailable");
+      if (!policy.semanticReviewShadowOnly) engineeringAdvisory = {
+        candidateWorkspaceHash: advice.candidateWorkspaceHash,
+        appliesToSelectedCandidate: advice.candidateWorkspaceHash === workerResult.validation.candidateWorkspaceHash,
+        recommendation: "advice_only", verification: "not_run", revisionDelivered: false, revisionAdopted: false,
+        engineeringResolution: "unknown", openSuggestions: [{ summary: advice.text }], issues: [],
       };
-      engineeringReviewProjection = {
-        assessmentStatus: advisory.assessmentStatus,
-        recommendation: advisory.recommendation,
-        verification: advisory.verification,
-        executionPlacement: advisory.executionPlacement,
-        engineeringCompletionStatus: advisory.engineeringCompletionStatus,
-        revisionDelivered: advisory.revisionDelivered,
-        revisionAdopted: advisory.revisionAdopted,
-        engineeringResolution: advisory.engineeringResolution,
-        openSuggestions: advisory.openSuggestions.map((item) => ({
-          publicSuggestionId: item.publicSuggestionId,
-          summary: item.summary,
-        })),
-        ...(advisory.revisionDelivered ? {
-          previousVersion: projectPreviousCandidateVersion(
-            baselineWorkerResult.candidate,
-            request.context.model.files,
-          ),
-        } : {}),
-        canContinue: workerResult.status === "validated_passed",
-        pendingImprovement: advisory.pendingImprovement,
-        assessmentCallCount: advisory.assessmentCallCount,
-        mainReentryCallCount: advisory.mainReentryCallCount,
-        revisionCycleCount: advisory.revisionCycleCount,
-        verificationCallCount: advisory.verificationCallCount,
-      };
-      if (advisory.revisionDelivered && revisionTask && revisionOutcome) {
-        selectedTask = revisionTask;
-        selectedTaskOutcome = revisionOutcome;
-      }
     }
     const obligation = resources.obligations.freeze({
       outcome: selectedTaskOutcome,
       task: selectedTask,
+      taskRevision: workerResult.taskRevision,
     });
-    const workerBinding = bindWorkerResult(obligation, workerResult);
-    if (workerResult.status === "validated_passed") {
-      await persistRunCheckpoint(resources, stageDependencies, {
+    const deliveryTaskView = Object.freeze({
+      ...projectWorkerTaskView(resources, selectedTask),
+      taskRevision: workerResult.taskRevision,
+    });
+    const deliveryResult = createValidatedCandidateDelivery({
+      workerResult,
+      task: deliveryTaskView,
+    });
+    const validatedCandidateDelivery = deliveryResult.ok ? deliveryResult.delivery : undefined;
+    bindWorkerResult(obligation, workerResult, validatedCandidateDelivery);
+    let finalizationContractFailed = false;
+    let sealedCandidateTaskContract: Awaited<ReturnType<typeof sealCandidateTaskContract>> | undefined;
+    if (!options.abortSignal?.aborted && workerResult.status === "validated_passed") {
+      const finalizationCheckpoint = await persistRunCheckpoint(resources, stageDependencies, {
         phase: "finalization_pending",
         candidate: workerResult.candidate,
         validation: workerResult.validation,
@@ -400,39 +439,75 @@ export async function runIntentV2Execution(input: {
         ),
         repairState: projectRepairCheckpointState(workerResult),
       });
+      sealedCandidateTaskContract = await sealCandidateTaskContract({
+        dependencies: stageDependencies,
+        checkpoint: finalizationCheckpoint,
+        candidateWorkspaceHash: workerResult.validation.candidateWorkspaceHash ?? "",
+        candidateContent: workerCandidateContent(workerResult),
+        finalizationRequestId: `${selectedTask.acceptedToolCallId}:main-finalization`,
+        resultCheckCompleted: resultBindingCompleted,
+        limitations: restoredLimitations,
+        ...(engineeringAdvisory ? { advisory: engineeringAdvisory } : {}),
+      });
+      sealedCandidateTaskContract.warnings.forEach((warning) => resources.recordOperationalWarning(warning));
+      if (!sealedCandidateTaskContract.view
+        && !sealedCandidateTaskContract.warnings.includes("task_contract_store_unavailable")) {
+        finalizationContractFailed = true;
+      }
     }
     const finalizerGeneration = v2GenerationSettings(options, true, "finalizer");
-    const finalizer = await finalizeDelegatedAnswer({
+    const finalAnswerStartedAt = Date.now();
+    const finalAnswerBudget = finalAnswerTimeoutBudget({
+      terminalReserveMs: policy.terminalReserveMs,
+      hardRemainingMs: resources.budget.view().hardRemainingMs,
+      // 已验证Candidate或确定性非PASS说明已经是服务端安全兜底，
+      // 不应为了教学润色继续占用Run工作预算。
+      hasSafeFallback: true,
+    });
+    const finalizer = await dispatchFinalAnswerWorker({
       resources,
-      binding: workerBinding,
-      model: options.finalizerModel ?? options.nonThinkingModel ?? options.model,
+      obligation,
+      source: {
+        kind: "worker_terminal",
+        workerResult,
+        limitations: restoredLimitations,
+      },
+      ...(sealedCandidateTaskContract?.view ? { taskContract: sealedCandidateTaskContract.view } : {}),
       abortSignal: finalizationSignal,
-      timeoutMs: Math.max(1, Math.min(
-        policy.terminalReserveMs,
-        resources.budget.view().hardRemainingMs,
-      )),
-      maxOutputTokens: policy.mediumAnswerMaxOutputTokens,
-      reasoning: finalizerGeneration.reasoning,
-      providerOptions: finalizerGeneration.providerOptions,
-      ...(finalizerAdvisory ? { advisory: finalizerAdvisory } : {}),
+      worker: createProductionFinalAnswerWorker({
+        model: options.finalizerModel ?? options.nonThinkingModel ?? options.model,
+        timeoutMs: finalAnswerBudget.totalMs,
+        reasoning: finalizerGeneration.reasoning,
+        providerOptions: finalizerGeneration.providerOptions,
+      }),
     });
     const budget = resources.budget.view();
-    const stopReason = workerStopReason(workerResult, {
+    const workerTerminalStopReason = workerStopReason(workerResult, {
       externalSignal: options.abortSignal,
       workDeadlineSignal,
       hardDeadlineSignal,
       workRemainingMs: budget.workRemainingMs,
     });
+    // Review只提供建议；它失败、缺失或提出扩展都不改变实际交付结果。
+    const stopReason = workerResult.status === "validated_passed"
+      ? finalizer.workerResult.status === "completed"
+        ? options.abortSignal?.aborted ? "cancelled" as const : "completed" as const
+        : classifyFinalAnswerFailureStopReason(finalizer.finishReason, hardDeadlineSignal)
+      : workerTerminalStopReason;
     const stopCause = runStopCauseFromSignals({
       externalSignal: options.abortSignal,
       workDeadlineSignal,
       hardDeadlineSignal,
     }) ?? (budget.workRemainingMs <= 0 ? "work_deadline_reached" : undefined);
+    const deliveryLimitations = workerResult.status === "validated_passed" && finalizer.workerResult.status !== "completed"
+      ? "本轮模型解释尚未完成，以下保留通过验证的候选。" : "";
     const assembled = assembleTrustedResponse({
-      modelText: finalizer.answer,
+      modelText: deliveryLimitations ? `${deliveryLimitations}\n\n${finalizer.answer}` : finalizer.answer,
       workflowVersion: "intent-orchestrator-v2",
       finishReason: finalizer.finishReason,
-      stepCount: preflight.response.stepCount + workerResult.attemptCount + 1,
+      stepCount: preflight.response.stepCount
+        + workerResult.attemptCount
+        + finalizer.workerResult.attemptCount,
       invalidToolCallCount: 0,
       stopReason,
       usage: {
@@ -444,48 +519,77 @@ export async function runIntentV2Execution(input: {
       warnings: [
         ...preflight.response.warnings,
         ...workerFailureWarnings(workerResult),
-        ...advisoryWarnings,
         ...resources.operationalWarnings(),
         ...(finalizer.finalization === "deterministic_fallback"
-          ? [`main_finalizer_fallback:${finalizer.finishReason}`]
+          ? [`final_answer_worker_fallback:${finalizer.finishReason}`]
           : []),
       ],
       ...(stopCause ? { stopCause } : {}),
     }, resources.ledger.snapshot(), {
       grounding: deriveEditorGrounding(request.context),
       suppressGroundingDisclosure: true,
-      stripInternalProcessNarration: true,
+      stripInternalProcessNarration: false,
+      ...(validatedCandidateDelivery ? { validatedCandidateDelivery } : {}),
     });
     const response: TrustedTeacherResponse = {
       ...preflight.response,
       ...assembled,
-      mainAgentDelegation: preflight.response.mainAgentDelegation,
-      answerCompletionStatus: workerResult.status === "validated_passed" ? "complete" : "incomplete",
-      phaseTimings: preflight.response.phaseTimings,
-      modelCalls: preflight.response.modelCalls,
+      mainAgentDelegation: projectMainAgentDelegation(selectedTaskOutcome, resources.input.questionHash),
+      answerCompletionStatus: !finalizationContractFailed && Boolean(validatedCandidateDelivery)
+        && finalizer.workerResult.status === "completed" && workerResult.status === "validated_passed"
+        ? "complete"
+        : "incomplete",
+      phaseTimings: appendFinalAnswerTiming(
+        preflight.response.phaseTimings,
+        Date.now() - finalAnswerStartedAt,
+        finalizer.workerResult.attemptCount,
+      ),
+      modelCalls: appendFinalAnswerModelCall(
+        preflight.response.modelCalls ?? [],
+        finalizer.workerResult,
+      ),
       warnings: [...new Set([...preflight.response.warnings, ...assembled.warnings])],
-      ...(engineeringReviewProjection ? { engineeringReview: engineeringReviewProjection } : {}),
     };
     outcome = await projectVisibleAnswer(options, {
       // Worker失败只关闭候选发布能力，不关闭已经形成的教学响应。
       // 唯一例外是调用方主动取消：此时不得把迟到的降级文本当作本轮交付。
-      ok: isDeliverableWorkerTerminal(workerResult, stopReason),
+      ok: !options.abortSignal?.aborted && isDeliverableWorkerTerminal(workerResult, stopReason),
       response,
       ledger: resources.ledger.snapshot(),
-      mainAgentOutcome: mainOutcome,
+      mainAgentOutcome: selectedTaskOutcome,
+      ...(validatedCandidateDelivery ? { validatedCandidateDelivery } : {}),
     });
-    bindFinalAnswer({
-      obligation,
-      workerResult,
-      finalAnswer: outcome.response.answer,
-      finalization: finalizer.finalization,
+    if (!options.abortSignal?.aborted) {
+      bindFinalAnswer({
+        obligation,
+        workerResult,
+        ...(validatedCandidateDelivery ? { validatedCandidateDelivery } : {}),
+        finalAnswerWorkerResult: finalizer.workerResult,
+        finalAnswer: outcome.response.answer,
+        finalization: finalizer.finalization,
+      });
+    }
+    if (sealedCandidateTaskContract?.view
+      && (options.abortSignal?.aborted || finalizer.workerResult.status !== "completed")) {
+      const pendingWarnings = await markTaskContractDeliveryPending({ dependencies: stageDependencies });
+      pendingWarnings.forEach((warning) => resources.recordOperationalWarning(warning));
+    }
+  } else if (mainOutcome?.type === "clarification_requested") {
+    const contractWarnings = await prepareClarificationTaskContract({
+      dependencies: stageDependencies,
+      clarificationQuestion: mainOutcome.question,
+      acceptedToolCallId: mainOutcome.acceptedToolCallId,
+      taskContractContext: request.taskContractContext,
     });
+    contractWarnings.forEach((warning) => resources.recordOperationalWarning(warning));
+    outcome.response.warnings = [...new Set([...outcome.response.warnings, ...contractWarnings])];
   } else if (isInternalDeadlineOutcome(preflight, options.abortSignal, workDeadlineSignal, hardDeadlineSignal)) {
     outcome = await projectVisibleAnswer(options, {
       ...preflight,
       ok: true,
       response: {
         ...preflight.response,
+        stopReason: hardDeadlineSignal.aborted ? "hard_timeout" : "timeout",
         answerCompletionStatus: "incomplete",
       },
     });
@@ -516,6 +620,29 @@ export async function runIntentV2Execution(input: {
   return outcome;
 }
 
+function isFinalAnswerTimeout(reason: string): boolean {
+  return /(?:timeout|timed out|aborted due to timeout)/iu.test(reason);
+}
+
+/**
+ * terminalReserveMs是Finalizer保证可用的软预算。只有Direct tool-only没有安全公开草稿时，
+ * 才允许同一次FinalAnswerWorker使用仍未消耗的Run hard budget；最终只受Run hard deadline约束。
+ * 这里不能再叠加独立的120秒上限，否则会在Run仍有充足余额时提前制造用户可见失败。
+ */
+function finalAnswerTimeoutBudget(input: {
+  terminalReserveMs: number;
+  hardRemainingMs: number;
+  hasSafeFallback: boolean;
+}): { softMs: number; totalMs: number; borrowed: boolean } {
+  const hardRemainingMs = Math.max(1, Math.floor(input.hardRemainingMs));
+  const softMs = Math.max(1, Math.min(Math.floor(input.terminalReserveMs), hardRemainingMs));
+  if (input.hasSafeFallback) {
+    return Object.freeze({ softMs, totalMs: softMs, borrowed: false });
+  }
+  const totalMs = hardRemainingMs;
+  return Object.freeze({ softMs, totalMs, borrowed: totalMs > softMs });
+}
+
 async function projectVisibleAnswer(
   options: RunTeacherAgentOptions,
   outcome: AgentRunOutcome,
@@ -533,6 +660,141 @@ async function projectVisibleAnswer(
       ])],
     },
   };
+}
+
+function appendFinalAnswerTiming(
+  phaseTimings: TrustedTeacherResponse["phaseTimings"],
+  durationMs: number,
+  occurrenceCount: 0 | 1,
+): NonNullable<TrustedTeacherResponse["phaseTimings"]> {
+  const existing = phaseTimings ?? [];
+  if (occurrenceCount === 0) return existing;
+  const withoutTotal = existing.filter((item) => item.phase !== "total");
+  const total = existing.findLast((item) => item.phase === "total");
+  const answerTiming = {
+    phase: "answer_generation" as const,
+    durationMs: Math.max(0, durationMs),
+    occurrences: occurrenceCount,
+  };
+  return [
+    ...withoutTotal,
+    answerTiming,
+    ...(total ? [{ ...total, durationMs: total.durationMs + answerTiming.durationMs }] : []),
+  ];
+}
+
+function appendFinalAnswerModelCall(
+  modelCalls: TrustedTeacherResponse["modelCalls"],
+  workerResult: import("./final-answer-worker.mjs").FinalAnswerWorkerResult,
+): NonNullable<TrustedTeacherResponse["modelCalls"]> {
+  const existing = modelCalls ?? [];
+  return workerResult.modelCall ? [...existing, workerResult.modelCall] : existing;
+}
+
+function projectMainWorkerObservation(
+  resources: ReturnType<typeof createRunResources>,
+  task: TaskWorkingState,
+  result: WorkerResult,
+): MainWorkerObservation {
+  const validation = result.validation;
+  const unavailable = validation
+    ? validation.official.syntax === "unavailable" || validation.official.semantic === "unavailable"
+    : false;
+  const validatorStatus: MainWorkerObservation["validator"]["status"] = !validation
+    ? "not_run"
+    : unavailable
+      ? "unavailable"
+      : validationPassed(validation)
+        ? "passed"
+        : "failed";
+  const budget = resources.budget.view();
+  return Object.freeze({
+    version: "main-worker-observation-v1",
+    action: Object.freeze({
+      workerType: result.workerType,
+      modeOrScope: result.workerType === "candidate" ? result.mode : result.scope,
+      ...(task.workerType === "candidate" ? { subject: task.subject } : {}),
+      ...(task.workerType === "candidate" && task.iterationDirective ? {
+        directive: Object.freeze({
+          contractId: task.iterationDirective.contractId,
+          contractRevision: task.iterationDirective.contractRevision,
+          taskSummary: task.iterationDirective.taskSummary,
+          instruction: task.iterationDirective.instruction,
+        }),
+      } : {}),
+    }),
+    worker: Object.freeze({
+      status: result.status,
+      attemptCount: result.attemptCount,
+      workPerformed: result.workPerformed,
+    }),
+    validator: Object.freeze({
+      subject: result.validatorSubject,
+      status: validatorStatus,
+      diagnostics: Object.freeze((validation?.official.diagnostics ?? []).slice(0, 20).map((item) => Object.freeze({
+        code: String(item.code ?? "").slice(0, 160),
+        severity: String(item.severity ?? "").slice(0, 40),
+        message: String(item.message ?? "").slice(0, 1_000),
+      }))),
+    }),
+    ...(result.status === "validated_passed" ? {
+      candidate: Object.freeze({
+        changedFromBaseline: candidateChangedFromTaskBaseline(task, result.candidate),
+        content: createCurrentValidatedCandidateBinding({
+          runId: resources.runId, candidate: result.candidate, validation: result.validation,
+          baselineModel: projectWorkerTaskView(resources, task).model,
+        }).model.files.map((file) => `// ${file.displayName}\n${file.content}`).join("\n\n"),
+      }),
+    } : {}),
+    budget: Object.freeze({
+      phase: budget.phase,
+      workRemainingMs: budget.workRemainingMs,
+      remainingOperations: Object.freeze({ ...budget.remainingOperations }),
+    }),
+  });
+}
+
+function candidateChangedFromTaskBaseline(
+  task: TaskWorkingState,
+  candidate: CandidateArtifact,
+): boolean {
+  if (candidate.mode === "replace_entry") {
+    return contentHash(candidate.content) !== candidate.baseHash;
+  }
+  if (candidate.mode === "standalone_model") return candidate.content.trim().length > 0;
+  if (candidate.mode === "workspace_files") {
+    const baseline = new Map(task.baseline.files.map((file) => [file.fileId, file.contentHash]));
+    return candidate.files.some((file) => baseline.get(file.fileId) !== contentHash(file.content));
+  }
+  return candidate.edits.length > 0;
+}
+
+function projectMainAgentDelegation(
+  outcome: Extract<MainAgentOutcome, { type: "delegate_candidate" | "delegate_repair" }>,
+  questionHash: string,
+): MainAgentDelegation {
+  return outcome.type === "delegate_candidate"
+    ? {
+      version: "main-agent-delegation-v1",
+      action: "candidate",
+      mode: outcome.mode,
+      subject: outcome.subject,
+      taskSummary: outcome.taskSummary,
+      instruction: outcome.instruction,
+      questionHash,
+      status: "accepted",
+    }
+    : {
+      version: "main-agent-delegation-v1",
+      action: "repair",
+      scope: outcome.scope,
+      questionHash,
+      status: "accepted",
+    };
+}
+
+function contentHash(value: string): string {
+  return `sha256:${createHash("sha256").update(value, "utf8").digest("hex")}`;
 }
 
 function projectPreviousCandidateVersion(
@@ -583,6 +845,9 @@ function resumedTaskOutcome(
   return {
     type: "delegate_candidate",
     mode: standalone ? "create" : "refine",
+    subject: standalone ? "standalone_model" : "current_workspace",
+    taskSummary: request.taskContractContext?.contract.objectiveSummary || request.question,
+    instruction: "复用服务端已持久化的候选和验证事实，继续当前任务；不重建已完成阶段。",
     acceptedToolCallId: outcome.acceptedToolCallId,
   };
 }
@@ -732,12 +997,13 @@ async function persistRunCheckpoint(
   resources: ReturnType<typeof createRunResources>,
   dependencies: RunTeacherAgentOptions["dependencies"],
   boundary: Parameters<NonNullable<RunTeacherAgentOptions["dependencies"]["persistExecutionCheckpoint"]>>[0],
-): Promise<void> {
-  if (!dependencies.persistExecutionCheckpoint) return;
+): Promise<unknown | undefined> {
+  if (!dependencies.persistExecutionCheckpoint) return undefined;
   try {
-    await dependencies.persistExecutionCheckpoint(boundary);
+    return await dependencies.persistExecutionCheckpoint(boundary);
   } catch {
     resources.recordOperationalWarning("execution_checkpoint_persistence_failed");
+    return undefined;
   }
 }
 
@@ -867,9 +1133,23 @@ function isInternalDeadlineOutcome(
   workDeadlineSignal: AbortSignal,
   hardDeadlineSignal: AbortSignal,
 ): boolean {
-  if (outcome.response.stopReason !== "timeout") return false;
-  if (externalSignal?.aborted && !workDeadlineSignal.aborted && !hardDeadlineSignal.aborted) return false;
-  return true;
+  if (outcome.response.stopReason !== "timeout" && outcome.response.stopReason !== "cancelled") return false;
+  // Caller取消始终不可交付。Provider/阶段自己的timeout可能比Run deadline计时器
+  // 先一个event-loop tick返回；此时仍应走安全的incomplete投影，不能把元数据留成not_required。
+  if (externalSignal?.aborted) return false;
+  if (outcome.response.stopReason === "timeout") return true;
+  return workDeadlineSignal.aborted || hardDeadlineSignal.aborted;
+}
+
+function classifyFinalAnswerFailureStopReason(
+  finishReason: string,
+  hardDeadlineSignal: AbortSignal,
+): TrustedTeacherResponse["stopReason"] {
+  if (hardDeadlineSignal.aborted) return "hard_timeout";
+  const normalized = finishReason.toLowerCase();
+  if (normalized.includes("timeout") || normalized.includes("timed out")) return "timeout";
+  if (normalized.includes("cancel")) return "cancelled";
+  return "provider_error";
 }
 
 async function emitLifecycleWithinSignal(
@@ -903,6 +1183,9 @@ export const intentV2ExecutionTesting = Object.freeze({
   isDeliverableInternalStop,
   isDeliverableWorkerTerminal,
   isInternalDeadlineOutcome,
+  classifyFinalAnswerFailureStopReason,
+  finalAnswerTimeoutBudget,
+  projectMainWorkerObservation,
   workerStopReason,
   workerFailureWarnings,
   runStopCauseFromSignals,

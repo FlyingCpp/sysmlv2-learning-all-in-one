@@ -1,3 +1,4 @@
+import { selectKnowledgeContent, knowledgeTokens } from "./knowledge-content.mjs";
 import { createHash } from "node:crypto";
 
 import { z } from "zod";
@@ -19,6 +20,7 @@ import type {
 } from "./types.mjs";
 
 export type RunParticipant = "main" | TaskWorkerType;
+export type RunExecutionParticipant = RunParticipant | "final_answer";
 
 export interface RunInputSnapshot {
   readonly question: string;
@@ -33,6 +35,11 @@ export interface RunInputSnapshot {
     title: string;
     objectives: readonly string[];
     taskHints: readonly string[];
+    courseRules: readonly Readonly<AgentRunRequest["context"]["lesson"]["courseRules"][number]>[];
+    referenceModel?: Readonly<{
+      entryFile: string;
+      files: readonly Readonly<NonNullable<AgentRunRequest["context"]["lesson"]["referenceModel"]>["files"][number]>[];
+    }>;
   }>;
   readonly model: Readonly<{
     entryFileId?: string;
@@ -40,6 +47,7 @@ export interface RunInputSnapshot {
     files: readonly Readonly<{
       fileId: string;
       displayName: string;
+      workspacePath?: string;
       content: string;
       contentHash: string;
       editable: boolean;
@@ -47,6 +55,9 @@ export interface RunInputSnapshot {
     selection?: Readonly<NonNullable<AgentRunRequest["context"]["model"]["selection"]>>;
     diagnostics: readonly Readonly<AgentRunRequest["context"]["model"]["diagnostics"][number]>[];
     activeDiagnosticId?: string;
+  }>;
+  readonly conversationSubjects: Readonly<{
+    lastValidatedCandidate?: Readonly<NonNullable<AgentRunRequest["context"]["conversationSubjects"]>["lastValidatedCandidate"]>;
   }>;
 }
 
@@ -69,12 +80,13 @@ export type RunToolContext = z.infer<typeof runToolContextSchema> & Record<strin
 export type RunExecutionView = Readonly<Record<string, unknown> & {
   readonly runId: string;
   readonly scopeKey: string;
+
   readonly hardDeadlineAtMs: number;
   readonly workDeadlineAtMs: number;
   readonly convergeAtMs: number;
   readonly candidatePhaseDeadlineAtMs: number;
   readonly repairDeadlineAtMs: number;
-  readonly participant: RunParticipant;
+  readonly participant: RunExecutionParticipant;
   readonly remaining: Readonly<RunBudgetView>;
   readonly stageBudget: Readonly<{
     terminalReserveMs: number;
@@ -102,6 +114,7 @@ export interface RunKnowledgeSnapshot {
   readonly seenEvidenceIds: readonly string[];
   readonly seenEvidenceSpanIds: readonly string[];
   readonly seenDomainSourceIds: readonly string[];
+  readonly seenExampleIds: readonly string[];
   readonly lexicalQueryHashes: readonly string[];
   readonly noNewEvidenceObservations: readonly {
     toolName: ToolName;
@@ -117,15 +130,19 @@ export interface KnowledgeView {
   readonly evidenceIds: readonly string[];
   readonly evidenceSpanIds: readonly string[];
   readonly domainSourceIds: readonly string[];
+  readonly exampleIds: readonly string[];
   /** 真正进入本次Worker Prompt的受审核知识；Seen ID本身不代表模型已经读过内容。 */
   readonly claims: readonly KnowledgeClaimView[];
   readonly evidenceBlocks: readonly KnowledgeEvidenceView[];
+  readonly examples?: readonly KnowledgeExampleView[];
   readonly disclosedClaimIds: readonly string[];
   readonly disclosedEvidenceIds: readonly string[];
   readonly disclosedEvidenceSpanIds: readonly string[];
+  readonly disclosedExampleIds?: readonly string[];
   readonly sourceToolCallIds: readonly string[];
   /** 外部领域资料必须与受审核SysML知识分层，不能伪装成同权威Claim/Evidence。 */
   readonly domainEvidence?: WorkerDomainEvidenceView;
+  readonly deferredContent?: readonly {kind: string; id: string}[];
   readonly truncated: boolean;
 }
 
@@ -138,6 +155,18 @@ export type KnowledgeEvidenceView = Readonly<Pick<
   ReviewedKnowledgeOutput["evidenceBlocks"][number],
   "evidenceId" | "sectionPath" | "excerpt" | "authorityLevel"
 >>;
+
+export type KnowledgeExampleView = Readonly<{
+  exampleId: string;
+  title: string;
+  intentText: string;
+  modelText: string;
+  constructTags: readonly string[];
+  exampleAuthority: "official-example" | "community-example";
+  languageVersionTrack: string;
+  validatorPassed: true;
+  truncated?: boolean;
+}>;
 
 export type WorkerDomainSourceView = Readonly<DomainEvidenceOutput["sources"][number]>;
 
@@ -155,16 +184,9 @@ export interface WorkerDomainEvidenceView {
   readonly truncated: boolean;
 }
 
-const WORKER_EVIDENCE_VIEW_TOKEN_BUDGET = 3_000;
 const WORKER_DOMAIN_EVIDENCE_VIEW_TOKEN_BUDGET = 2_000;
-const REVIEWED_KNOWLEDGE_CONTEXT_RESERVE_TOKENS = 4_096;
 
-export type ReviewedKnowledgeQueryRejectionReason =
-  | "reviewed_knowledge_no_new_evidence"
-  | "reviewed_knowledge_duplicate_normalized_query"
-  | "reviewed_knowledge_query_budget_exhausted"
-  | "reviewed_knowledge_operation_budget_exhausted"
-  | "reviewed_knowledge_context_budget_reached";
+export type ReviewedKnowledgeQueryRejectionReason = "reviewed_knowledge_duplicate_normalized_query";
 
 export class ReviewedKnowledgeQueryRejectedError extends Error {
   readonly code: ReviewedKnowledgeQueryRejectionReason;
@@ -190,46 +212,32 @@ export class RunKnowledgeSession {
   readonly #evidenceIds = new Set<string>();
   readonly #evidenceSpanIds = new Set<string>();
   readonly #domainSourceIds = new Set<string>();
+  readonly #exampleIds = new Set<string>();
   readonly #queryHashes = new Set<string>();
   readonly #noNewEvidence = new Map<string, RunKnowledgeSnapshot["noNewEvidenceObservations"][number]>();
   readonly #reviewedKnowledgeNoveltyKeys = new Set<string>();
-  readonly #maxNewReviewedKnowledgeQueries: number;
-  #admittedNewReviewedKnowledgeQueries = 0;
-
-  constructor(maxNewReviewedKnowledgeQueries = 4) {
-    this.#maxNewReviewedKnowledgeQueries = Math.max(0, Math.floor(maxNewReviewedKnowledgeQueries));
-  }
-
-  isNewReviewedKnowledgeQueryAllowed(): boolean {
-    return this.#noNewEvidence.size === 0
-      && this.#admittedNewReviewedKnowledgeQueries < this.#maxNewReviewedKnowledgeQueries;
-  }
+  constructor(private readonly readBudget: () => { max: number; remaining: number }) {}
 
   admitNewReviewedKnowledgeQuery(input: unknown): void {
-    if (this.#noNewEvidence.size > 0) {
-      throw new ReviewedKnowledgeQueryRejectedError("reviewed_knowledge_no_new_evidence");
-    }
+
     const noveltyKey = reviewedKnowledgeNoveltyKey(input);
     if (this.#reviewedKnowledgeNoveltyKeys.has(noveltyKey)) {
       throw new ReviewedKnowledgeQueryRejectedError("reviewed_knowledge_duplicate_normalized_query");
     }
-    if (this.#admittedNewReviewedKnowledgeQueries >= this.#maxNewReviewedKnowledgeQueries) {
-      throw new ReviewedKnowledgeQueryRejectedError("reviewed_knowledge_query_budget_exhausted");
-    }
     this.#reviewedKnowledgeNoveltyKeys.add(noveltyKey);
-    this.#admittedNewReviewedKnowledgeQueries += 1;
   }
 
   reviewedKnowledgeQueryBudget(): ReviewedKnowledgeQueryBudgetView {
+    const budget = this.readBudget();
     return Object.freeze({
-      maxNewQueries: this.#maxNewReviewedKnowledgeQueries,
-      admittedNewQueries: this.#admittedNewReviewedKnowledgeQueries,
-      remainingNewQueries: Math.max(
-        0,
-        this.#maxNewReviewedKnowledgeQueries - this.#admittedNewReviewedKnowledgeQueries,
-      ),
-      noNewEvidenceObserved: this.#noNewEvidence.size > 0,
+      maxNewQueries: budget.max, admittedNewQueries: budget.max - budget.remaining,
+      remainingNewQueries: budget.remaining, noNewEvidenceObserved: this.#noNewEvidence.size > 0,
     });
+  }
+
+  releaseFailedQuery(input: unknown): void {
+    // 失败仍消耗共享动作预算，但不能把暂时不可用记作永久无新证据。
+    this.#reviewedKnowledgeNoveltyKeys.delete(reviewedKnowledgeNoveltyKey(input));
   }
 
   observeToolResult(toolName: ToolName, input: unknown, output: unknown): void {
@@ -246,6 +254,7 @@ export class RunKnowledgeSession {
       collectIds(record.claims, "claimId", this.#claimIds);
       collectIds(record.evidenceBlocks, "evidenceId", this.#evidenceIds);
       collectIds(record.evidenceBlocks, "evidenceSpanId", this.#evidenceSpanIds);
+      collectIds(record.examples, "exampleId", this.#exampleIds);
       if (queryHash && isNoNewEvidence(record)) {
         const bundleRef = this.#bundleRef ?? "unbound";
         this.#noNewEvidence.set(`${toolName}:${queryHash}:${bundleRef}`, {
@@ -273,6 +282,7 @@ export class RunKnowledgeSession {
       evidenceIds: Object.freeze([...this.#evidenceIds].sort()),
       evidenceSpanIds: Object.freeze([...this.#evidenceSpanIds].sort()),
       domainSourceIds: Object.freeze([...this.#domainSourceIds].sort()),
+      exampleIds: Object.freeze([...this.#exampleIds].sort()),
       claims: Object.freeze([]),
       evidenceBlocks: Object.freeze([]),
       disclosedClaimIds: Object.freeze([]),
@@ -291,6 +301,7 @@ export class RunKnowledgeSession {
       seenEvidenceIds: Object.freeze([...this.#evidenceIds].sort()),
       seenEvidenceSpanIds: Object.freeze([...this.#evidenceSpanIds].sort()),
       seenDomainSourceIds: Object.freeze([...this.#domainSourceIds].sort()),
+      seenExampleIds: Object.freeze([...this.#exampleIds].sort()),
       lexicalQueryHashes: Object.freeze([...this.#queryHashes].sort()),
       noNewEvidenceObservations: Object.freeze([...this.#noNewEvidence.values()]),
     });
@@ -403,6 +414,7 @@ export interface RunBudgetView {
   readonly hardRemainingMs: number;
   readonly workRemainingMs: number;
   readonly phase: "normal" | "converge" | "finalize" | "expired";
+  readonly state: "NORMAL" | "COMMIT" | "FINALIZE" | "EXPIRED";
   readonly modelInputTokens: number;
   readonly modelOutputTokens: number;
   readonly modelReasoningTokens: number;
@@ -465,6 +477,13 @@ export class RunBudgetAccount {
       hardRemainingMs: Math.max(0, this.#hardDeadlineAtMs - nowMs),
       workRemainingMs: Math.max(0, this.#workDeadlineAtMs - nowMs),
       phase,
+      state: phase === "normal"
+        ? "NORMAL"
+        : phase === "converge"
+          ? "COMMIT"
+          : phase === "finalize"
+            ? "FINALIZE"
+            : "EXPIRED",
       modelInputTokens: this.#inputTokens,
       modelOutputTokens: this.#outputTokens,
       modelReasoningTokens: this.#reasoningTokens,
@@ -540,8 +559,10 @@ export interface ToolLifecycleProjection {
 }
 
 export interface RunResources {
+  readonly knowledgeWindowTokens: number;
   readonly runId: string;
   readonly scopeKey: string;
+  readonly candidateMaxArtifactBytes: number;
   readonly hardDeadlineAtMs: number;
   readonly workDeadlineAtMs: number;
   readonly convergeAtMs: number;
@@ -562,11 +583,24 @@ export interface RunResources {
   readonly admit: (action: RunBusinessAction) => Readonly<RunPhaseAdmission>;
   readonly assertAdmitted: (action: RunBusinessAction) => void;
   readonly isAllowed: (action: RunBusinessAction) => boolean;
+  /** 下一次模型Step是否仍应看到Reviewed Knowledge Search。 */
   readonly isNewReviewedKnowledgeQueryAllowed: () => boolean;
   readonly assertNewReviewedKnowledgeQueryAllowed: (input: unknown) => void;
   readonly tasks: TaskWorkingStateStore;
   readonly obligations: AnswerObligationStore;
   readonly priorKnowledgeEntries: Readonly<NonNullable<AgentRunRequest["resumeContext"]>["priorToolLedger"]>;
+  readonly serverInjectedKnowledgeEntries: () => readonly {
+    toolCallId: string;
+    toolName: "search_reviewed_knowledge";
+    input: unknown;
+    output: unknown;
+  }[];
+  readonly injectServerKnowledge: (entry: {
+    toolCallId: string;
+    toolName: "search_reviewed_knowledge";
+    input: unknown;
+    output: unknown;
+  }) => void;
   readonly findPriorKnowledgeResult: (toolName: ToolName, input: unknown) => {
     sourceRunId: string;
     output: unknown;
@@ -598,20 +632,30 @@ export function createRunResources(input: {
   );
   const lifecycle: ToolLifecycleProjection[] = [];
   const operationalWarnings = new Set<string>();
+  const injectedKnowledgeEntries: Array<{
+    toolCallId: string;
+    toolName: "search_reviewed_knowledge";
+    input: unknown;
+    output: unknown;
+  }> = [];
   const priorKnowledgeEntries = Object.freeze((input.request.resumeContext?.priorToolLedger ?? [])
     .map((entry) => Object.freeze({ ...entry })));
-  const knowledge = new RunKnowledgeSession(input.policy.reviewedKnowledgeMaxNewQueriesPerRun);
-  for (const entry of priorKnowledgeEntries) {
-    knowledge.observeToolResult(entry.toolName, entry.input, entry.output);
-  }
   const ledger = new ToolExecutionLedger({
     scopeKey,
     maxExecutions: resourcePolicy.maxToolExecutions,
     maxExecutionsPerTool: resourcePolicy.maxExecutionsPerTool,
   });
   const budget = new RunBudgetAccount(timing, resourcePolicy.operationLimits);
+  const knowledge = new RunKnowledgeSession(() => ({
+    max: resourcePolicy.operationLimits.knowledge_backend, remaining: budget.view().remainingOperations.knowledge_backend,
+  }));
+  for (const entry of priorKnowledgeEntries) {
+    knowledge.observeToolResult(entry.toolName, entry.input, entry.output);
+  }
   const resource: RunResources = {
     runId: input.request.runId,
+    candidateMaxArtifactBytes: input.policy.candidateMaxArtifactBytes,
+    knowledgeWindowTokens: Math.max(0, input.policy.contextWindowTokens - input.policy.mainContextExecutionReserveTokens - knowledgeTokens({model: input.request.context.model, messages: input.request.conversationMessages})),
     scopeKey,
     hardDeadlineAtMs: timing.hardDeadlineAtMs,
     workDeadlineAtMs: timing.workDeadlineAtMs,
@@ -632,32 +676,29 @@ export function createRunResources(input: {
     assertAdmitted: (action) => budget.assertAdmitted(action),
     isAllowed: (action) => budget.isAllowed(action),
     isNewReviewedKnowledgeQueryAllowed: () => {
-      const view = budget.view();
+      const queryBudget = knowledge.reviewedKnowledgeQueryBudget();
       return budget.isAllowed("knowledge_search")
-        && view.remainingOperations.knowledge_backend > 0
-        && view.modelTotalTokens < Math.max(
-          0,
-          input.policy.contextWindowTokens - REVIEWED_KNOWLEDGE_CONTEXT_RESERVE_TOKENS,
-        )
-        && knowledge.isNewReviewedKnowledgeQueryAllowed();
+        && queryBudget.remainingNewQueries > 0;
     },
     assertNewReviewedKnowledgeQueryAllowed: (toolInput) => {
       budget.assertAdmitted("knowledge_search");
-      const view = budget.view();
-      if (view.remainingOperations.knowledge_backend <= 0) {
-        throw new ReviewedKnowledgeQueryRejectedError("reviewed_knowledge_operation_budget_exhausted");
-      }
-      if (view.modelTotalTokens >= Math.max(
-        0,
-        input.policy.contextWindowTokens - REVIEWED_KNOWLEDGE_CONTEXT_RESERVE_TOKENS,
-      )) {
-        throw new ReviewedKnowledgeQueryRejectedError("reviewed_knowledge_context_budget_reached");
-      }
+
       knowledge.admitNewReviewedKnowledgeQuery(toolInput);
     },
     tasks: new TaskWorkingStateStore(input.request.runId),
     obligations: new AnswerObligationStore(input.request.runId),
     priorKnowledgeEntries,
+    serverInjectedKnowledgeEntries: () => Object.freeze(injectedKnowledgeEntries.map((entry) => Object.freeze({ ...entry }))),
+    injectServerKnowledge: (entry) => {
+      if (entry.toolName !== "search_reviewed_knowledge") return;
+      if (injectedKnowledgeEntries.some((item) => item.toolCallId === entry.toolCallId)) return;
+      injectedKnowledgeEntries.push(Object.freeze({
+        toolCallId: entry.toolCallId,
+        toolName: entry.toolName,
+        input: entry.input,
+        output: entry.output,
+      }));
+    },
     findPriorKnowledgeResult: (toolName, toolInput) => {
       if (!["search_reviewed_knowledge", "search_engineering_domain_evidence"].includes(toolName)
         || !input.request.resumeContext) return undefined;
@@ -693,21 +734,14 @@ export function createRunResources(input: {
 export function createRunResourcePolicy(policy: AgentPolicy): RunResourcePolicy {
   const maxUniqueCandidateValidationsPerWorker = 1 + policy.repairMaxRounds;
   const maxExecutionsPerTool = Object.freeze({
-    inspect_lesson_context: 1,
-    inspect_current_model: 1,
-    search_skill_guidance: 2,
-    search_reviewed_knowledge: 20,
-    search_engineering_domain_evidence: 2,
     validate_candidate_workspace: maxUniqueCandidateValidationsPerWorker,
   } satisfies Partial<Record<ToolName, number>>);
-  const reachableToolExecutions = Object.values(maxExecutionsPerTool)
-    .reduce((sum, value) => sum + value, 0);
-  const maxToolExecutions = Math.max(40, reachableToolExecutions);
+  const maxToolExecutions = policy.maxSteps + maxUniqueCandidateValidationsPerWorker;
   return Object.freeze({
     maxToolExecutions,
     maxExecutionsPerTool,
     operationLimits: Object.freeze({
-      knowledge_backend: 24,
+      knowledge_backend: policy.maxSteps,
       validator: maxUniqueCandidateValidationsPerWorker,
       candidate_generation: 1 + policy.candidateRecoveryMaxAttempts,
     }),
@@ -726,9 +760,6 @@ function canonicalKnowledgeReplayInput(toolName: ToolName, value: unknown): stri
     selectedPatternIds: Array.isArray(input.selectedPatternIds) ? input.selectedPatternIds : [],
   });
 }
-
-const MAX_TERMINAL_RESERVE_MS = 60_000;
-const MAX_CONVERGE_LEAD_MS = 75_000;
 
 export interface RunStageBudgetPolicy {
   readonly terminalReserveMs?: number;
@@ -755,7 +786,6 @@ export function createRunTiming(
 }> {
   const durationMs = Math.max(4, hardDeadlineAtMs - startedAtMs);
   const terminalReserveMs = Math.min(
-    MAX_TERMINAL_RESERVE_MS,
     Math.max(1, stageBudget.terminalReserveMs ?? Math.floor(durationMs / 8)),
     Math.max(1, durationMs - 3),
   );
@@ -778,7 +808,6 @@ export function createRunTiming(
   );
   const repairDeadlineAtMs = workDeadlineAtMs;
   const convergeLeadMs = Math.min(
-    MAX_CONVERGE_LEAD_MS,
     Math.max(1, requestedConvergeLeadMs),
     Math.max(1, Math.floor(durationMs / 3)),
   );
@@ -806,9 +835,19 @@ export function candidateAttemptDeadlineAt(
   ));
 }
 
+export function repairPhaseDeadlineAt(
+  resources: Pick<RunResources, "repairDeadlineAtMs" | "repairPhaseReserveMs">,
+  nowMs = Date.now(),
+): number {
+  return Math.max(nowMs, Math.min(
+    resources.repairDeadlineAtMs,
+    nowMs + resources.repairPhaseReserveMs,
+  ));
+}
+
 export function createRunExecutionView(
   resources: RunResources,
-  participant: RunParticipant,
+  participant: RunExecutionParticipant,
 ): RunExecutionView {
   const nowMs = Date.now();
   const execution = resources.resumeExecution;
@@ -817,7 +856,8 @@ export function createRunExecutionView(
     ? "pending" as const
     : phase === "validation_failed" || phase === "repair_in_progress"
       ? "failed" as const
-      : phase === "validated_passed" || phase === "finalization_pending" || phase === "completed"
+      : phase === "validated_passed" || phase === "main_review_pending"
+        || phase === "finalization_pending" || phase === "completed"
         ? "passed" as const
         : "not_started" as const;
   return Object.freeze({
@@ -912,17 +952,24 @@ export function projectWorkerEvidenceView(
   const seen = resources.knowledge.projectForTask(task);
   const claimIds = new Set<string>();
   const evidenceIds = new Set<string>();
+  const exampleIds = new Set<string>();
   const sourceToolCallIds = new Set<string>();
   const claims: KnowledgeClaimView[] = [];
   const evidenceBlocks: KnowledgeEvidenceView[] = [];
+  const examples: KnowledgeExampleView[] = [];
   const domainResearches: WorkerDomainResearchView[] = [];
   const disclosedDomainSourceIds = new Set<string>();
-  let remainingTokens = WORKER_EVIDENCE_VIEW_TOKEN_BUDGET;
   let remainingDomainTokens = WORKER_DOMAIN_EVIDENCE_VIEW_TOKEN_BUDGET;
   let truncated = false;
   let domainTruncated = false;
 
   const evidenceEntries = [
+    ...resources.serverInjectedKnowledgeEntries().map((entry) => ({
+      toolCallId: entry.toolCallId,
+      toolName: entry.toolName,
+      status: "succeeded" as const,
+      output: entry.output,
+    })),
     ...resources.priorKnowledgeEntries.map((entry) => ({
       toolCallId: `${resources.runId}:prior:${entry.toolCallId}`,
       toolName: entry.toolName,
@@ -931,53 +978,20 @@ export function projectWorkerEvidenceView(
     })),
     ...resources.ledger.snapshot(),
   ];
-  for (const entry of evidenceEntries) {
-    if (entry.toolName !== "search_reviewed_knowledge" || entry.status !== "succeeded") continue;
-    const output = entry.output;
-    if (!output || typeof output !== "object" || Array.isArray(output)) continue;
-    const record = output as Partial<ReviewedKnowledgeOutput>;
-    const entryWasUsed = { value: false };
-
-    for (const rawClaim of Array.isArray(record.claims) ? record.claims : []) {
-      if (!rawClaim?.claimId || claimIds.has(rawClaim.claimId)) continue;
-      const claim = Object.freeze({
-        claimId: rawClaim.claimId,
-        claimText: rawClaim.claimText,
-        authorityLevel: rawClaim.authorityLevel,
-        evidenceIds: Object.freeze([...rawClaim.evidenceIds]),
-      });
-      const cost = estimatedJsonTokens(claim);
-      if (cost > remainingTokens) {
-        truncated = true;
-        continue;
-      }
-      claims.push(claim);
-      claimIds.add(claim.claimId);
-      remainingTokens -= cost;
-      entryWasUsed.value = true;
-    }
-
-    for (const rawEvidence of Array.isArray(record.evidenceBlocks) ? record.evidenceBlocks : []) {
-      if (!rawEvidence?.evidenceId || evidenceIds.has(rawEvidence.evidenceId)) continue;
-      const evidence = Object.freeze({
-        evidenceId: rawEvidence.evidenceId,
-        sectionPath: rawEvidence.sectionPath,
-        excerpt: rawEvidence.excerpt,
-        authorityLevel: rawEvidence.authorityLevel,
-      });
-      const cost = estimatedJsonTokens(evidence);
-      if (cost > remainingTokens) {
-        truncated = true;
-        continue;
-      }
-      evidenceBlocks.push(evidence);
-      evidenceIds.add(evidence.evidenceId);
-      remainingTokens -= cost;
-      entryWasUsed.value = true;
-    }
-    if (entryWasUsed.value) sourceToolCallIds.add(entry.toolCallId);
+  const reviewedEntries = evidenceEntries.filter(entry => entry.toolName === "search_reviewed_knowledge" && entry.status === "succeeded");
+  const selected = selectKnowledgeContent(reviewedEntries.map(entry => entry.output), resources.knowledgeWindowTokens);
+  claims.push(...selected.claims as unknown as KnowledgeClaimView[]);
+  evidenceBlocks.push(...selected.evidenceBlocks as unknown as KnowledgeEvidenceView[]);
+  examples.push(...selected.examples.filter(row => row.validatorPassed === true) as unknown as KnowledgeExampleView[]);
+  claims.forEach(row => claimIds.add(row.claimId));
+  evidenceBlocks.forEach(row => evidenceIds.add(row.evidenceId));
+  examples.forEach(row => exampleIds.add(row.exampleId));
+  for (const entry of [...reviewedEntries].reverse()) {
+    const data = entry.output as Record<string, unknown>;
+    if ([...(Array.isArray(data.claims) ? data.claims : []), ...(Array.isArray(data.examples) ? data.examples : [])]
+      .some(row => claims.includes(row) || examples.includes(row))) { sourceToolCallIds.add(entry.toolCallId); }
   }
-
+  truncated = selected.deferredContent.length > 0;
   for (const entry of evidenceEntries) {
     if (entry.toolName !== "search_engineering_domain_evidence" || entry.status !== "succeeded") continue;
     const parsed = domainEvidenceOutputSchema.safeParse(entry.output);
@@ -1006,6 +1020,10 @@ export function projectWorkerEvidenceView(
     ...seen,
     claims: Object.freeze(claims),
     evidenceBlocks: Object.freeze(evidenceBlocks),
+    ...(examples.length > 0 ? {
+      examples: Object.freeze(examples),
+      disclosedExampleIds: Object.freeze([...exampleIds]),
+    } : {}),
     disclosedClaimIds: Object.freeze([...claimIds]),
     disclosedEvidenceIds: Object.freeze([...evidenceIds]),
     // Evidence View披露的是完整excerpt；`:all`阻止Repair把同一excerpt切片后再次披露。
@@ -1019,6 +1037,7 @@ export function projectWorkerEvidenceView(
         truncated: domainTruncated,
       }),
     } : {}),
+    deferredContent: Object.freeze(selected.deferredContent),
     truncated: truncated || domainTruncated,
   });
 }
@@ -1080,7 +1099,7 @@ function createRunInputSnapshot(request: AgentRunRequest): RunInputSnapshot {
     // 客户可见角色消息只作为非规范理解上下文；TaskSourceSet继续独立承担授权语义。
     conversationMessages: Object.freeze(request.conversationMessages.map((message) => Object.freeze({ ...message }))),
     // TaskSourceSet已由Agent Adapter按服务端授权范围和Hash绑定规则形成；
-    // Run内只冻结并投影，不再让Main或Worker重新抽取一套事实对象。
+    // Run内只冻结并投影，不再让Main或Worker重新抽取一套“事实对象”。
     taskSources: Object.freeze(request.taskSources.map((source) => Object.freeze({ ...source }))),
     threadId: request.context.threadId,
     authorizationScopeRef: stableHash({
@@ -1094,6 +1113,15 @@ function createRunInputSnapshot(request: AgentRunRequest): RunInputSnapshot {
       title: request.context.lesson.title,
       objectives: Object.freeze([...request.context.lesson.objectives]),
       taskHints: Object.freeze([...request.context.lesson.taskHints]),
+      courseRules: Object.freeze(request.context.lesson.courseRules.map((rule) => Object.freeze({ ...rule }))),
+      ...(request.context.lesson.referenceModel
+        ? {
+          referenceModel: Object.freeze({
+            ...request.context.lesson.referenceModel,
+            files: Object.freeze(request.context.lesson.referenceModel.files.map((file) => Object.freeze({ ...file }))),
+          }),
+        }
+        : {}),
     }),
     model: Object.freeze({
       ...(model.entryFileId ? { entryFileId: model.entryFileId } : {}),
@@ -1102,6 +1130,15 @@ function createRunInputSnapshot(request: AgentRunRequest): RunInputSnapshot {
       ...(model.selection ? { selection: Object.freeze({ ...model.selection }) } : {}),
       diagnostics: Object.freeze(model.diagnostics.map((diagnostic) => Object.freeze({ ...diagnostic }))),
       ...(model.activeDiagnosticId ? { activeDiagnosticId: model.activeDiagnosticId } : {}),
+    }),
+    conversationSubjects: Object.freeze({
+      ...(request.context.conversationSubjects?.lastValidatedCandidate
+        ? {
+          lastValidatedCandidate: Object.freeze({
+            ...request.context.conversationSubjects.lastValidatedCandidate,
+          }),
+        }
+        : {}),
     }),
   });
 }
@@ -1127,6 +1164,10 @@ function reviewedKnowledgeNoveltyKey(value: unknown): string {
   return stableHash({
     query: normalizeKnowledgeQueryForNovelty(input.query),
     topic: normalizeKnowledgeQueryForNovelty(input.topic),
+    offset: input.offset ?? 0,
+    exampleIds: input.exampleIds ?? [],
+    claimIds: input.claimIds ?? [],
+    evidenceIds: input.evidenceIds ?? [],
     selectedPatternIds: Array.isArray(input.selectedPatternIds)
       ? input.selectedPatternIds.filter((item): item is string => typeof item === "string").sort()
       : [],
@@ -1164,6 +1205,7 @@ function readString(value: unknown): string | undefined {
 }
 
 function isNoNewEvidence(output: Record<string, unknown>): boolean {
+  if (Array.isArray(output.examples) && output.examples.some((example: any) => example?.validatorPassed && example?.modelText)) return false;
   if (output.no_new_evidence === true) return true;
   return output.coverage === "NONE"
     && Array.isArray(output.claims)

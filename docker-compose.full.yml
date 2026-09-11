@@ -1,6 +1,8 @@
 services:
   validator:
     profiles: ["full"]
+    environment:
+      AI_TEACHER_INTERNAL_TOKEN: ${AI_TEACHER_INTERNAL_TOKEN:-}
 
   teacher:
     profiles: ["full"]

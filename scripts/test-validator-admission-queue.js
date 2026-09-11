@@ -19,7 +19,7 @@ async function expectCode(promise, code) {
 }
 
 async function testBoundedFifoAndQueueFull() {
-  const queue = new ValidatorAdmissionQueue({ maxInFlight: 1, queueLimit: 1, queueWaitMs: 1000 });
+  const queue = new ValidatorAdmissionQueue({ queueLimit: 1, queueWaitMs: 1000 });
   const first = deferred();
   const order = [];
   const firstRun = queue.run(async () => {
@@ -47,7 +47,7 @@ async function testBoundedFifoAndQueueFull() {
 }
 
 async function testQueuedCancellationAndTimeoutNeverExecute() {
-  const queue = new ValidatorAdmissionQueue({ maxInFlight: 1, queueLimit: 2, queueWaitMs: 15 });
+  const queue = new ValidatorAdmissionQueue({ queueLimit: 2, queueWaitMs: 15 });
   const first = deferred();
   let queuedExecutions = 0;
   const firstRun = queue.run(() => first.promise);
@@ -69,7 +69,7 @@ async function testQueuedCancellationAndTimeoutNeverExecute() {
 }
 
 async function testActiveCancellationDoesNotReleaseCapacityEarly() {
-  const queue = new ValidatorAdmissionQueue({ maxInFlight: 1, queueLimit: 1, queueWaitMs: 1000 });
+  const queue = new ValidatorAdmissionQueue({ queueLimit: 1, queueWaitMs: 1000 });
   const first = deferred();
   const activeAbort = new AbortController();
   let secondStarted = false;
@@ -97,10 +97,19 @@ async function testActiveCancellationDoesNotReleaseCapacityEarly() {
 
 async function main() {
   assert.throws(
-    () => new ValidatorAdmissionQueue({ maxInFlight: 2 }),
-    /maxInFlight must be an integer between 1 and 1/,
-    'the current single Java process must reject unsafe concurrency configuration'
+    () => new ValidatorAdmissionQueue({ maxInFlight: 2, queueLimit: 1, queueWaitMs: 1000 }),
+    /maxInFlight is an observed Validator capability/,
+    'the current single Java process must expose concurrency as an observed capability, not a policy field'
   );
+  const reloadable = new ValidatorAdmissionQueue({ queueLimit: 1, queueWaitMs: 1000 });
+  assert.deepStrictEqual(
+    { queueLimit: reloadable.updateSettings({ queueLimit: 4, queueWaitMs: 2500 }).queueLimit, queueWaitMs: reloadable.snapshot().queueWaitMs },
+    { queueLimit: 4, queueWaitMs: 2500 },
+    'runtime queue settings must change the admission owner state'
+  );
+  const reloadableBackend = new OfficialValidatorBackend({ timeoutMs: 5000 });
+  assert.strictEqual(reloadableBackend.updateTimeoutMs(9000), 9000);
+  assert.strictEqual(reloadableBackend.timeoutMs, 9000, 'runtime execution timeout must change the official backend timer');
   assert.throws(
     () => new OfficialValidatorBackend({ timeoutMs: 0 }),
     /AI_TEACHER_VALIDATOR_EXECUTION_TIMEOUT_MS must be an integer between 1 and 300000/,

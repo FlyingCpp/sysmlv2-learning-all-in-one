@@ -36,9 +36,11 @@ function createWebSearchProbePolicyConfig(options = {}) {
       86400
     ) * 1000,
     hourlyLimit: boundedInteger(
-      options.hourlyLimit || process.env.AI_TEACHER_WEB_SEARCH_PROBE_HOURLY_LIMIT,
+      options.hourlyLimit !== undefined
+        ? options.hourlyLimit
+        : process.env.AI_TEACHER_WEB_SEARCH_PROBE_HOURLY_LIMIT,
       DEFAULT_HOURLY_LIMIT,
-      1,
+      0,
       60
     ),
     timeoutMs: boundedInteger(
@@ -55,7 +57,7 @@ function createWebSearchProbePolicyConfig(options = {}) {
 }
 
 function createWebSearchProbeController(options = {}) {
-  const policy = options.policy || createWebSearchProbePolicyConfig(options.policyOptions || {});
+  let policy = options.policy || createWebSearchProbePolicyConfig(options.policyOptions || {});
   const searchConfig = options.searchConfig;
   const store = options.store || createWebSearchProbeStateStore(options.storeOptions || {});
   const search = options.search || searchDeepSeekDomainEvidence;
@@ -74,6 +76,24 @@ function createWebSearchProbeController(options = {}) {
         warningCode: 'probe_state_storage_unavailable'
       });
     }
+  }
+
+  function updatePolicy(nextPolicy = {}) {
+    policy = {
+      ...policy,
+      enabled: parseBoolean(nextPolicy.enabled, policy.enabled),
+      hourlyLimit: boundedInteger(nextPolicy.hourlyLimit, policy.hourlyLimit, 0, 60),
+      timeoutMs: boundedInteger(nextPolicy.timeoutMs, policy.timeoutMs, 1000, 180000)
+    };
+    return policyState();
+  }
+
+  function policyState() {
+    return {
+      enabled: policy.enabled,
+      hourlyLimit: policy.hourlyLimit,
+      timeoutMs: policy.timeoutMs
+    };
   }
 
   async function disable() {
@@ -177,8 +197,12 @@ function createWebSearchProbeController(options = {}) {
   }
 
   return {
-    policy,
+    get policy() {
+      return policy;
+    },
     publicState,
+    updatePolicy,
+    policyState,
     disable,
     enableAndProbe,
     probe,
@@ -451,16 +475,7 @@ function createPostgresProbeStateStore(options = {}) {
 }
 
 function createPool(options) {
-  const connectionString = options.connectionString
-    || process.env.AI_TEACHER_DB_URL
-    || process.env.DATABASE_URL;
-  if (!connectionString) throw new Error('AI_TEACHER_DB_URL or DATABASE_URL is required for postgres probe state');
-  const { Pool } = require('pg');
-  return new Pool({
-    connectionString,
-    max: Number(options.maxPoolSize || 2),
-    connectionTimeoutMillis: Number(options.connectionTimeoutMillis || 5000)
-  });
+  return require('./database-pool-policy').createTeacherDatabasePool(options, 'postgres probe state');
 }
 
 function parseCooldownSchedule(value) {

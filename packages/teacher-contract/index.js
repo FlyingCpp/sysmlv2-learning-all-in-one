@@ -1,10 +1,11 @@
 'use strict';
+const { sysmlCodeBlocks } = require('./candidate-content');
 
 const crypto = require('crypto');
 const OFFICIAL_VALIDATOR_ARTIFACT_MANIFEST = require('./official-validator-runtime-artifacts.json');
+const taskLifecycleContract = require('./task-lifecycle-contract');
 
 const CONTRACT_VERSION = '1.0';
-const DEFAULT_MAX_REQUEST_BYTES = 256 * 1024;
 const MODEL_CAPABILITY_SNAPSHOT_VERSION = 2;
 const SUPPORTED_MODEL_CAPABILITY_SNAPSHOT_VERSIONS = Object.freeze([1, 2]);
 const MODEL_PROTOCOL_MODES = Object.freeze([
@@ -562,8 +563,7 @@ function validateCodeBlockAttestations(validations, response, context, errors) {
     errors.push('codeBlockValidations must be an array for Agent responses');
     return;
   }
-  const blocks = [...String(response.directAnswer || '').matchAll(/```(?:sysml|sysmlv2)\s*\n([\s\S]*?)```/giu)]
-    .map((match) => canonicalCodeBlockText(match[1]));
+  const blocks = sysmlCodeBlocks(response.directAnswer).map(block => canonicalCodeBlockText(block.content));
   if (blocks.length !== validations.length) {
     errors.push('codeBlockValidations must match SysML code blocks one-to-one');
   }
@@ -716,8 +716,9 @@ function canonicalJson(value) {
   return JSON.stringify(value);
 }
 
-function validateRequestSize(byteLength, maxBytes = DEFAULT_MAX_REQUEST_BYTES) {
+function validateRequestSize(byteLength, maxBytes) {
   if (!Number.isFinite(byteLength) || byteLength < 0) return { ok: false, errors: ['request size must be a non-negative number'] };
+  if (!Number.isInteger(maxBytes) || maxBytes <= 0) return { ok: false, errors: ['request max bytes must be a positive integer'] };
   if (byteLength > maxBytes) return { ok: false, errors: [`request body exceeds ${maxBytes} bytes`] };
   return { ok: true, errors: [] };
 }
@@ -1422,7 +1423,6 @@ function validateGatewayExecutionPolicy(value, stageId, errors) {
 
 module.exports = {
   CONTRACT_VERSION,
-  DEFAULT_MAX_REQUEST_BYTES,
   MODEL_CAPABILITY_SNAPSHOT_VERSION,
   BOOTSTRAP_MODEL_CONTEXT_WINDOW_TOKENS,
   TRUSTED_OFFICIAL_VALIDATOR_ATTESTATION,
@@ -1438,5 +1438,6 @@ module.exports = {
   redactSecrets,
   containsSecret,
   publicError,
-  validateModelCapabilitySnapshot
+  validateModelCapabilitySnapshot,
+  ...taskLifecycleContract
 };

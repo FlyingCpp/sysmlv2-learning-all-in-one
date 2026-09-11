@@ -11,6 +11,7 @@ import {
   runResumedProductionExecution,
 } from "./production-worker-handlers.mjs";
 import { createRunResources } from "./run-resources.mjs";
+import { createCurrentValidatedCandidateBinding } from "./task-working-state.mjs";
 import {
   agentPolicySchema,
   agentRunRequestSchema,
@@ -91,6 +92,11 @@ export async function runEngineeringReviewEvaluation(
   const baselineOutcome = {
     type: "delegate_candidate" as const,
     mode: rawOptions.baselineCandidate.mode === "standalone_model" ? "create" as const : "refine" as const,
+    subject: rawOptions.baselineCandidate.mode === "standalone_model"
+      ? "standalone_model" as const
+      : "current_workspace" as const,
+    taskSummary: "评估用户目标与候选基线。",
+    instruction: "形成与输入验证绑定的完整候选。",
     acceptedToolCallId: `${request.runId}:engineering-evaluation-baseline`,
   };
   const baselineTask = resources.tasks.materialize({
@@ -150,12 +156,11 @@ export async function runEngineeringReviewEvaluation(
     policy: {
       enabled: true,
       shadowOnly: false,
-      assessmentMaxCalls: policy.semanticReviewAssessmentMaxCalls,
+      assessmentMaxCalls: 1, // 离线旧链评测固定一次；生产0/1策略由只读路径处理。
       assessmentTimeoutMs: policy.semanticReviewAssessmentTimeoutMs,
       mainDecisionTimeoutMs: policy.semanticReviewMainDecisionTimeoutMs,
       verificationMaxCalls: policy.semanticReviewVerificationMaxCalls,
       verificationTimeoutMs: policy.semanticReviewVerificationTimeoutMs,
-      maxOutputTokens: policy.semanticReviewMaxOutputTokens,
       maxIssues: policy.semanticReviewMaxIssues,
       minimumCompleteChainMs: policy.semanticReviewMinimumCompleteChainMs,
       domainSearchReserveMs: policy.semanticReviewDomainSearchReserveMs,
@@ -164,12 +169,21 @@ export async function runEngineeringReviewEvaluation(
       const revisionOutcome = {
         type: "delegate_candidate" as const,
         mode: baselineWorkerResult.candidate.mode === "standalone_model" ? "milestone" as const : "refine" as const,
+        subject: "current_validated_candidate" as const,
+        taskSummary: request.taskSources.map((source) => source.text).join("\n"),
+        instruction: issues.map((issue) => `${issue.issue}：${issue.suggestion}`).join("\n"),
         acceptedToolCallId: `${baselineTask.acceptedToolCallId}:engineering-revision`,
       };
       const revisionTask = resources.tasks.materialize({
         questionHash: resources.input.questionHash,
         outcome: revisionOutcome,
         context: request.context,
+        currentValidatedCandidateBinding: createCurrentValidatedCandidateBinding({
+          runId: resources.runId,
+          candidate: baselineWorkerResult.candidate,
+          validation: baselineWorkerResult.validation,
+          baselineModel: request.context.model,
+        }),
       });
       const dispatch = await dispatchWorker({
         resources,

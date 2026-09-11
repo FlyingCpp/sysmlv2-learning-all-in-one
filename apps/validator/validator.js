@@ -6,14 +6,29 @@ const { OfficialOutlineBackend } = require('./official-outline-backend');
 const { OfficialPlantUmlBackend } = require('./official-plantuml-backend');
 const { optimizePlantUmlLayout } = require('./plantuml-layout-optimizer');
 const { ValidatorAdmissionQueue } = require('./admission-queue');
+const {
+  BOOTSTRAP_VALUES: AGENT_RESOURCE_POLICY_BOOTSTRAP_VALUES,
+  runtimeProjection: agentResourcePolicyRuntimeProjection
+} = require('../../packages/agent-resource-policy');
+
+const validatorBootstrap = agentResourcePolicyRuntimeProjection(
+  AGENT_RESOURCE_POLICY_BOOTSTRAP_VALUES
+).validator;
 
 const backend = new OfficialValidatorBackend();
 const outlineBackend = new OfficialOutlineBackend();
 const plantUmlBackend = new OfficialPlantUmlBackend();
 const validatorAdmission = new ValidatorAdmissionQueue({
-  maxInFlight: process.env.AI_TEACHER_VALIDATOR_MAX_IN_FLIGHT,
-  queueLimit: process.env.AI_TEACHER_VALIDATOR_QUEUE_LIMIT,
-  queueWaitMs: process.env.AI_TEACHER_VALIDATOR_QUEUE_WAIT_MS
+  queueLimit: validatorBootstrap.queueLimit,
+  queueWaitMs: validatorBootstrap.queueWaitMs
+});
+let activeResourcePolicy = Object.freeze({
+  versionId: 'validator_bootstrap',
+  checksum: '',
+  queueLimit: validatorBootstrap.queueLimit,
+  queueWaitMs: validatorBootstrap.queueWaitMs,
+  executionTimeoutMs: validatorBootstrap.executionTimeoutMs,
+  appliedAt: new Date(0).toISOString()
 });
 const FALLBACK_ALLOWED = process.env.OFFICIAL_VALIDATOR_FALLBACK === 'true';
 const SYSML_NAME_SOURCE = String.raw`'(?:\\.|[^'\\\r\n])+'|[A-Za-z_][\w]*`;
@@ -89,8 +104,66 @@ function validatorHealth() {
     plantuml: plantUmlBackend.health(),
     fallbackAllowed: FALLBACK_ALLOWED,
     fallbackActive: !backend.isConfigured(),
-    localAnalyzerSource: LOCAL_ANALYZER_SOURCE
+    localAnalyzerSource: LOCAL_ANALYZER_SOURCE,
+    resourcePolicy: validatorResourcePolicyState()
   };
+}
+
+function applyValidatorResourcePolicy(input = {}) {
+  const next = validateValidatorResourcePolicy(input);
+  validatorAdmission.updateSettings(next);
+  backend.updateTimeoutMs(next.executionTimeoutMs);
+  activeResourcePolicy = Object.freeze({
+    ...next,
+    appliedAt: new Date().toISOString()
+  });
+  return validatorResourcePolicyState();
+}
+
+function validatorResourcePolicyState() {
+  const admission = validatorAdmission.snapshot();
+  return {
+    status: 'applied',
+    versionId: activeResourcePolicy.versionId,
+    checksum: activeResourcePolicy.checksum,
+    queueLimit: admission.queueLimit,
+    queueWaitMs: admission.queueWaitMs,
+    executionTimeoutMs: backend.timeoutMs,
+    appliedAt: activeResourcePolicy.appliedAt
+  };
+}
+
+function validateValidatorResourcePolicy(input = {}) {
+  const versionId = String(input.versionId || '').trim();
+  const checksum = String(input.checksum || '').trim();
+  if (!/^arp_[A-Za-z0-9._:-]{1,160}$/.test(versionId)) {
+    throw resourcePolicyError('VALIDATOR_RESOURCE_POLICY_VERSION_INVALID', 'Validator resource policy version is invalid.');
+  }
+  if (!/^sha256:[a-f0-9]{64}$/.test(checksum)) {
+    throw resourcePolicyError('VALIDATOR_RESOURCE_POLICY_CHECKSUM_INVALID', 'Validator resource policy checksum is invalid.');
+  }
+  return {
+    versionId,
+    checksum,
+    queueLimit: strictPolicyInteger(input.queueLimit, 0, 64, 'queueLimit'),
+    queueWaitMs: strictPolicyInteger(input.queueWaitMs, 1000, 120000, 'queueWaitMs'),
+    executionTimeoutMs: strictPolicyInteger(input.executionTimeoutMs, 5000, 120000, 'executionTimeoutMs')
+  };
+}
+
+function strictPolicyInteger(value, minimum, maximum, name) {
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < minimum || number > maximum) {
+    throw resourcePolicyError('VALIDATOR_RESOURCE_POLICY_VALUE_INVALID', `${name} must be an integer between ${minimum} and ${maximum}.`);
+  }
+  return number;
+}
+
+function resourcePolicyError(code, message) {
+  const error = new Error(message);
+  error.code = code;
+  error.status = 400;
+  return error;
 }
 
 async function generatePlantUml(input) {
@@ -623,6 +696,8 @@ function sysmlNameReference(value) {
 }
 
 module.exports = {
+  applyValidatorResourcePolicy,
+  validatorResourcePolicyState,
   validateWorkspace,
   generatePlantUml,
   validatorHealth,

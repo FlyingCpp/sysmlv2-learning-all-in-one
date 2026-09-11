@@ -1,0 +1,8 @@
+{
+  "fixtureSetId": "ai-teacher-student-question-limit-v1",
+  "evidenceClass": "synthetic-utf8-boundary-regression",
+  "prefix": "长中文学生问题上下文连续性检查：",
+  "acceptedCharacters": 8101,
+  "policyBoundaryCharacters": 16000,
+  "rejectedCharacters": 16001
+}

@@ -12,9 +12,12 @@ class ValidatorAdmissionError extends Error {
 
 class ValidatorAdmissionQueue {
   constructor(options = {}) {
-    this.maxInFlight = strictInteger(options.maxInFlight, 1, 1, 1, 'maxInFlight');
-    this.queueLimit = strictInteger(options.queueLimit, 8, 0, 1000, 'queueLimit');
-    this.queueWaitMs = strictInteger(options.queueWaitMs, 15000, 1, 300000, 'queueWaitMs');
+    if (Object.hasOwn(options, 'maxInFlight')) {
+      throw new RangeError('maxInFlight is an observed Validator capability, not a configurable policy field.');
+    }
+    this.maxInFlight = officialValidatorExecutionCapacity();
+    this.queueLimit = strictInteger(options.queueLimit, undefined, 0, 1000, 'queueLimit');
+    this.queueWaitMs = strictInteger(options.queueWaitMs, undefined, 1, 300000, 'queueWaitMs');
     this.inFlight = 0;
     this.queue = [];
     this.sequence = 0;
@@ -98,6 +101,12 @@ class ValidatorAdmissionQueue {
       }, this.queueWaitMs);
       this.queue.push(item);
     });
+  }
+
+  updateSettings(options = {}) {
+    this.queueLimit = strictInteger(options.queueLimit, this.queueLimit, 0, 1000, 'queueLimit');
+    this.queueWaitMs = strictInteger(options.queueWaitMs, this.queueWaitMs, 1, 300000, 'queueWaitMs');
+    return this.snapshot();
   }
 
   snapshot() {
@@ -220,6 +229,11 @@ class ValidatorAdmissionQueue {
     this.recordObservation(item, validatorObservation);
     return error;
   }
+}
+
+function officialValidatorExecutionCapacity() {
+  // 当前Official Validator Owner只有一个串行JVM执行通道；这是物理能力回读，不是资源策略旋钮。
+  return 1;
 }
 
 function observation(admissionOutcome, queueWaitMs, executionMs, retryableBeforeStart, abortedAfterStart) {

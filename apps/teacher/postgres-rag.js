@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const {
   migrateSysmlKnowledgeStore,
   queryActiveSysmlKnowledge,
+  listActiveExampleCatalog,
   sysmlKnowledgeResultToHits
 } = require('./sysml-knowledge-store');
 const {
@@ -72,6 +73,19 @@ function createPostgresKnowledgeRetriever(options = {}) {
         rankingMode: searchOptions.rankingMode || rankingMode
       });
     },
+    async searchExamples(query, context = {}, searchOptions = {}) {
+      return queryActiveSysmlKnowledge(pool, query, context, {
+        ...searchOptions,
+        limit: Math.max(1, Number(searchOptions.limit) || 8),
+        exampleLimit: searchOptions.exampleLimit,
+        constructTags: searchOptions.constructTags || [],
+        queryPlan: searchOptions.queryPlan,
+        rankingMode: searchOptions.rankingMode || rankingMode
+      });
+    },
+    async listExampleCatalog(context = {}, options = {}) {
+      return listActiveExampleCatalog(pool, options);
+    },
     async searchAnchors(query, context = {}, searchOptions = {}) {
       const requestTenantId = tenantIdForContext(context, tenantId);
       const result = await searchActiveKnowledgeAnchors(pool, query, context, {
@@ -125,16 +139,7 @@ function sessionIdForContext(context, options = {}) {
 }
 
 function createPool(options = {}) {
-  const connectionString = options.connectionString || process.env.AI_TEACHER_DB_URL || process.env.DATABASE_URL;
-  if (!connectionString) {
-    throw new Error('AI_TEACHER_DB_URL or DATABASE_URL is required for postgres_pgvector retrieval');
-  }
-  const { Pool } = require('pg');
-  return new Pool({
-    connectionString,
-    max: Number(options.maxPoolSize || process.env.AI_TEACHER_DB_POOL_MAX || 5),
-    connectionTimeoutMillis: Number(options.connectionTimeoutMillis || process.env.AI_TEACHER_DB_CONNECT_TIMEOUT_MS || 5000)
-  });
+  return require('./database-pool-policy').createTeacherDatabasePool(options, 'postgres_pgvector retrieval');
 }
 
 async function migratePostgresKnowledgeStore(options = {}) {
@@ -175,19 +180,22 @@ async function searchPostgresKnowledge(pool, query, context = {}, options = {}) 
   const limit = Math.max(0, Math.min(Number.isFinite(requestedLimit) ? Math.floor(requestedLimit) : DEFAULT_LIMIT, MAX_LIMIT));
   const queryText = queryTextWithContext(query, context);
   const graphResult = await queryActiveSysmlKnowledge(pool, query, context, {
+    offset: options.offset,
+    exampleIds: options.exampleIds,
+    claimIds: options.claimIds,
+    evidenceIds: options.evidenceIds,
     limit,
     queryPlan: options.queryPlan,
     rankingMode: options.rankingMode,
-    selectedPatternIds: options.selectedPatternIds
+    selectedPatternIds: options.selectedPatternIds,
+    exampleLimit: options.exampleLimit,
+    constructTags: options.constructTags
   });
-  if (graphResult.coverage !== 'NONE') {
-    // 图查询已按 25 条资源上限裁剪；这里不得再次用模型 limit 截断 required Claim 闭包。
-    const graphHits = sysmlKnowledgeResultToHits(graphResult);
-    await recordRetrievalEvent(pool, tenantId, context, queryText, graphHits, graphResult.ranking);
-    return graphHits;
-  }
-  await recordRetrievalEvent(pool, tenantId, context, queryText, []);
-  return [];
+  const graphHits = sysmlKnowledgeResultToHits(graphResult);
+  // 兼容卡片数组只用于旧展示；无 Claim 的案例页也必须保留完整图结果和续页信息。
+  Object.defineProperty(graphHits, 'graph', { value: graphResult, enumerable: false });
+  await recordRetrievalEvent(pool, tenantId, context, queryText, graphHits, graphResult.ranking);
+  return graphHits;
 }
 
 async function recordRetrievalEvent(pool, tenantId, context, query, hits, ranking = undefined) {

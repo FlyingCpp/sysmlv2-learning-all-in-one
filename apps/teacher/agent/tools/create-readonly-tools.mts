@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { selectKnowledgeContent } from "../knowledge-content.mjs";
 
 import { tool } from "ai";
 import type { z } from "zod";
@@ -109,7 +110,7 @@ async function executeBoundTool<OUTPUT>(args: {
     input: args.input,
     abortSignal: args.abortSignal,
     ...(priorResult ? { replayedFromRunId: priorResult.sourceRunId } : {}),
-    operation: async () => {
+    operation: async ({ markBackendExecutionStarted }) => {
       assertToolCapability(args.capabilityGrant, args.toolName);
       if (priorResult) {
         const output = args.outputSchema.parse(priorResult.output);
@@ -127,6 +128,7 @@ async function executeBoundTool<OUTPUT>(args: {
         ? args.runResources.budget.reserve(args.budgetOperation)
         : undefined;
       try {
+        markBackendExecutionStarted();
         const rawOutput = await args.operation();
         const output = args.outputSchema.parse(rawOutput);
         args.outputGuard?.(output);
@@ -134,6 +136,7 @@ async function executeBoundTool<OUTPUT>(args: {
         if (permit) args.runResources?.budget.settle(permit, "succeeded");
         return output;
       } catch (error) {
+        if (args.toolName === "search_reviewed_knowledge") args.runResources?.knowledge.releaseFailedQuery(args.input);
         if (permit) {
           args.runResources?.budget.settle(
             permit,
@@ -148,6 +151,22 @@ async function executeBoundTool<OUTPUT>(args: {
 
 function authorizedFiles(context: TeacherAgentContext): Map<string, TeacherAgentContext["model"]["files"][number]> {
   return new Map(context.model.files.map((file) => [file.fileId, file]));
+}
+
+function authorizedInspectedFiles(
+  context: TeacherAgentContext,
+  source: "current_workspace" | "last_validated_candidate",
+): Map<string, TeacherAgentContext["model"]["files"][number]> {
+  if (source === "current_workspace") return authorizedFiles(context);
+  const candidate = context.conversationSubjects?.lastValidatedCandidate;
+  if (!candidate) throw new Error("Last validated Candidate is unavailable");
+  return new Map([[candidate.fileId, {
+    fileId: candidate.fileId,
+    displayName: candidate.displayName,
+    content: candidate.content,
+    contentHash: candidate.contentHash,
+    editable: true,
+  }]]);
 }
 
 function candidateTargetReadOnlyError(fileId: string): Error & { readonly code: string } {
@@ -255,7 +274,7 @@ export function createReadOnlyTools(options: ToolRegistryOptions) {
 
   const inspectLessonContext = tool({
     description:
-      "读取当前课程与课时目标。参数不包含路径；仅返回服务端绑定到本次运行的课程上下文。",
+      "按需读取当前课程与课时目标、课程规则和课程参考工作区。参数不包含路径；仅返回服务端绑定到本次运行的可信课程资产。课程规则是工程Review参考，不是Official Validator硬门。",
     strict: true,
     inputSchema: inspectLessonContextInputSchema,
     execute: async (input, execution) => {
@@ -305,7 +324,10 @@ export function createReadOnlyTools(options: ToolRegistryOptions) {
         phaseAction: "knowledge_search",
         runResources: options.runResources,
         outputGuard: (output) => {
-          const authorized = authorizedFiles(options.context);
+          if (output.source !== input.source) {
+            throw new Error("Model dependency returned a different source");
+          }
+          const authorized = authorizedInspectedFiles(options.context, input.source);
           for (const file of output.files) {
             const expected = authorized.get(file.fileId);
             if (
@@ -317,11 +339,20 @@ export function createReadOnlyTools(options: ToolRegistryOptions) {
               throw new Error("Model dependency returned data outside the authorized snapshot");
             }
           }
-          if (output.activeFileId !== options.context.model.activeFileId) {
+          const expectedActiveFileId = input.source === "current_workspace"
+            ? options.context.model.activeFileId
+            : options.context.conversationSubjects?.lastValidatedCandidate?.fileId;
+          if (output.activeFileId !== expectedActiveFileId) {
             throw new Error("Model dependency returned a different active file");
           }
-          if (output.activeDiagnosticId !== options.context.model.activeDiagnosticId) {
+          const expectedActiveDiagnosticId = input.source === "current_workspace"
+            ? options.context.model.activeDiagnosticId
+            : undefined;
+          if (output.activeDiagnosticId !== expectedActiveDiagnosticId) {
             throw new Error("Model dependency returned a different active diagnostic");
+          }
+          if (input.source === "last_validated_candidate" && output.diagnostics.length > 0) {
+            throw new Error("Previous Candidate inspection must not inherit current diagnostics");
           }
         },
         operation: async () => {
@@ -332,7 +363,7 @@ export function createReadOnlyTools(options: ToolRegistryOptions) {
             abortSignal: execution.abortSignal,
           });
           const parsed = currentModelOutputSchema.parse(rawOutput);
-          return { ...parsed, focus: grounding };
+          return parsed;
         },
       });
       return output;
@@ -373,6 +404,12 @@ export function createReadOnlyTools(options: ToolRegistryOptions) {
   });
 
   const searchReviewedKnowledge = tool({
+    toModelOutput: ({ output }) => {
+      const selected = selectKnowledgeContent([output], options.runResources?.knowledgeWindowTokens ?? Number.POSITIVE_INFINITY);
+      return { type: "json" as const, value: JSON.parse(JSON.stringify({
+        ...(output as Record<string, unknown>), ...selected, disclosedContentComplete: selected.deferredContent.length === 0,
+      })) };
+    },
     description:
       "从当前Active SysML v2权威知识Bundle检索已审核Claim与Evidence。首次调用返回可选Knowledge Pattern；只有你确认Pattern适合学生原问题时，才在后续调用提交其selectedPatternIds以加载完整闭包。Pattern候选本身不是回答义务。",
     strict: true,
@@ -386,8 +423,8 @@ export function createReadOnlyTools(options: ToolRegistryOptions) {
         capabilityGrant: options.capabilityGrant,
         ledger: options.ledger,
         outputSchema: reviewedKnowledgeOutputSchema,
-        phaseAction: "knowledge_search",
         budgetOperation: "knowledge_backend",
+        phaseAction: "knowledge_search",
         runResources: options.runResources,
         outputGuard: (output) => {
           if (output.requestedQuery !== input.query) {

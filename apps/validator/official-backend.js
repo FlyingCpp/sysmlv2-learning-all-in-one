@@ -4,6 +4,14 @@ const { spawn } = require('child_process');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const {
+  BOOTSTRAP_VALUES: AGENT_RESOURCE_POLICY_BOOTSTRAP_VALUES,
+  runtimeProjection: agentResourcePolicyRuntimeProjection
+} = require('../../packages/agent-resource-policy');
+
+const DEFAULT_VALIDATOR_EXECUTION_TIMEOUT_MS = agentResourcePolicyRuntimeProjection(
+  AGENT_RESOURCE_POLICY_BOOTSTRAP_VALUES
+).validator.executionTimeoutMs;
 
 const OFFICIAL_SOURCE = 'official-sysml-v2-pilot-2026-04';
 const RELEASE_TAG = process.env.SYSML_RELEASE_TAG || '2026-04';
@@ -24,10 +32,7 @@ class OfficialValidatorBackend {
     this.classesPath = options.classesPath || process.env.SYSML_WRAPPER_CLASSES || path.join(__dirname, 'official', 'classes');
     this.javaBin = options.javaBin || process.env.JAVA_BIN || 'java';
     this.timeoutMs = strictPositiveInteger(
-      options.timeoutMs
-      ?? process.env.AI_TEACHER_VALIDATOR_EXECUTION_TIMEOUT_MS
-      ?? process.env.OFFICIAL_VALIDATOR_TIMEOUT_MS
-      ?? 25000,
+      options.timeoutMs ?? DEFAULT_VALIDATOR_EXECUTION_TIMEOUT_MS,
       'AI_TEACHER_VALIDATOR_EXECUTION_TIMEOUT_MS'
     );
     this.enabled = options.enabled ?? process.env.OFFICIAL_VALIDATOR_ENABLED !== 'false';
@@ -74,6 +79,11 @@ class OfficialValidatorBackend {
       lastError: this.lastError ? 'official-validator-process-error' : null,
       timeoutMs: this.timeoutMs
     };
+  }
+
+  updateTimeoutMs(timeoutMs) {
+    this.timeoutMs = strictPositiveInteger(timeoutMs, 'AI_TEACHER_VALIDATOR_EXECUTION_TIMEOUT_MS');
+    return this.timeoutMs;
   }
 
   artifactAttestation() {

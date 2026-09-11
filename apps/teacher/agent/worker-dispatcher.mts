@@ -16,6 +16,7 @@ import type {
   WorkerTaskView,
 } from "./worker-contracts.mjs";
 import { createWorkerFailureResult } from "./worker-result.mjs";
+import { lessonContextOutputSchema } from "./types.mjs";
 
 export interface WorkerExecutionContext {
   readonly resources: RunResources;
@@ -143,11 +144,24 @@ export function projectWorkerTaskView(
     target: task.target,
     baseline: task.baseline,
     preservationPolicyRef: task.preservationPolicyRef,
-    model: resources.input.model,
+    model: projectTaskModel(resources, task),
     knowledge: projectWorkerEvidenceView(resources, task),
+    ...projectInspectedLessonContext(resources),
   };
   return task.workerType === "candidate"
-    ? Object.freeze({ ...base, workerType: "candidate", mode: task.mode })
+    ? Object.freeze({
+      ...base,
+      workerType: "candidate",
+      mode: task.mode,
+      subject: task.subject,
+      ...(task.iterationDirective ? { iterationDirective: task.iterationDirective } : {}),
+      ...(task.validatedCandidateBinding?.candidate && task.validatedCandidateBinding.validation ? {
+        validatedBaseline: Object.freeze({
+          candidate: task.validatedCandidateBinding.candidate,
+          validation: task.validatedCandidateBinding.validation,
+        }),
+      } : {}),
+    })
     : Object.freeze({ ...base, workerType: "repair", scope: task.scope });
 }
 
@@ -157,7 +171,7 @@ function preflight(input: WorkerDispatcherInput): DispatchRejectReason | undefin
   if (task.revision !== input.expectedRevision) return "task_revision_conflict";
   if (task.status !== "delegated") return "task_not_delegated";
   if (task.questionHash !== input.resources.input.questionHash) return "question_hash_conflict";
-  if (task.baseline.snapshotHash !== currentBaselineHash(input.resources)) return "baseline_conflict";
+  if (task.baseline.snapshotHash !== currentBaselineHash(input.resources, task)) return "baseline_conflict";
   if (input.abortSignal.aborted) {
     return workerAbortReason(input.abortSignal) !== "caller_cancelled"
       ? "deadline_exceeded"
@@ -171,13 +185,23 @@ function preflight(input: WorkerDispatcherInput): DispatchRejectReason | undefin
   return undefined;
 }
 
+function projectInspectedLessonContext(
+  resources: RunResources,
+): { courseContext?: ReturnType<typeof lessonContextOutputSchema.parse> } {
+  const entry = resources.ledger.snapshot().findLast((item) => (
+    item.toolName === "inspect_lesson_context" && item.status === "succeeded"
+  ));
+  const parsed = lessonContextOutputSchema.safeParse(entry?.output);
+  return parsed.success ? { courseContext: parsed.data } : {};
+}
+
 function preflightResumed(input: ResumedWorkerDispatcherInput): DispatchRejectReason | undefined {
   const task = input.resources.tasks.get(input.taskId);
   if (!task) return "unknown_task";
   if (task.revision !== input.expectedRevision) return "task_revision_conflict";
   if (task.status !== "delegated") return "task_not_delegated";
   if (task.questionHash !== input.resources.input.questionHash) return "question_hash_conflict";
-  if (task.baseline.snapshotHash !== currentBaselineHash(input.resources)) return "baseline_conflict";
+  if (task.baseline.snapshotHash !== currentBaselineHash(input.resources, task)) return "baseline_conflict";
   if (input.abortSignal.aborted) {
     return workerAbortReason(input.abortSignal) !== "caller_cancelled"
       ? "deadline_exceeded"
@@ -188,13 +212,29 @@ function preflightResumed(input: ResumedWorkerDispatcherInput): DispatchRejectRe
   return undefined;
 }
 
-function currentBaselineHash(resources: RunResources): string {
-  const files = resources.input.model.files.map((file) => ({
+function currentBaselineHash(resources: RunResources, task: TaskWorkingState): string {
+  const files = projectTaskModel(resources, task).files.map((file) => ({
     fileId: file.fileId,
     contentHash: file.contentHash,
     editable: file.editable,
   }));
   return `sha256:${createHash("sha256").update(JSON.stringify(files), "utf8").digest("hex")}`;
+}
+
+function projectTaskModel(
+  resources: RunResources,
+  task: TaskWorkingState,
+): RunResources["input"]["model"] {
+  if (task.workerType !== "candidate" || task.subject === "current_workspace") {
+    return resources.input.model;
+  }
+  if (task.subject === "standalone_model") {
+    return Object.freeze({ files: Object.freeze([]), diagnostics: Object.freeze([]) });
+  }
+  if (!task.validatedCandidateBinding) {
+    throw new TaskStateConflictError("Validated Candidate binding is unavailable");
+  }
+  return task.validatedCandidateBinding.model;
 }
 
 function assertWorkerResult(result: WorkerResult, task: WorkerTaskView): void {

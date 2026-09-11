@@ -17,9 +17,11 @@ const {
   validatePolicyValues: validateAgentResourcePolicyValues,
   checksumPolicyValues: checksumAgentResourcePolicyValues,
   createPolicySnapshot: createAgentResourcePolicySnapshot,
-  diffPolicyValues: diffAgentResourcePolicyValues,
-  migratePolicyValues: migrateAgentResourcePolicyValues
+  migratePolicyValues: migrateAgentResourcePolicyValues,
+  resolvePolicyModelReferenceValues,
+  diffPolicyValues: diffAgentResourcePolicyValues
 } = require('../../packages/agent-resource-policy');
+const { modelRegistryFromLiteLlmVersion } = require('./ai-teacher-model-registry');
 const {
   SYSON_TOOL_ID,
   defaultExternalModelingToolSettings,
@@ -91,7 +93,8 @@ function createAccountStore(options = {}) {
   const memoryLiteLlmConfigVersions = [seedLiteLlmConfigVersionRow()];
   const memoryLiteLlmCapabilityProbeRuns = [];
   const memoryAgentResourcePolicyVersions = migrateMemoryAgentResourcePolicyVersions(
-    Array.isArray(options.agentResourcePolicyVersions) ? options.agentResourcePolicyVersions : []
+    Array.isArray(options.agentResourcePolicyVersions) ? options.agentResourcePolicyVersions : [],
+    { modelRegistry: modelRegistryFromLiteLlmVersion(memoryLiteLlmConfigVersions[0]) }
   );
   const memoryUserEntitlements = new Map();
   const memoryAdminAuditEvents = [];
@@ -547,7 +550,7 @@ function createAccountStore(options = {}) {
     const userId = user.id || input.userId || '';
     const policies = await loadAiTeacherTierPolicies();
     const policy = resolveAiTeacherPolicy(user, policies);
-    const estimatedTokens = Math.max(0, Math.ceil(Number(input.estimatedTokens || input.estimatedTotalTokens || 0)));
+    const estimatedTokens = 0;
     const requestId = input.requestId || input.envelope?.requestId || '';
     const tenantId = input.tenantId || input.envelope?.tenant?.tenantId || '';
     const capability = input.capability || 'answer';
@@ -570,7 +573,9 @@ function createAccountStore(options = {}) {
       return decision;
     }
     const usage = await getAiUsageSummary(userId, { user, now: input.now });
-    const exceeded = quotaExceededReason(usage, policy, estimatedTokens);
+    // 账户额度只在一轮用户对话开始前做余额非零准入。estimatedTokens保留在
+    // 兼容响应和审计中，但不再作为本轮能否完整执行的预测门禁。
+    const exceeded = quotaExhaustedReason(usage, policy);
     if (!exceeded) {
       return { allowed: true, reason: 'within_quota', estimatedTokens, usage, policy };
     }
@@ -603,13 +608,12 @@ function createAccountStore(options = {}) {
   async function reserveAiTeacherBudget(input = {}) {
     const user = input.user || {};
     const userId = String(user.id || input.userId || '').trim();
-    const estimatedTokens = Math.max(1, Math.ceil(Number(input.estimatedTokens || input.estimatedTotalTokens || 0)));
-    const estimatedInputTokens = Math.max(0, Math.ceil(Number(input.estimatedInputTokens || 0)));
-    const estimatedOutputTokens = Math.max(0, Math.ceil(Number(input.estimatedOutputTokens || 0)));
+    const estimatedTokens = 0;
     const resourcePolicyVersion = String(input.resourcePolicyVersion || '').slice(0, 160);
     const requestId = String(input.requestId || input.envelope?.requestId || '').trim();
     const tenantId = String(input.tenantId || input.envelope?.tenant?.tenantId || '');
     const capability = String(input.capability || 'answer');
+    const reuseLineageAdmission = input.reuseLineageAdmission === true;
     if (!userId) return { allowed: false, status: 401, code: 'AUTH_REQUIRED', reason: 'auth_required' };
 
     const poolInstance = await ensurePool();
@@ -635,7 +639,7 @@ function createAccountStore(options = {}) {
         const usage = summarizeMemoryAiUsage(userId, now, memoryAiUsageLedger, memoryAiUsage, memoryAiQuotaResets.get(userId));
         const reserved = summarizeMemoryAiBudgetReservations(userId, now, memoryAiBudgetReservations, memoryAiQuotaResets.get(userId));
         const quotaUsage = withAiTeacherQuotaSummary(userId, { ...usage, ...reserved }, user, policies);
-        const exceeded = quotaExceededReason(quotaUsage, policy, estimatedTokens);
+        const exceeded = reuseLineageAdmission ? '' : quotaExhaustedReason(quotaUsage, policy);
         if (exceeded) return budgetDeniedDecision(exceeded, estimatedTokens, policy, quotaUsage);
         const reservationId = `budget_${crypto.randomUUID()}`;
         const expiresAt = new Date(now.getTime() + aiTeacherBudgetReservationTtlMs);
@@ -646,14 +650,16 @@ function createAccountStore(options = {}) {
           requestId,
           capability,
           tierCode: user.tier || 'free',
-          reservedTokens: estimatedTokens,
+          // Reservation只承担重复请求防护和Run结算绑定，不预扣预测Token。
+          // 准入后的整轮对话允许完整执行，实际用量在终态一次结算。
+          reservedTokens: 0,
           status: 'active',
           createdAt: now,
           expiresAt
         });
         return {
           allowed: true,
-          reason: 'budget_reserved',
+          reason: reuseLineageAdmission ? 'lineage_admission_reused' : 'conversation_admitted',
           estimatedTokens,
           reservationId,
           expiresAt: expiresAt.toISOString(),
@@ -717,7 +723,7 @@ function createAccountStore(options = {}) {
             reservedDailyTokens: reservedRow.reserved_daily_tokens || 0,
             reservedWeeklyTokens: reservedRow.reserved_weekly_tokens || 0
           }, user, policies);
-          const exceeded = quotaExceededReason(quotaUsage, policy, estimatedTokens);
+          const exceeded = reuseLineageAdmission ? '' : quotaExhaustedReason(quotaUsage, policy);
           if (exceeded) {
             decision = budgetDeniedDecision(exceeded, estimatedTokens, policy, quotaUsage);
           } else {
@@ -727,11 +733,11 @@ function createAccountStore(options = {}) {
                 (reservation_id, user_id, tenant_id, request_id, capability, tier_code, reserved_tokens, status, expires_at)
                values ($1, $2, $3, $4, $5, $6, $7, 'active', now() + ($8::bigint * interval '1 millisecond'))
                returning expires_at`,
-              [reservationId, userId, tenantId, requestId, capability, user.tier || 'free', estimatedTokens, aiTeacherBudgetReservationTtlMs]
+              [reservationId, userId, tenantId, requestId, capability, user.tier || 'free', 0, aiTeacherBudgetReservationTtlMs]
             );
             decision = {
               allowed: true,
-              reason: 'budget_reserved',
+              reason: reuseLineageAdmission ? 'lineage_admission_reused' : 'conversation_admitted',
               estimatedTokens,
               reservationId,
               expiresAt: insertResult.rows[0]?.expires_at?.toISOString?.() || insertResult.rows[0]?.expires_at || null,
@@ -761,9 +767,8 @@ function createAccountStore(options = {}) {
       dailyLimitTokens: policy.dailyTokenLimit,
       weeklyLimitTokens: policy.weeklyTokenLimit,
       metadata: {
-        estimatedTokens,
-        estimatedInputTokens,
-        estimatedOutputTokens,
+        admissionMode: reuseLineageAdmission ? 'lineage_reuse' : 'balance_nonzero',
+        estimationUsedForAdmission: false,
         resourcePolicyVersion,
         reservationId: decision.reservationId || '',
         reservedDailyTokens: decision.usage?.reservedDailyTokens || 0,
@@ -1451,7 +1456,7 @@ function createAccountStore(options = {}) {
       ? await getAgentResourcePolicyVersion(sourceVersionId)
       : await getActiveAgentResourcePolicyVersion();
     const requestedValues = values === undefined ? source?.values : values;
-    const normalizedInput = normalizeAgentResourcePolicyDraftValues(requestedValues);
+    const normalizedInput = normalizeAgentResourcePolicyDraftValues(requestedValues, modelRegistry);
     const validation = validateAgentResourcePolicyValues(normalizedInput, { baseline: source?.values, modelRegistry });
     if (validation.errors.some((item) => item.code === 'POLICY_FIELD_UNKNOWN')) throwAgentResourcePolicyInvalid(validation);
     const row = {
@@ -2493,7 +2498,7 @@ async function ensureSchema(pool) {
       request_id text not null default '',
       capability text not null default 'answer',
       tier_code text not null default 'free',
-      reserved_tokens integer not null check (reserved_tokens > 0),
+      reserved_tokens integer not null constraint ai_teacher_budget_reservations_reserved_tokens_check check (reserved_tokens >= 0),
       actual_tokens integer,
       status text not null default 'active' check (status in ('active', 'settled', 'released', 'expired')),
       expires_at timestamptz not null,
@@ -2579,6 +2584,32 @@ async function ensureSchema(pool) {
   await pool.query(`alter table ai_usage_ledger add column if not exists usage_source text not null default 'provider'`);
   await pool.query(`alter table ai_usage_ledger add column if not exists status text not null default 'succeeded'`);
   await pool.query(`alter table ai_usage_ledger add column if not exists budget_reservation_id text`);
+  await pool.query(`
+    do $$
+    declare
+      constraint_definition text;
+    begin
+      select pg_get_constraintdef(oid)
+        into constraint_definition
+        from pg_constraint
+       where conrelid = 'ai_teacher_budget_reservations'::regclass
+         and conname = 'ai_teacher_budget_reservations_reserved_tokens_check';
+      if constraint_definition is not null and constraint_definition not like '%>= 0%' then
+        alter table ai_teacher_budget_reservations
+          drop constraint ai_teacher_budget_reservations_reserved_tokens_check;
+      end if;
+      if not exists (
+        select 1
+          from pg_constraint
+         where conrelid = 'ai_teacher_budget_reservations'::regclass
+           and conname = 'ai_teacher_budget_reservations_reserved_tokens_check'
+      ) then
+        alter table ai_teacher_budget_reservations
+          add constraint ai_teacher_budget_reservations_reserved_tokens_check
+          check (reserved_tokens >= 0);
+      end if;
+    end $$;
+  `);
   await pool.query(`create index if not exists ai_usage_ledger_user_created_idx on ai_usage_ledger (user_id, created_at desc)`);
   await pool.query(`create unique index if not exists ai_usage_ledger_budget_reservation_idx on ai_usage_ledger (budget_reservation_id) where budget_reservation_id is not null`);
   await pool.query(`create index if not exists ai_teacher_budget_reservations_user_status_idx on ai_teacher_budget_reservations (user_id, status, created_at desc)`);
@@ -2874,7 +2905,8 @@ function migrateMemoryAgentResourcePolicyVersions(rows = [], options = {}) {
   if (!activeRows.length) {
     migratedRows.push(seedAgentResourcePolicyVersionRow({
       now: options.now,
-      sequence: nextMemoryPolicySequence(migratedRows)
+      sequence: nextMemoryPolicySequence(migratedRows),
+      modelRegistry: options.modelRegistry
     }));
     return migratedRows;
   }
@@ -2903,15 +2935,25 @@ async function migratePostgresAgentResourcePolicyVersions(pool, options = {}) {
         limit 1
         for update`
     );
+    const activeLiteLlmResult = await client.query(
+      `select version_id, status, config_json, rendered_yaml, checksum, validation_json, created_by, published_by, notes, created_at, published_at
+         from ai_teacher_litellm_config_versions
+        where status = 'active'
+        order by published_at desc nulls last, created_at desc
+        limit 1`
+    );
+    const modelRegistry = activeLiteLlmResult.rows[0]
+      ? modelRegistryFromLiteLlmVersion(publicLiteLlmConfigVersion(activeLiteLlmResult.rows[0], { includeRenderedYaml: false }))
+      : null;
 
     if (!activeResult.rows.length) {
-      await insertActiveAgentResourcePolicyVersion(client, seedAgentResourcePolicyVersionRow({ now }), now);
+      await insertActiveAgentResourcePolicyVersion(client, seedAgentResourcePolicyVersionRow({ now, modelRegistry }), now);
       await client.query('commit');
       return { action: 'seeded', versionId: `arp_bootstrap_v${AGENT_RESOURCE_POLICY_SCHEMA_VERSION}` };
     }
 
     const source = publicAgentResourcePolicyVersion(activeResult.rows[0]);
-    const migration = createAgentResourcePolicySchemaMigrationRow(source, { now });
+    const migration = createAgentResourcePolicySchemaMigrationRow(source, { now, modelRegistry });
     if (!migration) {
       await client.query('commit');
       return { action: 'unchanged', versionId: source.versionId };
@@ -2938,21 +2980,11 @@ async function migratePostgresAgentResourcePolicyVersions(pool, options = {}) {
 
 function createAgentResourcePolicySchemaMigrationRow(sourceRow, options = {}) {
   const source = cloneAgentResourcePolicyVersion(sourceRow);
-  const currentValidation = validateAgentResourcePolicyValues(source.values);
+  const currentValidation = validateAgentResourcePolicyValues(source.values, { modelRegistry: options.modelRegistry });
   if (currentValidation.ok) return null;
-  let migrationResult;
-  try {
-    migrationResult = migrateAgentResourcePolicyValues(source.values);
-  } catch (error) {
-    if (error?.code === 'AGENT_RESOURCE_POLICY_SCHEMA_MIGRATION_INVALID') {
-      throwAgentResourcePolicyMigrationInvalid('invalid_deprecated_source_values');
-    }
-    throw error;
-  }
-  if (migrationResult.unknownKeys.length) {
-    throwAgentResourcePolicyMigrationInvalid('unsupported_source_values');
-  }
-  const validation = validateAgentResourcePolicyValues(migrationResult.values);
+  const migrationResult = migrateAgentResourcePolicyValues(source.values, { modelRegistry: options.modelRegistry });
+  if (migrationResult.unknownKeys.length) throwAgentResourcePolicyMigrationInvalid('unsupported_source_values');
+  const validation = validateAgentResourcePolicyValues(migrationResult.values, { modelRegistry: options.modelRegistry });
   if (!validation.ok) throwAgentResourcePolicyMigrationInvalid('migrated_values_invalid');
   const checksum = checksumAgentResourcePolicyValues(validation.values);
   const migrationId = crypto.createHash('sha256')
@@ -3179,11 +3211,14 @@ function resolveAiTeacherPolicy(user = {}, policies = buildAiTeacherTierPolicies
   return policies[user.tier || 'free'] || policies.free;
 }
 
-function quotaExceededReason(usage, policy, estimatedTokens) {
-  const dailyCommitted = positiveInteger(usage.dailyTokens) + positiveInteger(usage.reservedDailyTokens);
-  const weeklyCommitted = positiveInteger(usage.weeklyTokens) + positiveInteger(usage.reservedWeeklyTokens);
-  if (policy.dailyTokenLimit && dailyCommitted + estimatedTokens > policy.dailyTokenLimit) return 'daily_quota_exceeded';
-  if (policy.weeklyTokenLimit && weeklyCommitted + estimatedTokens > policy.weeklyTokenLimit) return 'weekly_quota_exceeded';
+function quotaExhaustedReason(usage, policy) {
+  // 不预测本轮消耗，也不因活动Reservation预扣余额。只要日、周两个适用窗口
+  // 在对话开始时都还有余额，本轮即可完整执行；终态实际用量超过额度后，
+  // remainingTokens()确定性钳制为0，下一轮才拒绝。
+  const dailyUsed = positiveInteger(usage.dailyTokens);
+  const weeklyUsed = positiveInteger(usage.weeklyTokens);
+  if (policy.dailyTokenLimit && dailyUsed >= policy.dailyTokenLimit) return 'daily_quota_exceeded';
+  if (policy.weeklyTokenLimit && weeklyUsed >= policy.weeklyTokenLimit) return 'weekly_quota_exceeded';
   return '';
 }
 
@@ -3447,9 +3482,9 @@ function normalizeAgentResourcePolicyVersionId(value) {
   return id;
 }
 
-function normalizeAgentResourcePolicyDraftValues(values) {
+function normalizeAgentResourcePolicyDraftValues(values, modelRegistry) {
   if (!values || typeof values !== 'object' || Array.isArray(values)) return {};
-  return JSON.parse(JSON.stringify(values));
+  return resolvePolicyModelReferenceValues(JSON.parse(JSON.stringify(values)), modelRegistry);
 }
 
 function nextMemoryPolicySequence(rows) {
@@ -3477,8 +3512,8 @@ function publicAgentResourcePolicyVersion(row = {}) {
 }
 
 function seedAgentResourcePolicyVersionRow(options = {}) {
-  const values = { ...AGENT_RESOURCE_POLICY_BOOTSTRAP_VALUES };
-  const validation = validateAgentResourcePolicyValues(values);
+  const values = resolvePolicyModelReferenceValues({ ...AGENT_RESOURCE_POLICY_BOOTSTRAP_VALUES }, options.modelRegistry);
+  const validation = validateAgentResourcePolicyValues(values, { modelRegistry: options.modelRegistry });
   const now = options.now || new Date(0).toISOString();
   return {
     versionId: `arp_bootstrap_v${AGENT_RESOURCE_POLICY_SCHEMA_VERSION}`,
