@@ -60,3 +60,9 @@ package Broken {
 修正后 Teacher 编译通过，22 组 Teacher 运行管理测试全部通过，新增专项覆盖问题指定／候选产生 BrowserView、中文别名、混合未支持视图、确定性回退和无关问题。日志为 `.tmp/ui-retest-teacher-build.log`、`.tmp/ui-retest-teacher-regression.log`。新 Teacher 镜像 `synfeld-teacher:keywords-ui` 已接入原测试栈，镜像构建退出 0；六项 Token 布尔门和真实 Validator Tool 再次通过（HTTP 200、语法／语义通过、无 fallback），见 `.tmp/ui-retest-teacher-image.log`、`.tmp/ui-retest-runtime-gate.log`。公开边界、129 词条一致性和差异检查通过。
 
 当前剩余验收是周配额可用后的修正版本真实能力问答，以及 Chrome 扩展链路本身。没有调整配额或切换身份绕过限制；前两轮真实交付、自动回归和实际成员树展示均不能替代修正后的真实模型答案。
+
+## README 资源树展示前的能力核对
+
+2026-09-11，核对公开 main `f68b95e` 的 `WorkbenchPage.tsx`、`SysmlCodeMirror.tsx` 与 `MuiModelOutlineTree.tsx`，并在既有本地应用内浏览器测试会话执行两项验证：向 Broken 包新增 `part navProbe;` 后，资源树自动出现 navProbe 且显示“已与当前代码同步”；点击 navProbe 节点后，编辑器出现 `cm-navigationHighlight`，高亮内容为 navProbe。验证后恢复原模型，没有发起新的 AI 提问。
+
+确认范围是树节点定位代码、代码修改后自动刷新官方语义树。源码定位需要节点具有可用的位置信息，语义树刷新需要成功解析；当前没有将编辑器光标绑定到树的受控选择／展开状态，因此 README 不声称光标移动会自动选中并展开对应树节点，也不声称可以在树中直接编辑模型。

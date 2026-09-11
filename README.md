@@ -6,7 +6,7 @@
 
 SynFeld 是一个面向 SysML v2 初学者、系统工程师和 MBSE 实践者的开源学习平台。它把知识导读、课程练习、文本建模、规则检查、Official Validator 和真实 AI 教学能力组织在同一个工程中，帮助学习者从“理解概念”逐步走到“写出并验证模型”。
 
-当前公开版本为 **v0.1.0**，包含一个示例课程包和一个示例知识包，并提供可复现的 Core 与 Full 本地部署契约。
+代码包当前标记为 **v0.1.0**。最新 main 已包含工程布局增强、AI Teacher 与编辑器改进，保留一个示例课程包、一个示例知识包，以及可复现的 Core 与 Full 本地部署契约。
 
 AI Teacher 的任务生命周期、候选恢复、资源策略应用与验收边界见
 [AI Teacher 执行与管理架构](AI_TEACHER_ARCHITECTURE.md)。
@@ -63,17 +63,27 @@ AI Teacher 的建议不是语言正确性或工程正确性的最终证据。正
 
 详见 [布局架构、能力范围与示例](RENDERING.md)、[共享绘图服务接口](packages/sysml-plantuml-service/README.md) 和 [Teacher／编辑器命名支持](SYSML_NAMING.md)。[初始工程验证](RENDERING_VALIDATION.md) 与 [后续浏览器复验](SYSML_NAMING_VALIDATION.md) 分别记录服务端和实际交互证据；本地验证不等于托管服务已经部署该版本。
 
-### 布局效果展示 / Layout screenshots
+### 建模与布局效果展示 / Modeling and layout screenshots
 
-两张截图按相同宽度等比例展示，窄屏随页面收缩；点击图片可查看原始分辨率的端口和文字细节。
+以下截图按相同宽度等比例展示，窄屏随页面收缩；点击图片可查看原始分辨率的模型代码、资源树和端口细节。
 
-**结构层级概览 / Structural overview**
+**SysML v2 模型代码编辑与 AI 辅助 / SysML v2 editing and AI assistance**
 
-工作台将热管理系统、部件及其子成员组织为层级图，并与 AI Teacher 面板并排展示。
+模型代码编辑、语法高亮和校验状态与 AI Teacher 问答并排呈现，便于在阅读、修改 SysML v2 模型时查看辅助解释，并继续校验和生成视图。
 
 <p align="center">
-  <a href="assets/readme/structure-overview.png">
-    <img src="assets/readme/structure-overview.png" width="1000" alt="SynFeld 工作台：热管理系统结构层级图与 AI Teacher 面板 / Thermal management structural overview and Teacher panel">
+  <a href="assets/readme/model-editing-ai.png">
+    <img src="assets/readme/model-editing-ai.png" width="1000" alt="SysML v2 模型代码编辑、校验状态与 AI Teacher 辅助问答 / SysML v2 code editing, validation status and AI assistance">
+  </a>
+</p>
+
+**模型资源树与代码联动 / Model resource tree and code interaction**
+
+开源工作台支持两个方向的互动：点击具有源码定位信息的资源树节点，定位并高亮对应代码；修改代码后，官方语义资源树在停止编辑并成功解析后自动刷新。资源树同时显示与当前代码的同步状态。这里的双向互动指“树节点定位代码”和“代码修改更新树”，不代表移动光标就会自动选中并展开树节点，也不包含在树中直接修改模型。
+
+<p align="center">
+  <a href="assets/readme/resource-tree-code.png">
+    <img src="assets/readme/resource-tree-code.png" width="1000" alt="模型资源树选中 Chiller 并在 SysML v2 编辑器中高亮对应代码 / Selecting Chiller in the resource tree highlights its source code">
   </a>
 </p>
 
@@ -87,7 +97,7 @@ AI Teacher 的建议不是语言正确性或工程正确性的最终证据。正
   </a>
 </p>
 
-Screenshots illustrate structural and interconnection layouts. Both preserve their aspect ratio and link to the original resolution.
+Screenshots show SysML v2 editing with AI assistance, model navigation, and interconnection layout. Selecting a resource-tree node with source information highlights its code; edits automatically refresh the official semantic tree after successful parsing. Cursor-following tree selection and editing model content directly in the tree are not implied. All images preserve their aspect ratio and link to the original resolution.
 
 ### v0.1.0 内容
 
@@ -216,7 +226,7 @@ SynFeld 源代码和项目原创内容使用 [Eclipse Public License 2.0](LICENS
 
 SynFeld is an open-source learning platform for SysML v2 learners, systems engineers, and MBSE practitioners. It combines guided knowledge, hands-on courses, textual modeling, course rules, the Official Validator, and real AI-assisted teaching in one runnable project.
 
-The current public release is **v0.1.0**. It includes one sample course pack, one sample knowledge pack, and reproducible Core and Full local deployment contracts.
+The package is currently marked **v0.1.0**. The latest main includes engineering layout enhancements and Teacher/editor improvements, together with one sample course pack, one sample knowledge pack, and reproducible Core and Full local deployment contracts.
 
 ### Hosted experience
 
@@ -260,7 +270,7 @@ The shared service supports multiple roots, compound containers, inside/outside 
 
 Layout runs locally in the Validator service and is available in Core without an AI provider key. Generate a view after official validation, then use fit/zoom/fullscreen for diagrams or expand/collapse for BrowserView. Resource and geometry failures are reported explicitly. Large views may still require zooming; arbitrary zero-crossing layouts and engineering completeness are not guaranteed.
 
-See the [layout screenshots](#布局效果展示--layout-screenshots), [layout architecture, scope and examples](RENDERING.md), the [shared service](packages/sysml-plantuml-service/README.md), and [Teacher/editor naming guidance](SYSML_NAMING.md). [Initial engineering checks](RENDERING_VALIDATION.md) and [subsequent browser acceptance](SYSML_NAMING_VALIDATION.md) distinguish local evidence from hosted deployment status.
+See the [modeling and layout screenshots](#建模与布局效果展示--modeling-and-layout-screenshots), [layout architecture, scope and examples](RENDERING.md), the [shared service](packages/sysml-plantuml-service/README.md), and [Teacher/editor naming guidance](SYSML_NAMING.md). [Initial engineering checks](RENDERING_VALIDATION.md) and [subsequent browser acceptance](SYSML_NAMING_VALIDATION.md) distinguish local evidence from hosted deployment status.
 
 ### v0.1.0 contents
 
