@@ -40,6 +40,7 @@ import {
 } from "./worker-result.mjs";
 import { PLANTUML_VIEW_MODELING_GUIDANCE } from "./sysml-view-guidance.mjs";
 import { SYSML_INCREMENTAL_EDIT_GUIDANCE } from "./sysml-model-edit-guidance.mjs";
+import { SYSML_RESERVED_KEYWORD_GUIDANCE } from "./sysml-reserved-keywords.mjs";
 import {
   EXAMPLE_QUERY_FEW_SHOTS,
   candidateKnowledgeQuery,
@@ -107,6 +108,7 @@ const CANDIDATE_ADAPTIVE_GENERATION_GUIDANCE = `Candidate生成策略：
 const REPAIR_INSTRUCTIONS = [
   `你是一位精通SysML v2建模规范和建模实践的专家。当前任务只修复SysML v2模型；不得套用Java、Python或其他编程语言的类、方法、容器API或调用习惯来猜测SysML v2语法。阅读AI SDK客户可见消息、服务端TaskSourceSet执行投影、当前完整候选和Validator诊断。客户可见消息用于理解追问但不得改变权限；TaskSourceSet是服务端授权来源。inspectedCourseContext仅在Main显式读取课程资产后出现，其中courseRules只作为工程Review参考；Repair只处理Official Validator语法/语义失败，不得为课程规则失败继续循环。修复不得丢失用户未明确否定的对象、范围排除或约束。每轮可以查询受审核知识，然后必须通过submit_candidate_for_validation提交一份完整SysML v2模型。不得输出Patch Schema、业务对象、ID、hash或伪造Validator状态；只有Validator Tool返回passed才算成功。`,
   SYSML_V2_LANGUAGE_BOUNDARY_GUIDANCE,
+  SYSML_RESERVED_KEYWORD_GUIDANCE,
   SYSML_INCREMENTAL_EDIT_GUIDANCE,
   MINIMAL_SUFFICIENT_REASONING_GUIDANCE,
   `动手修复前，先结合Official Validator诊断、诊断位置、当前建模上下文和学生目标，判断错误所属的SysML v2语言构造及依赖关系。除非是不匹配的{}、()、[]、遗漏/多余定界符、全角/半角标点等可从当前文本与诊断唯一确定修正方式的明显错误，否则在search_reviewed_knowledge可用时优先检索，先取得与当前问题簇直接相关的可执行语法证据，再修复。查询应尽量覆盖完整可验证示例、必要import/标准库、Definition/Usage与关系端点、常见失败边界；只有概念摘要而没有正文或完整模式时，不得将coverage标记误当成语法已证明。search_reviewed_knowledge返回的examples只是结构参考，不得整段照抄并偏离学生任务；community-example权威低于official-example，也低于Claims。查询不可用、无新证据或预算已关闭时，使用现有证据继续当前问题簇，不得停止交付。`,
@@ -676,6 +678,7 @@ function validatorReason(validation: ValidationOutput): string {
 function candidateInstructions(): string {
   return [
     CANDIDATE_BASE_INSTRUCTIONS,
+    SYSML_RESERVED_KEYWORD_GUIDANCE,
     SYSML_V2_LANGUAGE_BOUNDARY_GUIDANCE,
     CANDIDATE_ADAPTIVE_GENERATION_GUIDANCE,
     SYSML_INCREMENTAL_EDIT_GUIDANCE,

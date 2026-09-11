@@ -1,11 +1,9 @@
+import reservedKeywords from './reserved-keywords.json';
+
+export const SYSML_RESERVED_KEYWORDS: ReadonlySet<string> = new Set(reservedKeywords.keywords);
+
 export const SYSML_LEXICON = {
-  coreKeywords: [
-    'package', 'private', 'public', 'import', 'library', 'doc',
-    'abstract', 'variation', 'variant', 'individual', 'def', 'specializes',
-    'subject', 'objective', 'actor', 'in', 'out', 'return', 'first', 'then',
-    'else', 'if', 'accept', 'send', 'assign', 'perform', 'expose', 'render',
-    'satisfy', 'verify', 'include', 'connect', 'bind', 'metadata'
-  ],
+  coreKeywords: reservedKeywords.keywords,
   definitionPhrases: [
     'part def', 'item def', 'attribute def', 'port def', 'interface def',
     'connection def', 'allocation def', 'flow def', 'action def', 'state def',
@@ -53,10 +51,4 @@ export const SYSML_LEXICON = {
   ]
 } as const;
 
-export const SYSML_HIGHLIGHT_KEYWORDS: ReadonlySet<string> = new Set([
-  ...SYSML_LEXICON.coreKeywords,
-  ...SYSML_LEXICON.definitionPhrases.flatMap((phrase) => phrase.split(/\s+/)),
-  ...SYSML_LEXICON.usagePhrases.flatMap((phrase) => phrase.split(/\s+/)),
-  'from', 'to', 'by', 'of', 'redefines', 'subsets', 'references',
-  'crosses', 'readonly', 'ordered', 'nonunique'
-]);
+export const SYSML_HIGHLIGHT_KEYWORDS = SYSML_RESERVED_KEYWORDS;

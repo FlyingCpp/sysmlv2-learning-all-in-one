@@ -1,6 +1,6 @@
-import { SYSML_HIGHLIGHT_KEYWORDS, SYSML_LEXICON } from './lexicon';
+import { SYSML_HIGHLIGHT_KEYWORDS, SYSML_LEXICON, SYSML_RESERVED_KEYWORDS } from './lexicon';
 import { buildSysmlNavigationIndex, type SysmlNavigationIndex, type SysmlSymbol } from './navigation-index';
-import { sysmlCodeOnlyText } from './text';
+import { scanSysmlText, sysmlCodeOnlyText } from './text';
 
 export interface SysmlCompletionRequest {
   content: string;
@@ -13,6 +13,7 @@ export interface SysmlCompletionOption {
   type: 'keyword' | 'type' | 'variable' | 'property' | 'function';
   detail?: string;
   info?: string;
+  apply?: string;
 }
 
 export interface SysmlMemberCompletion {
@@ -95,6 +96,11 @@ export function sysmlCompletionOptions(request: SysmlCompletionRequest): SysmlCo
   const content = request.content || '';
   const cursor = clampCursor(content, request.cursor);
   const beforeCursor = content.slice(0, cursor);
+  const codeBeforeCursor = completionCodeOnlyText(beforeCursor);
+  const currentWord = beforeCursor.match(/[A-Za-z_][A-Za-z0-9_]*$/)?.[0];
+  if (currentWord && !codeBeforeCursor.endsWith(currentWord)) return [];
+  const reservedName = sysmlReservedNameCompletion(beforeCursor);
+  if (reservedName) return [reservedName];
   const memberMatch = beforeCursor.match(/([A-Za-z_]\w*)\.([A-Za-z_]\w*)?$/);
   if (memberMatch) {
     const objectName = memberMatch[1];
@@ -116,8 +122,37 @@ export function sysmlCompletionOptions(request: SysmlCompletionRequest): SysmlCo
     .slice(0, 80)
     .map((candidate) => ({
       label: candidate,
-      type: completionTypeForCandidate(candidate)
+      type: completionTypeForCandidate(candidate),
+      ...(SYSML_RESERVED_KEYWORDS.has(candidate) ? {
+        detail: 'SysML 保留字',
+        info: `作为语法关键字直接使用；若用作名称，请写成 '${candidate}'，引用时也使用单引号。保留字区分大小写。`
+      } : {})
     }));
+}
+
+/** 仅提供可选择的名称补全，不把轻量上下文识别当成语法诊断或自动改写。 */
+export function sysmlReservedNameCompletion(beforeCursor: string): SysmlCompletionOption | undefined {
+  const source = completionCodeOnlyText(beforeCursor);
+  const match = source.match(/\b(?:part|port|item|attribute|action|state|requirement|constraint|calc|interface|connection|allocation|view|viewpoint|package)\s+(?:def\s+)?([A-Za-z_]\w*)$/);
+  const name = match?.[1];
+  // 这些词可继续组成合法声明短语，不能优先替换成名称。
+  if (!name || !SYSML_RESERVED_KEYWORDS.has(name) || ['def', 'in', 'out', 'inout', 'all'].includes(name)) return undefined;
+  return {
+    label: name,
+    apply: `'${name}'`,
+    type: 'variable',
+    detail: `作为名称：'${name}'`,
+    info: `${name} 是区分大小写的 SysML 保留字。如果此处要声明名称，请使用单引号；若正在输入语法构造，请继续输入，无需采用此建议。`
+  };
+}
+
+// 名称内容在导航中需要保留，但在补全上下文中应与注释、字符串一样屏蔽。
+function completionCodeOnlyText(text: string): string {
+  let result = '';
+  scanSysmlText(text, ({ mode, char }) => {
+    result += mode === 'code' || char === '\n' || char === '\r' ? char : ' ';
+  });
+  return result;
 }
 
 export function sysmlMemberCompletionOptions(
