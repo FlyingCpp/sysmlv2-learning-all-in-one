@@ -2969,7 +2969,7 @@ async function testPublicTraceContract(MockLanguageModelV4) {
     assert.equal(modelCallLedger[1].outputPayload.visibleText, 'Definition 描述类型，Usage 表示上下文中的使用。');
     assert.equal(modelCallLedger[1].outputPayload.toolCalls[0]?.toolName, 'request_final_answer',
       'the Main audit must bind Direct completion to the accepted typed action');
-    assert.equal(modelCallLedger[2].promptVersion, 'final-answer-worker-v16-identifier-advice');
+    assert.equal(modelCallLedger[2].promptVersion, 'final-answer-worker-v17-membership-capability');
     assert(!JSON.stringify(response.body).includes('modelCallLedger'),
       'the internal model call ledger must not be exposed in the public response');
     const auditQuery = new URLSearchParams({

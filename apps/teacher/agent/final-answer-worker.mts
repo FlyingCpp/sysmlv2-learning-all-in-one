@@ -153,7 +153,7 @@ export interface FinalAnswerWorkerOptions {
   readonly reasoning?: "none" | "medium" | "high" | "xhigh";
 }
 
-export const FINAL_ANSWER_WORKER_PROMPT_VERSION = "final-answer-worker-v16-identifier-advice";
+export const FINAL_ANSWER_WORKER_PROMPT_VERSION = "final-answer-worker-v17-membership-capability";
 
 
 const FINAL_ANSWER_WORKER_INSTRUCTIONS = `你是SysML v2教学助手的Final Answer Worker。服务端已经完成意图处理、Tool调用、Worker执行和业务状态绑定。你只生成一次直接面向学生的最终回答。
@@ -395,9 +395,14 @@ export function deterministicFinalAnswerFallback(task: FinalAnswerTaskView): str
 function deterministicViewCapabilityDisclosure(
   capability: FinalAnswerViewCapability | undefined,
 ): string {
-  if (!capability?.withoutDedicatedPlantUmlRendering.length) return "";
+  if (!capability) return "";
+  const browser = capability.relevantStandardViews.includes("BrowserView")
+    ? "BrowserView支持模型成员层级浏览：工作台和回答代码预览可以展开、折叠成员，静态SVG提供缩进成员列表；这不表示连接拓扑或工程完整性已经验证。"
+    : "";
+  if (!capability.withoutDedicatedPlantUmlRendering.length) return browser;
   const requested = capability.withoutDedicatedPlantUmlRendering.join("、");
-  return `${requested}属于SysML v2标准库View，但当前平台不能按其专用语义完成PlantUML渲染。平台目前提供专用语义映射的5种标准View是：${PLANTUML_DEDICATED_VIEW_NAMES.join("、")}。没有平台专用渲染不等于该View不是标准View，也不会覆盖本轮实际Official Validator结果。`;
+  const unsupported = `${requested}属于SysML v2标准库View，但当前平台不能按其专用语义完成PlantUML渲染。平台目前提供专用语义映射的5种标准View是：${PLANTUML_DEDICATED_VIEW_NAMES.join("、")}。没有平台专用渲染不等于该View不是标准View，也不会覆盖本轮实际Official Validator结果。`;
+  return [browser, unsupported].filter(Boolean).join("\n\n");
 }
 
 function projectFinalAnswerViewCapability(
@@ -409,8 +414,11 @@ function projectFinalAnswerViewCapability(
     ? findStandardViews(candidateContent(source.workerResult), false)
     : [];
   const relevant = [...new Set([...requested, ...produced])];
-  const withoutDedicated = relevant.filter((name) => !PLANTUML_DEDICATED_VIEW_NAMES.includes(name));
-  if (!withoutDedicated.length) return Object.freeze({});
+  // BrowserView已有专用成员树呈现，不能仅因没有独立PlantUML模式枚举就归入不支持列表。
+  const withoutDedicated = relevant.filter((name) => (
+    !PLANTUML_DEDICATED_VIEW_NAMES.includes(name) && name !== "BrowserView"
+  ));
+  if (!withoutDedicated.length && !relevant.includes("BrowserView")) return Object.freeze({});
   return Object.freeze({
     viewCapability: Object.freeze({
       relevantStandardViews: Object.freeze(relevant),

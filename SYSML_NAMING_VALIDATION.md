@@ -1,8 +1,8 @@
 # Teacher／编辑器命名改进验证记录
 
-日期：2026-09-11。该分支基于绘图提交 `424391f`，仅新增共享保留字知识、命名补全与高亮、可复现的官方语法源及相关验证。
+日期：2026-09-11。该分支基于绘图提交 `424391f`，新增共享保留字知识、命名补全与高亮、可复现的官方语法源，以及交互复测发现的 Teacher 最终回答视图能力说明修正。
 
-代码与工程验证结果见下表。真实 Provider 探针失败，Chrome 交互未验证，不能宣称完整端到端教学验收通过。未推送、未创建远端 PR。
+代码与工程验证结果见下表，保留首次失败。随后应用内浏览器已完成主要交互和两轮真实 Teacher 可见回答验证；修正能力说明后的真实 AI 复测被平台周 token 配额拦截，因此不能宣称全部验收通过。Chrome 扩展连接仍未恢复。未推送、未创建远端 PR。
 
 | 检查 | 结果 | 证据 |
 | --- | --- | --- |
@@ -23,4 +23,40 @@
 
 本地测试栈沿用原配置、网络与数据，只替换 Teacher/Web 镜像；停用的上一版容器仍保留用于回退。API/Validator 继续运行前一个绘图改动镜像。凭据不进入源码、报告或日志。
 
-待补验收：恢复 Provider 后验证真实 Candidate/Repair 命名行为及用户可见答案；恢复 Chrome 后验证补全菜单／Tab 插入、块注释高亮、中文名称与撤销行为。两项缺口均不能用模拟模型结果代替。
+首次待补项为真实 Teacher 命名行为和浏览器交互。后续进展见以下复测记录；首次 HTTP 500 不再代表当前所有真实模型调用均失败。
+
+## 当日浏览器复测
+
+入口为 `http://localhost:13000/#/bench`，API 为 `18081`，Validator 为 `19090`。Chrome 控制仍在请求头策略加载阶段失败；本次通过 Codex 应用内浏览器访问同一测试栈，使用页面提供的游客入口。应用内浏览器没有复用用户的 Chrome 登录态，因此这些证据不覆盖其已登录账户或 Chrome 扩展链路。
+
+| 交互 | 结果 | 页面证据 |
+| --- | --- | --- |
+| 保留字补全 | PASS | `part frame` 的菜单显示限定名称建议，Enter 和 Tab 均得到 `part 'frame'`；撤销恢复原文 |
+| 编辑器保护边界 | PASS | 行／块注释、字符串、未闭合限定名称、`part def` 和 `part Frame` 不被错误添加引号 |
+| 实际高亮 | PASS | 跨行块注释三行同为注释颜色，结束后 package/part 恢复关键字颜色；限定名称不被错误着色为 frame 关键字 |
+| GeneralView | PASS | 中文车辆系统及 frame/battery 子成员、Controller 独立根完整显示；适应、100%→120% 缩放、全屏和关闭可操作 |
+| BrowserView | PASS | 四元素成员树，全部折叠隐藏子成员、展开恢复；全屏内操作生效，Esc 关闭；没有图形缩放按钮 |
+| 视口与中文 | PASS（限定范围） | 宽屏及窄屏截图均已观察，测得文档没有横向溢出；窄屏类型英文标签存在换行，不据此宣称全面移动端体验验收 |
+| 无效模型反馈 | PASS | 未限定 frame 触发官方诊断；旧图被移除，不保留成功展示 |
+| 真实 Teacher 第 1 轮 | 交付 PASS，内容有偏差 | 59 秒后显示完整命名解释，发送入口恢复；“普通名称不应加引号”把风格建议说得过强 |
+| 真实 Teacher 第 2 轮 | 交付／候选 PASS，能力说明有缺陷 | 70 秒后显示完整回答和官方验证通过候选，保留包名 Broken 与名称 frame；主动区分普通名称加引号的语法合法性与风格建议 |
+| 回答候选预览和应用 | PASS | 代码预览渲染为 Browser 成员树；复制代码块后手动填入编辑器，重新生成显示“已自动保存并通过校验”和 Broken::brokenBrowser 的 frame 成员 |
+| 修正后真实 Teacher 第 3 轮 | BLOCK | 页面提示“本周 AI Teacher tokens 已用完，下周重置后可继续使用。”并显示本轮未生成可见内容；发送入口恢复，但没有新答案，不能算修正后的真实模型通过 |
+
+第 2 轮候选为：
+
+```sysml
+package Broken {
+  part 'frame';
+
+  view brokenBrowser : StandardViewDefinitions::BrowserView {
+    expose 'frame';
+  }
+}
+```
+
+第 2 轮最终说明仍将 BrowserView 描述为缺少专用图形模式，遗漏已可用的成员树。根因是 Finalizer 的能力投影仅按五种 PlantUML 图形模式分类，BrowserView 被放入未支持集合。现将成员浏览能力从该集合分离，保留工作台、回答预览的展开／折叠能力说明；GeometryView、GridView 的专用渲染未支持边界继续保留。提示词版本升为 `final-answer-worker-v17-membership-capability`。
+
+修正后 Teacher 编译通过，22 组 Teacher 运行管理测试全部通过，新增专项覆盖问题指定／候选产生 BrowserView、中文别名、混合未支持视图、确定性回退和无关问题。日志为 `.tmp/ui-retest-teacher-build.log`、`.tmp/ui-retest-teacher-regression.log`。新 Teacher 镜像 `synfeld-teacher:keywords-ui` 已接入原测试栈，镜像构建退出 0；六项 Token 布尔门和真实 Validator Tool 再次通过（HTTP 200、语法／语义通过、无 fallback），见 `.tmp/ui-retest-teacher-image.log`、`.tmp/ui-retest-runtime-gate.log`。公开边界、129 词条一致性和差异检查通过。
+
+当前剩余验收是周配额可用后的修正版本真实能力问答，以及 Chrome 扩展链路本身。没有调整配额或切换身份绕过限制；前两轮真实交付、自动回归和实际成员树展示均不能替代修正后的真实模型答案。
