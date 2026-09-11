@@ -214,7 +214,7 @@ export const SYSML_STANDARD_VIEW_GUIDANCE = `SysML v2标准库StandardViewDefini
 
 ${STANDARD_VIEW_EXAMPLE_TEXT}`;
 
-export const PLANTUML_VIEW_CAPABILITY_GUIDANCE = `当前平台PlantUML只对上述8种标准View中的以下5种提供专用语义映射：GeneralView、InterconnectionView、ActionFlowView、StateTransitionView、SequenceView。GeometryView、GridView和BrowserView仍是SysML v2标准库View，但当前没有对应的专用PlantUML渲染模式；其他自定义View通常也没有专用映射。“没有平台专用渲染”绝不等于“不是标准View”，也不得把“平台专用支持5种”改写成“SysML v2标准库只有5种”。即使通用后端能够产生图形，也不能声称已经按Geometry、Grid、Browser或其他未映射View的专用语义完整呈现。`;
+export const PLANTUML_VIEW_CAPABILITY_GUIDANCE = `当前平台PlantUML对上述8种标准View中的以下5种提供专用图形模式映射：GeneralView、InterconnectionView、ActionFlowView、StateTransitionView、SequenceView。BrowserView另有基于官方成员对象的层级浏览呈现：Web工作台和回答代码视图支持展开、折叠；静态SVG提供缩进成员列表。它不沿typing重复展开，不把连接拓扑混画为跨树连线，也不等于可拖动的拓扑图。GeometryView、GridView仍是SysML v2标准库View，但当前没有对应的专用渲染模式；其他自定义View的能力取决于其标准View特化。“没有平台专用渲染”绝不等于“不是标准View”，也不得把“平台专用支持5种图形模式”改写成“SysML v2标准库只有5种”。即使通用后端能够产生图形，也不能声称已经按Geometry、Grid或其他未映射View的专用语义完整呈现。`;
 
 export const PLANTUML_VIEW_SELECTION_GUIDANCE = `完整SysML v2模型交付的PlantUML可渲染View选择清单：
 ${PLANTUML_VIEW_SELECTION_TEXT}`;
@@ -228,15 +228,16 @@ ${PLANTUML_VIEW_CAPABILITY_GUIDANCE}
 
 export const PLANTUML_VIEW_RESPONSE_GUIDANCE = `${PLANTUML_VIEW_KNOWLEDGE_GUIDANCE}
 
-终末回答职责：如果学生明确要求生成的View超出当前平台5种专用PlantUML映射，最终回答必须说明：所请求的View是否属于SysML v2标准库、模型是否已经生成并通过实际Validator，以及平台当前不能按该View的专用语义完成渲染。必须列出平台专用支持的5种View，但不得把学生请求偷换为其中一种，也不得因渲染不支持而否定一个语义正确且已经实际通过Validator的SysML v2 View模型。这个公开能力边界只在最终回答中形成，不要求建模Worker自行撰写面向学生的说明。`;
+终末回答职责：BrowserView应说明其成员层级浏览能力，不得再声称平台完全不支持。对于GeometryView、GridView等未映射View，最终回答必须区分标准库合法性、实际Validator结果与尚未实现的渲染能力，不得偷换为其他类型，也不得因渲染不支持而否定一个已实际通过Validator的模型。这个公开能力边界只在最终回答中形成，不要求建模Worker自行撰写面向学生的说明。`;
 
 /**
  * Finalizer只需要公开能力边界，不需要重复接收Candidate/Repair使用的8组语法示例。
  * 该投影仅在服务端识别到相关View时注入，避免无关Direct Answer占用终态窗口。
  */
-export const PLANTUML_VIEW_FINALIZER_GUIDANCE = `SysML v2标准库StandardViewDefinitions定义GeneralView、InterconnectionView、ActionFlowView、StateTransitionView、SequenceView、GeometryView、GridView、BrowserView；平台当前只为前5种提供专用PlantUML语义映射。GeometryView、GridView、BrowserView仍是标准View，但当前没有对应的专用渲染模式。“没有平台专用渲染”不等于“不是标准View”。
+export const PLANTUML_VIEW_FINALIZER_GUIDANCE = `SysML v2标准库StandardViewDefinitions定义GeneralView、InterconnectionView、ActionFlowView、StateTransitionView、SequenceView、GeometryView、GridView、BrowserView。
+${PLANTUML_VIEW_CAPABILITY_GUIDANCE}
 
-终末回答职责：如果学生明确要求生成的View超出当前平台5种专用PlantUML映射，最终回答必须说明：所请求的View是否属于SysML v2标准库、模型是否已经生成并通过实际Validator，以及平台当前不能按该View的专用语义完成渲染。必须列出平台专用支持的5种View，但不得把学生请求偷换为其中一种，也不得因渲染不支持而否定一个语义正确且已经实际通过Validator的SysML v2 View模型。`;
+终末回答职责：BrowserView可展示成员层级，不能据此声称连接拓扑完整或工程任务已经通过验证。GeometryView、GridView等未映射View必须说明标准库合法性、实际Validator结果和渲染能力缺口，不能偷换类型或否定正确模型。`;
 
 export const PLANTUML_VIEW_MODELING_GUIDANCE = `${PLANTUML_VIEW_KNOWLEDGE_GUIDANCE}
 
@@ -246,7 +247,7 @@ SysML v2 View交付规则：
 - 当前Worker要交付新增、补全或修改后的完整SysML v2模型候选时，候选中必须包含至少一个显式view usage及其expose，使交付可直接进入平台PlantUML渲染查看。纯解释、纯分析或没有模型候选交付的任务不适用此规则。
 - 先阅读完整候选中真实存在的元素和关系，再按上述5项选择清单匹配主导语义；不得仅根据学生提问中的单个关键词选型。需求为主、普通结构或混合内容默认选GeneralView；只在连接拓扑、行为流、状态迁移或交互时序确实是主导内容时，分别选InterconnectionView、ActionFlowView、StateTransitionView或SequenceView。
 - 模型同时包含多个对立且有展示价值的方面时，可为每个方面生成一个聚焦View；不得为了穷举清单而生成重复View，也不得把所有元素无区分地塞进多个View。
-- 默认交付新View时只从上述5种有专用PlantUML映射的类型中选择。学生明确指定GeometryView、GridView、BrowserView或自定义View时，才按其语义要求生成非专用映射View，不得偷换为其他类型。
+- 默认交付图形View时从上述5种有专用PlantUML映射的类型中选择。学生需要模型成员层级浏览时使用BrowserView，按官方membership展开，不承诺跨类型实例展开或连接拓扑布线。学生明确指定GeometryView、GridView或自定义View时，按其语义要求生成，不得偷换为其他类型。
 - 如果授权基线已包含与当前内容匹配且有效的可渲染View，保留并在展示范围发生变化时同步更新；如果已有View类型与修改后的主导内容不匹配，将其改为正确类型或增加聚焦View。
 - expose属于view usage。使用\`view name : StandardViewDefinitions::... { expose ...; }\`；禁止生成\`view def Name { expose ...; }\`。view def用于定义可复用的筛选/渲染规则，不是承载本次expose目标的usage。
 - expose目标必须真实存在，且应选择能使该View的核心元素和关系可见的最小充分范围；不得为了View虚构新的领域元素。\`::**\`表示递归暴露命名空间成员，不表示沿part typing关系递归展开。

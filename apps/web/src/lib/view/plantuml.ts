@@ -51,6 +51,7 @@ export function plantUmlViewportFit({
 }
 
 export interface PlantUmlRenderResult {
+  browserTree?: { profile: 'browser-membership'; viewName: string; nodes: BrowserMemberNode[]; };
   ok?: boolean;
   svg?: string;
   viewName?: string;
@@ -232,4 +233,15 @@ export function friendlyPlantUmlError(error: unknown, result?: PlantUmlRenderRes
     return 'PlantUML 渲染服务暂不可用。代码不会丢失，请稍后重新生成视图。';
   }
   return message || 'PlantUML 视图生成失败。';
+}
+
+export interface BrowserMemberNode {
+  id: string;
+  parentId: string;
+  depth: number;
+  name: string;
+  kind: string;
+  typeName: string;
+  sourceElementId: string;
+  qualifiedName: string;
 }

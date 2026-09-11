@@ -10,14 +10,12 @@ const cases = [
   {
     label: 'simple',
     content: fs.readFileSync(path.join(fixtureRoot, 'electric-vehicle-charging-interconnection.sysml'), 'utf8'),
-    expectedMode: 'ibd-single-context',
-    expectedConnectors: 5
+    expectedCounts: [12, 20, 10]
   },
   {
     label: 'complex',
     content: fs.readFileSync(path.join(fixtureRoot, 'electric-vehicle-charging-complex-interconnection.sysml'), 'utf8'),
-    expectedMode: 'route-only-multi-context',
-    expectedConnectors: 29
+    expectedCounts: [79, 235, 162]
   }
 ];
 
@@ -49,15 +47,11 @@ async function main() {
       viewName: 'ElectricVehicleCharging::vehicleInterconnection'
     });
     assert.strictEqual(rendered.ok, true, JSON.stringify(rendered, null, 2));
-    assert.strictEqual(rendered.source, 'official-sysml-v2-pilot-2026-04');
+    assert.strictEqual(rendered.source, 'official-sysml-v2-model-local-layout');
     assert.strictEqual(rendered.resolvedRenderMode, 'INTERCONNECTION');
-    assert.strictEqual(rendered.interconnectionLayout?.applied, true, JSON.stringify(rendered.interconnectionLayout, null, 2));
-    assert.strictEqual(rendered.interconnectionLayout.metrics.layoutMode, testCase.expectedMode);
-    assert.strictEqual(rendered.interconnectionLayout.metrics.connectorCount, testCase.expectedConnectors);
-    assert.strictEqual(rendered.interconnectionLayout.metrics.unresolvedConnectorCount, 0);
-    assert.strictEqual(rendered.interconnectionLayout.metrics.partOverlapCount, 0);
-    assert.strictEqual(rendered.interconnectionLayout.metrics.nonOrthogonalConnectorCount, 0);
-    if (testCase.label === 'complex') assert.strictEqual(rendered.interconnectionLayout.metrics.movedClusterCount, 0);
+    assert.strictEqual(rendered.renderer, 'local-layout');
+    assert.deepStrictEqual([rendered.layoutScene.nodes.length, rendered.layoutScene.ports.length, rendered.layoutScene.edges.length], testCase.expectedCounts);
+    assert.deepStrictEqual(require('../packages/sysml-plantuml-service/diagram-layout').inspectScene(rendered.diagramDocument, rendered.layoutScene).issues, []);
   }
 
   console.log('real PlantUML service runtime tests passed');

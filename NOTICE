@@ -14,3 +14,7 @@ apps/web/public/model-assets/opencar/NOTICE.md.
 
 SysML is a trademark of the Object Management Group. SynFeld is an independent
 open-source project and is not endorsed by the Object Management Group.
+
+工程图布局使用 ELK.js 0.11.1，许可证为 EPL-2.0。共享绘图包锁定该版本；
+上游来源：https://github.com/kieler/elkjs 。
+SVG 绘制继续使用官方内核随附的 PlantUML；没有把第三方绘图组件重新许可为本项目代码。

@@ -3120,7 +3120,7 @@ function TeacherCodeBlock({ code, language, validation }: { code: string; langua
           ) : null}
           {renderResult?.svg ? (
             <div className="aiTeacherPlantUmlCanvas">
-              <PlantUmlViewport svgMarkup={renderResult.svg} />
+              <PlantUmlViewport svgMarkup={renderResult.svg} browserTree={renderResult.browserTree} />
             </div>
           ) : null}
           {renderState === 'working' && renderResult?.svg ? (

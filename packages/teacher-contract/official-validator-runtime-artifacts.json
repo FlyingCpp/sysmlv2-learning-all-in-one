@@ -11,9 +11,9 @@
   "components": {
     "jarHash": "sha256:7d6f1f2d555ddde2538a2b4f726709ba261567aa6c7eb172ad7db762d01efbaf",
     "libraryHash": "sha256:fc760c65d06ecbf74386f20ef5b6ad50240d4142c30ae4629eba92d8c5b86b20",
-    "wrapperHash": "sha256:cb8d6fb38f2ea59142d0d1cde21fc539c01c7d50f83166d4e76027503677f405"
+    "wrapperHash": "sha256:c65fce3db671fc171e76ba2262c6528ae3f36bf05d99c432985a3c5a5fb54c75"
   },
-  "artifactHash": "sha256:ae47c8a54bcb4d8752fbbc2d7d7bdbf87fa7de13c7a0f996bd068bd8089b7b8f",
+  "artifactHash": "sha256:a2228857b1dd7da2c174b355fc58d1d6506254aa1918457e12d9552bbf84debf",
   "digestAlgorithms": {
     "file": "sha256-bytes/v1",
     "directory": "sha256-json-path-manifest/v1",

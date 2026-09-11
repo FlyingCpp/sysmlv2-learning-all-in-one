@@ -76,13 +76,10 @@ async function main() {
   const simple = await generatePlantUml({ content: simpleContent, viewName });
   assert.strictEqual(simple.ok, true, JSON.stringify(simple, null, 2));
   assert.strictEqual(simple.resolvedRenderMode, 'INTERCONNECTION');
-  assert.strictEqual(simple.interconnectionLayout?.applied, true, JSON.stringify(simple.interconnectionLayout, null, 2));
-  assert.strictEqual(simple.interconnectionLayout.metrics.layoutMode, 'ibd-single-context');
-  assert.strictEqual(simple.interconnectionLayout.metrics.connectorCount, 5);
-  assert.strictEqual(simple.interconnectionLayout.metrics.unresolvedConnectorCount, 0);
-  assert.strictEqual(simple.interconnectionLayout.metrics.partOverlapCount, 0);
-  assert.strictEqual(simple.interconnectionLayout.metrics.nonOrthogonalConnectorCount, 0);
-  for (const expectedText of ['chargePort: ChargingPort', 'obc: OnBoardCharger', 'bms: BatteryManagementSystem', 'tms: ThermalManagementSystem', 'battery: BatteryPack']) {
+  assert.strictEqual(simple.renderer, 'local-layout');
+  assert.deepStrictEqual([simple.layoutScene.nodes.length, simple.layoutScene.ports.length, simple.layoutScene.edges.length], [12, 20, 10]);
+  assert.deepStrictEqual(require('../packages/sysml-plantuml-service/diagram-layout').inspectScene(simple.diagramDocument, simple.layoutScene).issues, []);
+  for (const expectedText of ['chargePort', 'ChargingPort', 'obc', 'OnBoardCharger', 'bms', 'BatteryManagementSystem', 'tms', 'ThermalManagementSystem', 'battery', 'BatteryPack']) {
     assert(String(simple.svg).includes(expectedText), `simple SVG is missing ${expectedText}`);
   }
 
@@ -92,14 +89,9 @@ async function main() {
   assert.strictEqual(raw.ok, true, JSON.stringify(raw, null, 2));
   assert.strictEqual(optimized.ok, true, JSON.stringify(optimized, null, 2));
   assert.strictEqual(optimized.resolvedRenderMode, 'INTERCONNECTION');
-  assert.strictEqual(optimized.interconnectionLayout?.applied, true, JSON.stringify(optimized.interconnectionLayout, null, 2));
-  assert.strictEqual(optimized.interconnectionLayout.metrics.layoutMode, 'route-only-multi-context');
-  assert(optimized.interconnectionLayout.metrics.compositeContextCount >= 3, JSON.stringify(optimized.interconnectionLayout.metrics, null, 2));
-  assert.strictEqual(optimized.interconnectionLayout.metrics.movedClusterCount, 0);
-  assert.strictEqual(optimized.interconnectionLayout.metrics.connectorCount, 29);
-  assert.strictEqual(optimized.interconnectionLayout.metrics.unresolvedConnectorCount, 0);
-  assert.strictEqual(optimized.interconnectionLayout.metrics.nonOrthogonalConnectorCount, 0);
-  assert.strictEqual(countNonOrthogonalConnectors(optimized.svg), 0);
+  assert.strictEqual(optimized.renderer, 'local-layout');
+  assert.deepStrictEqual([optimized.layoutScene.nodes.length, optimized.layoutScene.ports.length, optimized.layoutScene.edges.length], [79, 235, 162]);
+  assert.deepStrictEqual(require('../packages/sysml-plantuml-service/diagram-layout').inspectScene(optimized.diagramDocument, optimized.layoutScene).issues, []);
 
   const direct = improveInterconnectionSvg(raw.svg);
   assert.strictEqual(direct.metrics.connectorCount, 29);
