@@ -63,6 +63,32 @@ AI Teacher 的建议不是语言正确性或工程正确性的最终证据。正
 
 详见 [布局架构、能力范围与示例](RENDERING.md)、[共享绘图服务接口](packages/sysml-plantuml-service/README.md) 和 [Teacher／编辑器命名支持](SYSML_NAMING.md)。[初始工程验证](RENDERING_VALIDATION.md) 与 [后续浏览器复验](SYSML_NAMING_VALIDATION.md) 分别记录服务端和实际交互证据；本地验证不等于托管服务已经部署该版本。
 
+### 布局效果展示 / Layout screenshots
+
+两张截图按相同宽度等比例展示，窄屏随页面收缩；点击图片可查看原始分辨率的端口和文字细节。
+
+**结构层级概览 / Structural overview**
+
+工作台将热管理系统、部件及其子成员组织为层级图，并与 AI Teacher 面板并排展示。
+
+<p align="center">
+  <a href="assets/readme/structure-overview.png">
+    <img src="assets/readme/structure-overview.png" width="1000" alt="SynFeld 工作台：热管理系统结构层级图与 AI Teacher 面板 / Thermal management structural overview and Teacher panel">
+  </a>
+</p>
+
+**复合容器与端口互连 / Compound containers and port connections**
+
+全屏视图保留系统、电池包、模块及冷却通道的嵌套边界，展示端口锚点和跨层级正交线路，便于沿声明的连接检查模型结构。
+
+<p align="center">
+  <a href="assets/readme/interconnection-layout.png">
+    <img src="assets/readme/interconnection-layout.png" width="1000" alt="SynFeld 全屏互连视图：热管理系统的复合容器、端口锚点与正交连接 / Compound thermal system layout with ports and orthogonal connections">
+  </a>
+</p>
+
+Screenshots illustrate structural and interconnection layouts. Both preserve their aspect ratio and link to the original resolution.
+
 ### v0.1.0 内容
 
 | 类型 | 内容 |
@@ -234,7 +260,7 @@ The shared service supports multiple roots, compound containers, inside/outside 
 
 Layout runs locally in the Validator service and is available in Core without an AI provider key. Generate a view after official validation, then use fit/zoom/fullscreen for diagrams or expand/collapse for BrowserView. Resource and geometry failures are reported explicitly. Large views may still require zooming; arbitrary zero-crossing layouts and engineering completeness are not guaranteed.
 
-See [layout architecture, scope and examples](RENDERING.md), the [shared service](packages/sysml-plantuml-service/README.md), and [Teacher/editor naming guidance](SYSML_NAMING.md). [Initial engineering checks](RENDERING_VALIDATION.md) and [subsequent browser acceptance](SYSML_NAMING_VALIDATION.md) distinguish local evidence from hosted deployment status.
+See the [layout screenshots](#布局效果展示--layout-screenshots), [layout architecture, scope and examples](RENDERING.md), the [shared service](packages/sysml-plantuml-service/README.md), and [Teacher/editor naming guidance](SYSML_NAMING.md). [Initial engineering checks](RENDERING_VALIDATION.md) and [subsequent browser acceptance](SYSML_NAMING_VALIDATION.md) distinguish local evidence from hosted deployment status.
 
 ### v0.1.0 contents
 
