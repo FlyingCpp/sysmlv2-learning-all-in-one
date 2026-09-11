@@ -18,6 +18,7 @@ const tests = [
   'test-teacher-run-resources',
   'test-teacher-worker-dispatcher',
   'test-teacher-candidate-worker',
+  'test-teacher-view-capability',
   'test-teacher-intent-orchestrator-v2',
   'test-web-search-probe-policy',
   'test-ai-teacher-token-policy',

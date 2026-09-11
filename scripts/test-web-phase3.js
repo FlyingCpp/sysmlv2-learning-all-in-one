@@ -28,10 +28,35 @@ const {
 } = requireModule('lib/sysml/completion.js');
 
 testCompletionCoverage();
+testReservedKeywordCompletion();
 testModelNavigationCoverage();
 testReactWorkbenchContracts();
 
 console.log('web phase3 tests passed');
+
+function testReservedKeywordCompletion() {
+  const asset = require('../packages/teacher-contract/sysml-reserved-keywords.json');
+  const { SYSML_HIGHLIGHT_KEYWORDS } = requireModule('lib/sysml/lexicon.js');
+  const { sysmlReservedNameCompletion } = requireModule('lib/sysml/completion.js');
+  assert.deepEqual([...SYSML_HIGHLIGHT_KEYWORDS], asset.keywords, '高亮必须与 Teacher 词表一致');
+  for (const keyword of ['frame', 'references', 'first', 'hastype', 'until']) {
+    const options = sysmlCompletionOptions({ content: keyword, explicit: true });
+    assert(options.some((option) => option.label === keyword && option.info.includes('单引号')));
+    const naming = sysmlCompletionOptions({ content: `part ${keyword}`, explicit: true });
+    assert.equal(naming[0].apply, `'${keyword}'`, '补全名称必须限定保留字');
+  }
+  assert.equal(sysmlCompletionOptions({ content: 'part def frame', explicit: true })[0].apply, "'frame'");
+  for (const text of ['part Frame', 'part framePart', "part 'frame'", "part 'part frame", '// part frame', '/* part frame', 'doc /* part frame', 'rep "part frame', 'rep "escaped \\" part frame']) {
+    assert(!sysmlCompletionOptions({ content: text, explicit: true }).some((option) => option.apply === "'frame'"), text);
+    assert.equal(sysmlReservedNameCompletion(text), undefined, text);
+  }
+  assert.equal(sysmlReservedNameCompletion('/* part frame */\npart frame').apply, "'frame'");
+  assert.equal(sysmlReservedNameCompletion('// part frame\npart frame').apply, "'frame'");
+  for (const word of ['def', 'in', 'out', 'inout', 'all']) {
+    assert.equal(sysmlReservedNameCompletion(`part ${word}`), undefined);
+  }
+  assert(!SYSML_HIGHLIGHT_KEYWORDS.has('a') && !SYSML_HIGHLIGHT_KEYWORDS.has('Frame'));
+}
 
 function testCompletionCoverage() {
   const source = [

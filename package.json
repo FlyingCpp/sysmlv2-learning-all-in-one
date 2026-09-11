@@ -17,7 +17,7 @@
     "build:teacher-agent": "node scripts/clean-teacher-agent-build.js && tsc -p apps/teacher/tsconfig.agent.json",
     "setup:official-validator": "node scripts/setup-official-validator.js",
     "typecheck:web": "tsc --noEmit -p apps/web/tsconfig.json",
-    "test": "npm run test:public-boundary && npm run test:deployment-contract && npm run test:course-content && npm run test:knowledge-packs && npm run test:validator && npm run test:teacher-public && npm run test:teacher-agent-loop && npm run test:teacher-message-continuity && npm run test:teacher-model-control-plane && npm run test:api && npm run test:teacher-runtime-management && npm run test:diagrams",
+    "test": "npm run test:public-boundary && npm run test:deployment-contract && npm run test:course-content && npm run test:knowledge-packs && npm run test:validator && npm run test:teacher-public && npm run test:teacher-agent-loop && npm run test:teacher-message-continuity && npm run test:teacher-model-control-plane && npm run test:api && npm run test:teacher-runtime-management && npm run test:diagrams && npm run test:sysml-keywords",
     "test:deployment-contract": "node scripts/test-deployment-contract.js",
     "test:public-boundary": "node scripts/verify-public-boundary.js",
     "test:api": "node scripts/test-api-public.js",
@@ -37,7 +37,11 @@
     "test:validator": "node scripts/test-validator-public.js && node scripts/test-plantuml-interconnection-layout.js && node scripts/test-validator-http-boundary.js && node scripts/test-validator-admission-queue.js",
     "test:web": "node scripts/test-web-i18n.js && node scripts/test-web-phase0.js && node scripts/test-web-phase1.js && node scripts/test-web-phase2.js && node scripts/test-web-phase3.js && node scripts/test-web-phase4.js",
     "test:teacher-runtime-management": "npm run build:teacher-agent && node scripts/test-teacher-runtime-management.js",
-    "test:diagrams": "npm run build:teacher-agent && node scripts/test-orthogonal-router.js && node scripts/test-engineering-views.js && node scripts/test-browser-view.js && node scripts/test-general-view-layout.js && node scripts/test-multiroot-rendering.js && node scripts/test-complex-requirements-layout.js && node scripts/test-native-relation-projection.js && node scripts/test-official-plantuml-view-modes.js"
+    "test:diagrams": "npm run build:teacher-agent && node scripts/test-orthogonal-router.js && node scripts/test-engineering-views.js && node scripts/test-browser-view.js && node scripts/test-general-view-layout.js && node scripts/test-multiroot-rendering.js && node scripts/test-complex-requirements-layout.js && node scripts/test-native-relation-projection.js && node scripts/test-official-plantuml-view-modes.js",
+    "generate:sysml-keywords": "node scripts/generate-sysml-reserved-keywords.js",
+    "check:sysml-keywords": "node scripts/generate-sysml-reserved-keywords.js --check",
+    "test:sysml-keywords": "npm run build:teacher-agent && node scripts/test-sysml-reserved-keywords.js",
+    "test:sysml-keywords:official": "npm run build:teacher-agent && node scripts/test-sysml-reserved-keywords.js --official"
   },
   "engines": {
     "node": ">=24 <25"

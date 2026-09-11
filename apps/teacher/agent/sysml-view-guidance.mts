@@ -237,7 +237,7 @@ export const PLANTUML_VIEW_RESPONSE_GUIDANCE = `${PLANTUML_VIEW_KNOWLEDGE_GUIDAN
 export const PLANTUML_VIEW_FINALIZER_GUIDANCE = `SysML v2标准库StandardViewDefinitions定义GeneralView、InterconnectionView、ActionFlowView、StateTransitionView、SequenceView、GeometryView、GridView、BrowserView。
 ${PLANTUML_VIEW_CAPABILITY_GUIDANCE}
 
-终末回答职责：BrowserView可展示成员层级，不能据此声称连接拓扑完整或工程任务已经通过验证。GeometryView、GridView等未映射View必须说明标准库合法性、实际Validator结果和渲染能力缺口，不能偷换类型或否定正确模型。`;
+终末回答职责：涉及BrowserView时，应明确说明工作台和回答代码预览已经支持可展开、折叠的成员树；不能只说“没有专用图形模式”而省略现有呈现能力，也不能将它与GeometryView、GridView归为同一种未支持状态。成员树可用不等于连接拓扑完整或工程任务已经通过验证。GeometryView、GridView等未映射View必须说明标准库合法性、实际Validator结果和渲染能力缺口，不能偷换类型或否定正确模型。`;
 
 export const PLANTUML_VIEW_MODELING_GUIDANCE = `${PLANTUML_VIEW_KNOWLEDGE_GUIDANCE}
 

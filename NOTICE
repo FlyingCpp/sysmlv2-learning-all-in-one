@@ -18,3 +18,7 @@ open-source project and is not endorsed by the Object Management Group.
 工程图布局使用 ELK.js 0.11.1，许可证为 EPL-2.0。共享绘图包锁定该版本；
 上游来源：https://github.com/kieler/elkjs 。
 SVG 绘制继续使用官方内核随附的 PlantUML；没有把第三方绘图组件重新许可为本项目代码。
+
+scripts/fixtures/sysml-grammar/pilot-2026-04 包含上述官方 2026-04 发行版内核
+随附的三份 Xtext 语法和两份 Ecore 模型，按 EPL-2.0 分发，保留上游版权头。
+具体来源、内核 SHA-256 和各文件哈希见该目录的 provenance.json。

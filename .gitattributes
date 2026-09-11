@@ -1,3 +1,6 @@
 *.sh text eol=lf
 *.yml text eol=lf
 *.yaml text eol=lf
+# 保留官方语法归档字节，供来源哈希校验跨平台复现。
+scripts/fixtures/sysml-grammar/**/*.xtext -text -whitespace
+scripts/fixtures/sysml-grammar/**/*.ecore -text -whitespace

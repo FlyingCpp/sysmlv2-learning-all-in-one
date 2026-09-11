@@ -8,6 +8,7 @@ import {
   bestSysmlCompletion,
   sysmlCompletionCandidates,
   sysmlCompletionOptions,
+  sysmlReservedNameCompletion,
   sysmlMemberCompletionOptions
 } from '../../lib/sysml/completion';
 import { SYSML_HIGHLIGHT_KEYWORDS } from '../../lib/sysml/lexicon';
@@ -82,13 +83,23 @@ export interface SysmlEditorContextMenu {
 }
 
 const sysmlLanguage = StreamLanguage.define({
-  token(stream) {
+  startState: () => ({ blockComment: false }),
+  token(stream, state) {
+    if (state.blockComment || stream.match('/*')) {
+      state.blockComment = true;
+      while (!stream.eol()) {
+        if (stream.match('*/')) { state.blockComment = false; break; }
+        stream.next();
+      }
+      return 'comment';
+    }
     if (stream.eatSpace()) return null;
     if (stream.match('//')) {
       stream.skipToEnd();
       return 'comment';
     }
     if (stream.match(/"(?:[^"\\]|\\.)*"?/)) return 'string';
+    if (stream.match(/'(?:[^'\\]|\\.)*'?/)) return 'variable';
     if (stream.match(/[{}()[\];,.]/)) return 'punctuation';
     if (stream.match(/[0-9]+(?:\.[0-9]+)?/)) return 'number';
     const word = stream.match(/[A-Za-z_][A-Za-z0-9_:]*/);
@@ -468,6 +479,15 @@ function runTabCompletion(view: EditorView): boolean {
   const currentLine = view.state.doc.lineAt(cursor);
   const beforeCursor = view.state.doc.sliceString(currentLine.from, cursor);
   const nextChar = view.state.doc.sliceString(cursor, cursor + 1);
+  const reservedName = sysmlReservedNameCompletion(content.slice(0, cursor));
+  if (reservedName?.apply && !/[\w:]/.test(nextChar)) {
+    view.dispatch({
+      changes: { from: cursor - reservedName.label.length, to: cursor, insert: reservedName.apply },
+      selection: { anchor: cursor - reservedName.label.length + reservedName.apply.length },
+      userEvent: 'input.complete'
+    });
+    return true;
+  }
   const memberMatch = beforeCursor.match(/([A-Za-z_]\w*)\.([A-Za-z_]\w*)?$/);
   if (memberMatch && !/[\w:]/.test(nextChar)) {
     const prefix = memberMatch[2] || '';

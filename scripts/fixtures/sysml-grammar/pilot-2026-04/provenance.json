@@ -1,0 +1,28 @@
+{
+  "releaseUrl": "https://github.com/Systems-Modeling/SysML-v2-Pilot-Implementation/releases/tag/2026-04",
+  "kernelVersion": "0.59.0",
+  "jarHash": "sha256:7d6f1f2d555ddde2538a2b4f726709ba261567aa6c7eb172ad7db762d01efbaf",
+  "license": "EPL-2.0",
+  "files": [
+    {
+      "path": "model/SysML.ecore",
+      "sha256": "be71998ca0d9bb7e6081a25e8ead93ce49d623a47ca414b30ee8c572d6d0d753"
+    },
+    {
+      "path": "model/kerml.ecore",
+      "sha256": "62db52cbccf41266ccfa9b3b9cbb4a40384f16ab513f1d8522fd29d9d0fda8e7"
+    },
+    {
+      "path": "org/omg/sysml/xtext/SysML.xtext",
+      "sha256": "5f37a3009b016026bb6c418ed610801896b02c806d3834604a23c26e7ff21d82"
+    },
+    {
+      "path": "org/omg/kerml/xtext/KerML.xtext",
+      "sha256": "1b1ecdd1cb0642d5a152b9c1dac163dd4113a69deab98ad37ea41633d01cd56c"
+    },
+    {
+      "path": "org/omg/kerml/expressions/xtext/KerMLExpressions.xtext",
+      "sha256": "499ec9b99d6c0a9195894fd420e168343fa1906698c4d1ac9ca3c0a94ca00cc7"
+    }
+  ]
+}
