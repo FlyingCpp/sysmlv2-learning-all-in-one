@@ -39,10 +39,29 @@ AI Teacher 的任务生命周期、候选恢复、资源策略应用与验收边
 - 知识包：可浏览的概念、术语、参考资料和学习主题。
 - SysML v2 建模工作台：文本模型编辑、课程上下文和诊断反馈。
 - 双层验证：课程学习规则 + Official SysML v2 Validator。
+- 工程视图：官方语义投影、ELK 布局与正交避障、PlantUML/SVG 绘图，以及可展开折叠的 BrowserView 成员树。
 - AI Teacher：仅在 Full 档位启用，并强制通过 LiteLLM 连接真实 Provider；Core 不启动 Teacher。
 - 中英文界面与可扩展的课程包、知识包边界。
 
 AI Teacher 的建议不是语言正确性或工程正确性的最终证据。正式模型仍应经过 Official Validator、项目规则和工程评审。
+
+### Layout 增强：让工程模型更容易读懂
+
+复杂模型需要同时表达部件归属、端口、跨层级连接和需求关系。SynFeld 在 PlantUML 绘图之外引入独立的布局计算层：先从官方 SysML 对象取得元素与关系，再计算节点大小、层级排列、端口锚点和连线路径，最后绘制 SVG。**模型决定“有什么、怎么连接”，布局决定“放在哪里、线怎么走”。** 布局坐标和辅助锚点不会写回模型，也不会替模型补造连接。
+
+| 增强能力 | 对建模者的作用 |
+| --- | --- |
+| 多根与复合容器布局 | 同一视图展示多个根及嵌套部件，保留连接所属上下文 |
+| 端口锚点与正交避障 | 区分容器端口的内外连接侧，绕开受检查的部件和标签障碍 |
+| General／需求卡片 | 展示成员、类型、继承及已支持的 require／assume 引用，按文字测量安排卡片和间距 |
+| 中文与几何检查 | 按实际字体测量标签，检查端点、重叠、越界和线路几何；超预算或几何无效时明确报错 |
+| BrowserView 成员浏览 | 在工作台和 Teacher 回答预览中展开、折叠声明成员；同时提供静态列表 SVG |
+
+工程布局由 `packages/sysml-plantuml-service` 在本地 Validator 服务中执行，Core 也可使用，不需要 AI 模型 Key。受支持的结构、需求、互连和简单动作走增强布局；State／Sequence 等走相应原生渲染路径。BrowserView 是成员层级浏览，GeometryView／GridView 的专用渲染尚未支持。
+
+在工作台编辑模型后点击“生成视图”，官方校验通过后选择模型中的 view。图形视图支持适应、缩放和全屏；BrowserView 使用成员展开／折叠。大图仍可能需要缩放，不保证任意图零交叉；布局通过也不表示工程设计已经完整。
+
+详见 [布局架构、能力范围与示例](RENDERING.md)、[共享绘图服务接口](packages/sysml-plantuml-service/README.md) 和 [Teacher／编辑器命名支持](SYSML_NAMING.md)。[初始工程验证](RENDERING_VALIDATION.md) 与 [后续浏览器复验](SYSML_NAMING_VALIDATION.md) 分别记录服务端和实际交互证据；本地验证不等于托管服务已经部署该版本。
 
 ### v0.1.0 内容
 
@@ -117,6 +136,7 @@ config/litellm/      Public LiteLLM configuration template
 courses/             Public course packs
 knowledge-packs/     Public knowledge packs
 packages/            Shared runtime contracts and libraries
+  sysml-plantuml-service/ Semantic projection, engineering layout, and SVG rendering
 scripts/             Build, migration, verification, and boundary gates
 DEPLOYMENT.md         Core and Full deployment guide
 ```
@@ -200,10 +220,21 @@ The hosted service is an early experience environment with no SLA. Do not upload
 - Browsable knowledge packs.
 - A SysML v2 textual modeling workbench.
 - Layered validation: course rules followed by the Official SysML v2 Validator.
+- Engineering views: official semantic projection, ELK layout and orthogonal routing, PlantUML/SVG drawing, and an expandable BrowserView membership tree.
 - AI Teacher is enabled only in Full and must use a real provider through LiteLLM; Core does not start Teacher.
 - Chinese and English UI resources and extensible content-package boundaries.
 
 AI suggestions are not final evidence of language or engineering correctness. Use the Official Validator, project rules, and engineering review.
+
+### Layout enhancement: readable engineering models
+
+SynFeld adds an explicit layout layer alongside PlantUML drawing. Official SysML objects determine the elements, ownership and declared relationships; layout calculates card sizes, compound hierarchy, port anchors and connector geometry; the renderer produces SVG. Layout coordinates and helper anchors never modify the model or invent connections.
+
+The shared service supports multiple roots, compound containers, inside/outside port connections, orthogonal obstacle routing, General/requirement cards, CJK text measurement and geometry checks. BrowserView provides expandable membership browsing in the workbench and Teacher answer preview, plus a static SVG list. Supported structural, requirement, interconnection and simple action projections use the enhanced path; State/Sequence use their native rendering paths. Dedicated GeometryView/GridView rendering is not yet supported.
+
+Layout runs locally in the Validator service and is available in Core without an AI provider key. Generate a view after official validation, then use fit/zoom/fullscreen for diagrams or expand/collapse for BrowserView. Resource and geometry failures are reported explicitly. Large views may still require zooming; arbitrary zero-crossing layouts and engineering completeness are not guaranteed.
+
+See [layout architecture, scope and examples](RENDERING.md), the [shared service](packages/sysml-plantuml-service/README.md), and [Teacher/editor naming guidance](SYSML_NAMING.md). [Initial engineering checks](RENDERING_VALIDATION.md) and [subsequent browser acceptance](SYSML_NAMING_VALIDATION.md) distinguish local evidence from hosted deployment status.
 
 ### v0.1.0 contents
 
