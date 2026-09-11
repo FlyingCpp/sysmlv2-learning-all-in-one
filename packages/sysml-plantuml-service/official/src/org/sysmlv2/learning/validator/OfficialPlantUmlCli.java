@@ -33,16 +33,14 @@ public final class OfficialPlantUmlCli {
         new ViewModeSpec("StandardViewDefinitions::GeneralView", "DEFAULT")
     );
 
-    private final SysMLInteractive interactive;
+    private final String libraryPath;
+    private final String dotPath;
     private final PrintStream jsonOut;
 
     private OfficialPlantUmlCli(String libraryPath, String dotPath, PrintStream jsonOut) {
+        this.libraryPath = libraryPath;
+        this.dotPath = dotPath;
         this.jsonOut = jsonOut;
-        this.interactive = SysMLInteractive.createInstance();
-        this.interactive.loadLibrary(libraryPath);
-        if (dotPath != null && !dotPath.isBlank()) {
-            this.interactive.setGraphVizPath(dotPath);
-        }
     }
 
     public static void main(String[] args) throws Exception {
@@ -73,7 +71,13 @@ public final class OfficialPlantUmlCli {
                 String viewName = decodePart(parts, 1);
                 String renderMode = decodePart(parts, 2);
                 List<String> styles = csvList(decodePart(parts, 3));
-                response = render(source, viewName, renderMode, styles);
+                if ("DRAW_SCENE".equals(decodePart(parts, 5))) {
+                    if (source.length() > 4000000) throw new IllegalArgumentException("SCENE_LIMIT");
+                    String svg = EngineeringSceneRenderer.render(com.google.gson.JsonParser.parseString(source).getAsJsonObject());
+                    response = new com.google.gson.Gson().toJson(java.util.Map.of("ok", true, "kind", "SVG", "svg", svg));
+                } else {
+                    response = render(source, viewName, renderMode, styles, "true".equals(decodePart(parts, 4)));
+                }
             } catch (Exception error) {
                 response = errorResult(error);
             }
@@ -82,7 +86,16 @@ public final class OfficialPlantUmlCli {
         }
     }
 
-    private String render(String source, String requestedViewName, String renderMode, List<String> styles) {
+    private String render(String source, String requestedViewName, String renderMode, List<String> styles, boolean projectLayout) throws IOException {
+        // SysMLInteractive.removeResource() does not fully isolate every visualization cache in
+        // the upstream pilot runtime. A fresh session per request prevents repeated VS Code view
+        // switching from accumulating the same workspace until PlantUML returns its element-limit
+        // placeholder.
+        SysMLInteractive interactive = SysMLInteractive.createInstance();
+        interactive.loadLibrary(libraryPath);
+        if (dotPath != null && !dotPath.isBlank()) {
+            interactive.setGraphVizPath(dotPath);
+        }
         SysMLInteractiveResult parsed = interactive.process(source, true);
         try {
             if (parsed.getException() != null) {
@@ -93,15 +106,61 @@ public final class OfficialPlantUmlCli {
             }
 
             Selection selection = select(parsed.getRootElement(), requestedViewName, firstPackageName(source));
-            RenderDecision renderDecision = resolveRenderDecision(selection.viewUsage, renderMode);
+            RenderDecision renderDecision = resolveRenderDecision(interactive, selection.viewUsage, renderMode);
+            // Browser 是成员浏览呈现；不向官方 Visitor 发明一个不存在的 BROWSER 图形模式。
+            if (projectLayout && renderDecision.source.equals("default") && isBrowserView(interactive, selection.viewUsage)) {
+                var browserTree = BrowserViewProjection.project(selection.viewUsage);
+                String plantuml = EngineeringNativeRenderer.browser(browserTree);
+                var result = new java.util.LinkedHashMap<String, Object>();
+                result.put("ok", true);
+                result.put("kind", "SVG");
+                result.put("svg", EngineeringNativeRenderer.render(plantuml));
+                result.put("plantuml", plantuml);
+                result.put("browserTree", browserTree);
+                result.put("renderer", "engineering-native");
+                result.put("backend", "official-model-browser-membership");
+                result.put("viewName", selection.viewName);
+                result.put("renderMode", renderDecision.mode);
+                result.put("resolvedRenderMode", renderDecision.mode);
+                result.put("requestedRenderMode", normalizeRenderMode(renderMode));
+                result.put("renderModeSource", "standard-view-definition");
+                result.put("standardViewDefinition", "StandardViewDefinitions::BrowserView");
+                result.put("diagnostics", List.of());
+                return new com.google.gson.Gson().toJson(result);
+            }
+            java.util.Map<String, Object> projection = projectLayout
+                ? DiagramProjection.project(selection.viewUsage, renderDecision.mode) : null;
+            if (projection != null && List.of("PROJECTION_LIMIT_OR_RECURSION", "PORT_BUDGET_EXCEEDED",
+                    "EDGE_BUDGET_EXCEEDED", "LABEL_TOO_LARGE").contains(String.valueOf(projection.get("reason")))) {
+                return errorResult(new IllegalArgumentException("视图超出当前详细绘制预算，请减少暴露范围或聚焦子系统。"
+                    + " [" + projection.get("reason") + "]"));
+            }
+            if (projection != null && "ready".equals(projection.get("status"))) {
+                java.util.Map<String, Object> result = new java.util.LinkedHashMap<>();
+                result.put("ok", true);
+                boolean general = renderDecision.mode.equals("DEFAULT");
+                result.put("kind", "DIAGRAM_DOCUMENT");
+                result.put("diagramDocument", general ? GeneralViewPresentation.prepare(projection) : projection);
+                result.put("viewName", selection.viewName);
+                result.put("renderMode", renderDecision.mode);
+                result.put("resolvedRenderMode", renderDecision.mode);
+                result.put("requestedRenderMode", normalizeRenderMode(renderMode));
+                result.put("renderModeSource", renderDecision.source);
+                result.put("standardViewDefinition", renderDecision.standardViewDefinition);
+                result.put("diagnostics", List.of());
+                return new com.google.gson.Gson().toJson(result);
+            }
             List<String> renders = new ArrayList<>(List.of(renderDecision.mode));
             List<String> safeStyles = styles == null || styles.isEmpty() ? List.of("LR", "ORTHOLINE") : styles;
+            boolean nativeSkin = projectLayout && List.of("DEFAULT", "STATE", "SEQUENCE", "ACTION", "INTERCONNECTION").contains(renderDecision.mode);
+            List<String> visitorStyles = new ArrayList<>(safeStyles);
+            if (nativeSkin) visitorStyles.add("PUMLCODE");
 
             VizResult viz;
             if (selection.viewName != null && !selection.viewName.isBlank()) {
-                viz = interactive.view(selection.viewName, renders, new ArrayList<>(safeStyles), Collections.emptyList());
+                viz = interactive.view(selection.viewName, renders, visitorStyles, Collections.emptyList());
             } else if (!selection.elementNames.isEmpty()) {
-                viz = interactive.viz(selection.elementNames, renders, new ArrayList<>(safeStyles), Collections.emptyList());
+                viz = interactive.viz(selection.elementNames, renders, visitorStyles, Collections.emptyList());
             } else {
                 viz = VizResult.emptyResult();
             }
@@ -109,6 +168,12 @@ public final class OfficialPlantUmlCli {
             if (viz.hasException()) {
                 return errorResult(new RuntimeException(viz.formatException()));
             }
+            String nativeSource = nativeSkin && viz.getPlantUML() != null
+                ? EngineeringNativeRenderer.applySkin(viz.getPlantUML(), renderDecision.mode) : null;
+            NativeRelationProjection.Result repaired = nativeSource == null ? null
+                : NativeRelationProjection.repair(nativeSource, parsed.getRootElement(), renderDecision.mode);
+            if (repaired != null) nativeSource = repaired.source();
+            if (nativeSource != null) viz = VizResult.svgResult(EngineeringNativeRenderer.render(nativeSource));
             StringBuilder out = new StringBuilder();
             out.append("{");
             field(out, "source", SOURCE).append(",");
@@ -127,9 +192,16 @@ public final class OfficialPlantUmlCli {
             }
             out.append("],");
             field(out, "svg", viz.getSVG()).append(",");
-            field(out, "plantuml", viz.getPlantUML()).append(",");
+            field(out, "plantuml", nativeSource == null ? viz.getPlantUML() : nativeSource).append(",");
+            field(out, "renderer", nativeSource == null ? null : "engineering-native").append(",");
             field(out, "text", viz.getText()).append(",");
-            out.append("\"diagnostics\":[]");
+            field(out, "projectionFallbackReason", projection == null ? null : String.valueOf(projection.get("reason"))).append(",");
+            out.append("\"relationProjection\":").append(new com.google.gson.Gson().toJson(repaired == null ? List.of() : repaired.relations())).append(",");
+            boolean incompleteRelations = repaired != null && repaired.relations().stream()
+                .anyMatch(r -> !List.of("present", "added").contains(r.get("status")));
+            out.append("\"diagnostics\":").append(new com.google.gson.Gson().toJson(incompleteRelations
+                ? List.of(java.util.Map.of("severity", "warning", "code", "RELATION_PROJECTION_INCOMPLETE",
+                    "message", "部分连接或绑定未完成端点映射核对（端点未显示或关系形式尚未覆盖）；当前图不能作为完整连接关系的证据。")) : List.of()));
             out.append("}");
             return out.toString();
         } finally {
@@ -137,7 +209,16 @@ public final class OfficialPlantUmlCli {
         }
     }
 
-    private RenderDecision resolveRenderDecision(ViewUsage view, String requestedRenderMode) {
+    private boolean isBrowserView(SysMLInteractive interactive, ViewUsage view) {
+        Element definition = interactive.resolve("StandardViewDefinitions::BrowserView");
+        return view != null && definition instanceof Type standard
+            && view.getType().stream().anyMatch(type -> TypeUtil.specializes(type, standard));
+    }
+
+    private RenderDecision resolveRenderDecision(
+            SysMLInteractive interactive,
+            ViewUsage view,
+            String requestedRenderMode) {
         if (view != null) {
             RenderingUsage rendering = view.getViewRendering();
             if (rendering != null) {
@@ -323,7 +404,34 @@ public final class OfficialPlantUmlCli {
 
     private static String decodePart(String[] parts, int index) {
         if (index >= parts.length || parts[index] == null || parts[index].isBlank()) return "";
-        return new String(Base64.getDecoder().decode(parts[index].trim()), StandardCharsets.UTF_8);
+        String encoded = parts[index].trim();
+        if (index == 0 && encoded.startsWith("\uFEFF")) {
+            encoded = encoded.substring(1);
+        }
+        try {
+            return new String(Base64.getDecoder().decode(encoded), StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException error) {
+            int invalidOffset = -1;
+            int invalidCodePoint = -1;
+            for (int offset = 0; offset < encoded.length(); offset++) {
+                char value = encoded.charAt(offset);
+                boolean valid = (value >= 'A' && value <= 'Z')
+                    || (value >= 'a' && value <= 'z')
+                    || (value >= '0' && value <= '9')
+                    || value == '+' || value == '/' || value == '=';
+                if (!valid) {
+                    invalidOffset = offset;
+                    invalidCodePoint = value;
+                    break;
+                }
+            }
+            throw new IllegalArgumentException(
+                "Invalid Base64 in request field " + index
+                    + " at offset " + invalidOffset
+                    + " (code point " + invalidCodePoint + "): " + safeMessage(error),
+                error
+            );
+        }
     }
 
     private static List<String> csvList(String value) {

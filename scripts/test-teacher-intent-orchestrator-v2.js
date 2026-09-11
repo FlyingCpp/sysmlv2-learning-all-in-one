@@ -2443,38 +2443,59 @@ async function testMainFailureDegradationAndBounds(MockLanguageModelV4, runtime)
   assert(!failedCompressionJson.includes('END-SENTINEL'),
     '压缩失败必须降级Execution View，不能重新关闭后续Tool或泄漏完整大结果');
 
-  const projectionHost = normalizedHost(
-    '解释 Definition 与 Usage。',
-    'req_v2_sdk_tool_projection'
-  );
-  const projectionModel = new MockLanguageModelV4({
-    doGenerate: [
-      generatedText('PASS'),
-      generatedToolCalls([toolCall('knowledge-projection', 'search_reviewed_knowledge', {
-        query: 'Definition Usage relationship', limit: 5
-      })]),
-      generatedText('Usage可以由Definition定型。[source:evidence-definition-usage]'),
-      generatedDirectAnswer('Definition 描述分类规则；Usage 描述上下文中的使用。')
-    ]
-  });
-  const projectionOutput = completeKnowledgeOutput('Definition Usage relationship');
-  const projectionSentinel = `BEGIN-${'evidence '.repeat(5_000)}-END-SENTINEL`;
-  projectionOutput.evidenceBlocks[0].excerpt = projectionSentinel;
-  projectionOutput.evidenceBlocks[0].textHash = hashContent(projectionSentinel);
-  await runAgentCapability(projectionHost, v2Config(projectionModel, {
-    agentContextWindowTokens: 20_000,
-    agentDependencies: {
-      searchReviewedKnowledge: async () => projectionOutput
+  // 20k 窗口仍能调用压缩，但剩余预算放不下带引用/执行元数据的完整摘要对象。
+  // 24k 窗口覆盖摘要可容纳路径；两种情况下都不得把大结果重新交给 Main。
+  for (const projectionCase of [
+    { contextWindowTokens: 24_000, expectedStatus: 'semantic_compressed' },
+    { contextWindowTokens: 20_000, expectedStatus: 'available_but_omitted' }
+  ]) {
+    const projectionHost = normalizedHost(
+      '解释 Definition 与 Usage。',
+      'req_v2_sdk_tool_projection'
+    );
+    const projectionModel = new MockLanguageModelV4({
+      doGenerate: [
+        generatedText('PASS'),
+        generatedToolCalls([toolCall('knowledge-projection', 'search_reviewed_knowledge', {
+          query: 'Definition Usage relationship', limit: 5
+        })]),
+        generatedText('Usage可以由Definition定型。[source:evidence-definition-usage]'),
+        generatedDirectAnswer('Definition 描述分类规则；Usage 描述上下文中的使用。')
+      ]
+    });
+    const projectionOutput = completeKnowledgeOutput('Definition Usage relationship');
+    const projectionSentinel = `BEGIN-${'evidence '.repeat(5_000)}-END-SENTINEL`;
+    projectionOutput.evidenceBlocks[0].excerpt = projectionSentinel;
+    projectionOutput.evidenceBlocks[0].textHash = hashContent(projectionSentinel);
+    await runAgentCapability(projectionHost, v2Config(projectionModel, {
+      agentContextWindowTokens: projectionCase.contextWindowTokens,
+      agentDependencies: {
+        searchReviewedKnowledge: async () => projectionOutput
+      }
+    }));
+    const compressionCall = projectionModel.doGenerateCalls.find((call) => call.prompt.some((message) =>
+      message.role === 'system' && String(message.content).includes('你只压缩一个只读Tool Result')));
+    assert(compressionCall, '必须实际调用语义压缩模型，不能只判断终末回答');
+    const continuationCalls = projectionModel.doGenerateCalls.filter((call) => call.prompt.some((message) =>
+      message.role === 'tool' && Array.isArray(message.content) && message.content.some((part) =>
+        part.type === 'tool-result' && part.toolCallId === 'knowledge-projection')));
+    assert.equal(continuationCalls.length, 1, '应按 Tool Call ID 定位 Main 续轮，而非假设最后一次模型调用');
+    const providerContinuation = JSON.stringify(continuationCalls[0]);
+    assert(!providerContinuation.includes('END-SENTINEL'),
+      'AI SDK Tool toModelOutput必须阻止完整大结果进入Provider续轮');
+    assert(providerContinuation.includes(projectionCase.expectedStatus),
+      'Reviewed Knowledge投影必须与压缩后的可用预算一致');
+    if (projectionCase.expectedStatus === 'semantic_compressed') {
+      assert(providerContinuation.includes('[source:evidence-definition-usage]'));
+    } else {
+      assert(providerContinuation.includes('semantic_compression_output_exceeded'),
+        '摘要对象仍超预算时必须明确记录安全省略原因');
     }
-  }));
-  const providerContinuation = JSON.stringify(projectionModel.doGenerateCalls.at(-1));
-  assert(!providerContinuation.includes('END-SENTINEL'),
-    'AI SDK Tool toModelOutput必须阻止完整大结果进入Provider续轮');
-  assert(providerContinuation.includes('semantic_compressed'),
-    '超限Reviewed Knowledge必须把AI SDK语义压缩结果交给Provider');
-  assert(providerContinuation.includes('[source:evidence-definition-usage]'));
-  assert(!providerContinuation.includes('[truncated:'),
-    'AI SDK Tool toModelOutput不得恢复字符级截断');
+    assert(!providerContinuation.includes('[truncated:'),
+      'AI SDK Tool toModelOutput不得恢复字符级截断');
+    assert(projectionOutput.evidenceBlocks[0].excerpt.endsWith('END-SENTINEL'),
+      '模型可见投影不得改写服务端完整证据');
+  }
 
   const invalidHost = normalizedHost('解释 Definition。', 'req_v2_invalid_read_tool');
   const invalidModel = new MockLanguageModelV4({

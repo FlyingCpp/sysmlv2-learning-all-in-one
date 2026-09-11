@@ -1,0 +1,47 @@
+.browserModelView {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  color: #253247;
+  background: #fff;
+  font-size: 14px;
+  user-select: text;
+}
+.browserModelHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 22px;
+  border-bottom: 1px solid #dbe3ec;
+  background: #f8fafc;
+}
+.browserModelHeader strong { display: flex; align-items: center; gap: 8px; }
+.browserModelHeader p { margin: 6px 0 0; color: #60748a; overflow-wrap: anywhere; }
+.browserModelActions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.browserModelActions button { padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; background: white; color: #253247; cursor: pointer; }
+.browserModelScroll { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 12px 20px 24px; }
+.browserMemberList { list-style: none; padding: 0; margin: 0; }
+.browserMemberList .browserMemberList { margin-left: 18px; padding-left: 10px; border-left: 1px solid #dbe3ec; }
+.browserMemberRow { display: flex; align-items: flex-start; gap: 8px; width: 100%; min-width: 0; padding: 9px 10px; border: 0; border-radius: 6px; text-align: left; color: inherit; background: transparent; font: inherit; line-height: 1.5; }
+button.browserMemberRow { cursor: pointer; }
+.browserMemberRow:hover { background: #f1f5f9; }
+.browserMemberRow > svg { flex: 0 0 16px; margin-top: 3px; color: #60748a; }
+.browserMemberRow > svg.isOpen { transform: rotate(90deg); }
+.browserMemberText { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.browserMemberName { font-weight: 600; }
+.browserMemberType { color: #60748a; }
+.browserMemberKind { flex-shrink: 0; max-width: 35%; font-size: 11px; color: #52657a; background: #edf2f7; padding: 2px 6px; border-radius: 4px; overflow-wrap: anywhere; }
+.browserMemberCount { font-size: 12px; color: #60748a; }
+.browserModelView button:focus-visible, .browserModelScroll:focus-visible { outline: 2px solid #2563eb; outline-offset: -2px; }
+.plantUmlSvgFrame.isBrowserView { cursor: default; touch-action: auto; user-select: text; }
+.isBrowserView > .plantUmlViewToolbar { position: absolute; top: auto; bottom: 12px; }
+@media (max-width: 600px) {
+  .browserModelHeader { padding: 12px; }
+  .browserModelScroll { padding: 8px; }
+  .browserMemberList .browserMemberList { margin-left: 6px; padding-left: 4px; }
+  .browserMemberRow { gap: 5px; padding: 8px 4px; }
+  .browserMemberKind { max-width: 28%; }
+}

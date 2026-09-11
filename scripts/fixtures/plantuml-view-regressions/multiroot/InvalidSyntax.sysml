@@ -1,0 +1,1 @@
+package InvalidSyntax { part def

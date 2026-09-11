@@ -1,5 +1,10 @@
 # AI Teacher 执行与管理架构
 
+绘图更新：工作台和回答视图共用 BrowserView 成员树呈现，Teacher 提示同步实际视图能力。
+Validator 通过共享绘图服务执行投影、ELK 布局和 SVG 输出。无 Teacher 执行架构影响：
+Main/Worker、LLM Schema、Candidate、Ledger/Contract 数量、官方校验及发布状态机不变。
+目标逻辑与当前物理调用图保持既有结构；迁移差距仅为渲染器支持范围，见 RENDERING.md。
+
 本文件描述开源实现与验收边界。实现入口为 `apps/api/server.js`、
 `apps/teacher/server.js`、`apps/teacher/agent/intent-v2-execution.mts`。
 

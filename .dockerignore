@@ -14,3 +14,9 @@ outputs/
 backups/
 npm-debug.log*
 .DS_Store
+
+**/node_modules/
+packages/sysml-plantuml-service/official/classes/
+.official-cache/
+.npm-cache/
+.docker-test-config/

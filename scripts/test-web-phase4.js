@@ -529,9 +529,9 @@ function testReactPhase4Contracts() {
   );
   assert(teacherPanelTsx.includes('/api/teacher/answer-stream') && teacherPanelTsx.includes('/api/teacher/validate-patch'), 'AI teacher panel must use stream and patch validation routes');
   assert(
-    teacherPanelTsx.includes('const DEFAULT_DOCK_WIDTH = 380')
+    teacherPanelTsx.includes('const DEFAULT_DOCK_WIDTH = MAX_DOCK_WIDTH')
       && teacherPanelTsx.includes('dockWidth: DEFAULT_DOCK_WIDTH'),
-    'AI teacher dock must use the compact desktop default width while retaining user resize controls'
+    'AI teacher dock must preserve the existing maximum default width and user resize controls'
   );
   assert(
     teacherPanelTsx.includes('data-feedback-outcome="resolved"')
@@ -560,7 +560,7 @@ function testReactPhase4Contracts() {
     && teacherPanelTsx.includes('document.documentElement.style.overflow = previousRootOverflow')
     && teacherPanelTsx.includes("aria-label={isRenderMaximized ? '还原模型视图' : '最大化模型视图'}")
     && teacherPanelTsx.includes('data-maximized={isRenderMaximized}')
-    && teacherPanelTsx.includes('<PlantUmlViewport svgMarkup={renderResult.svg} />')
+    && teacherPanelTsx.includes('<PlantUmlViewport svgMarkup={renderResult.svg} browserTree={renderResult.browserTree} />')
     && viewPaneTsx.includes('export function PlantUmlViewport')
     && appCss.includes('.aiTeacherPlantUmlDialog')
     && appCss.includes(".aiTeacherPlantUmlDialog[data-maximized='true']")
@@ -582,7 +582,7 @@ function testReactPhase4Contracts() {
     teacherPanelTsx.includes("kind: 'engineering_feedback'")
       && teacherPanelTsx.includes("manualContinuationKind: effectiveManualKind")
       && teacherPanelTsx.includes('data-ai-teacher-composer-context')
-      && teacherPanelTsx.includes('正在基于上一版 Validator-PASS 模型继续改进')
+      && teacherPanelTsx.includes("t('aiPanel.engineeringContext')")
       && teacherPanelTsx.includes('data-ai-teacher-engineering-review')
       && teacherPanelTsx.includes('data-ai-teacher-question-card')
       && teacherPanelTsx.includes('data-ai-teacher-version-dialog')
@@ -631,7 +631,8 @@ function testReactPhase4Contracts() {
     teacherPanelTsx.includes('notifyTeacherBusy')
       && teacherPanelTsx.includes('data-ai-teacher-busy-tip')
       && teacherPanelTsx.includes('data-ai-teacher-running={running}')
-      && teacherPanelTsx.includes("running ? stopTeacher() : void runTeacher()")
+      && teacherPanelTsx.includes("interactionBusy ? stopTeacher() : void runTeacher()")
+      && teacherPanelTsx.includes('data-ai-teacher-submission-phase={submissionPhase}')
       && teacherPanelTsx.indexOf('aiTeacherRunControllers.get(runSessionKey)?.abort()') < teacherPanelTsx.indexOf('`/api/teacher/runs/${encodeURIComponent(runId)}/cancel?${teacherContextQuery(lesson)}`'),
     'the single submit control must expose busy state and stop the active run instead of starting concurrent work'
   );
@@ -700,13 +701,13 @@ function testReactPhase4Contracts() {
       && unsupportedMermaidTs.includes('export const diagram = {}'),
     'optional oversized Mermaid diagram engines must fail clearly instead of bypassing the Web chunk budget'
   );
-  assert(teacherPanelTsx.includes('TeacherCodeBlock') && teacherPanelTsx.includes('aria-label="复制代码块"') && teacherPanelTsx.includes('copyText(code)'), 'AI teacher markdown code blocks must expose one-click copy');
+  assert(teacherPanelTsx.includes('TeacherCodeBlock') && teacherPanelTsx.includes('data-copy-state={copyState}') && teacherPanelTsx.includes("'复制代码块'") && teacherPanelTsx.includes('copyText(code)'), 'AI teacher markdown code blocks must expose one-click copy and observable result state');
   assert(teacherPanelTsx.includes('data-code-validation-status') && teacherPanelTsx.includes('aiTeacherCodeValidationLights') && teacherPanelTsx.includes('验证未通过 · 需人工复查'), 'AI teacher SysML code blocks must show validator traffic-light status and human-review warning text');
   assert(teacherPanelTsx.includes('panelRef') && teacherPanelTsx.includes("event.key === 'Escape'"), 'AI teacher panel must focus on open and close on Escape');
   assert(
     teacherPanelTsx.includes('aiTeacherResizeHandle')
       && teacherPanelTsx.includes('--ai-teacher-dock-width')
-      && teacherPanelTsx.includes('左右拖动调整 AI 教师宽度')
+      && teacherPanelTsx.includes("t('aiPanel.resizeTitle')")
       && teacherPanelTsx.includes("event.key === 'ArrowLeft'")
       && teacherPanelTsx.includes("event.key === 'ArrowRight'"),
     'AI teacher dock must expose pointer and keyboard width resizing in docked mode'

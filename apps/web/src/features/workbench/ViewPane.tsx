@@ -1,3 +1,4 @@
+import { BrowserModelView } from './BrowserModelView';
 import { ExternalLink, Maximize2, Minus, Plus, Scan, X } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import {
@@ -285,7 +286,7 @@ export function ViewPane({ sectionRef, workspace, validationPassed, courseRulesP
         hidden={activeTab !== 'plantuml'}
       >
         {plantUmlResult?.svg ? (
-          <PlantUmlViewport svgMarkup={plantUmlResult.svg} allowFullscreen />
+          <PlantUmlViewport svgMarkup={plantUmlResult.svg} browserTree={plantUmlResult.browserTree} allowFullscreen />
         ) : (
           <ViewPlaceholder
             state={viewState}
@@ -315,7 +316,7 @@ export function ViewPane({ sectionRef, workspace, validationPassed, courseRulesP
   );
 }
 
-export function PlantUmlViewport({ svgMarkup, allowFullscreen = false }: { svgMarkup: string; allowFullscreen?: boolean }) {
+export function PlantUmlViewport({ svgMarkup, browserTree, allowFullscreen = false }: { svgMarkup: string; browserTree?: PlantUmlRenderResult['browserTree']; allowFullscreen?: boolean }) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const transformRef = useRef<ViewTransform>({ x: 0, y: 0, scale: 1 });
   const pointerRef = useRef<{ pointerId: number; clientX: number; clientY: number } | null>(null);
@@ -391,12 +392,13 @@ export function PlantUmlViewport({ svgMarkup, allowFullscreen = false }: { svgMa
     const viewport = viewportRef.current;
     if (!viewport) return;
     const handleWheel = (event: WheelEvent) => {
+      if (browserTree) return;
       event.preventDefault();
       zoomAt(Math.exp(-event.deltaY * 0.0015), event.clientX, event.clientY);
     };
     viewport.addEventListener('wheel', handleWheel, { passive: false });
     return () => viewport.removeEventListener('wheel', handleWheel);
-  }, [zoomAt]);
+  }, [zoomAt, browserTree]);
 
   useEffect(() => {
     if (!isFullscreen) return undefined;
@@ -420,7 +422,7 @@ export function PlantUmlViewport({ svgMarkup, allowFullscreen = false }: { svgMa
   }, [isFullscreen]);
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return;
+    if (browserTree || event.button !== 0) return;
     event.preventDefault();
     pointerRef.current = { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY };
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -454,24 +456,24 @@ export function PlantUmlViewport({ svgMarkup, allowFullscreen = false }: { svgMa
   return (
     <div
       ref={viewportRef}
-      className={`plantUmlSvgFrame${isDragging ? ' isDragging' : ''}`}
+      className={`plantUmlSvgFrame${isDragging ? ' isDragging' : ''}${browserTree ? ' isBrowserView' : ''}`}
       data-plantuml-svg
       data-plantuml-interactive-viewport
       data-plantuml-fit-mode={fitMode}
       role="region"
-      aria-label="PlantUML 模型视图，可拖动和缩放"
+      aria-label={browserTree ? "模型成员层级浏览 / Model membership browser" : "PlantUML 模型视图，可拖动和缩放"}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={releasePointer}
       onPointerCancel={releasePointer}
     >
-      <div
+      {!browserTree || allowFullscreen ? <div
         className="plantUmlViewToolbar"
         data-plantuml-view-toolbar
         aria-label="模型视图缩放工具"
         onPointerDown={stopToolbarPointer}
       >
-        <button type="button" aria-label="缩小模型视图" title="缩小" onClick={() => zoomAt(1 / VIEW_ZOOM_STEP)}>
+        {!browserTree ? <><button type="button" aria-label="缩小模型视图" title="缩小" onClick={() => zoomAt(1 / VIEW_ZOOM_STEP)}>
           <Minus size={16} aria-hidden="true" />
         </button>
         <output data-plantuml-zoom aria-label={`当前缩放 ${zoomPercent}%`}>{zoomPercent}%</output>
@@ -481,6 +483,7 @@ export function PlantUmlViewport({ svgMarkup, allowFullscreen = false }: { svgMa
         <button type="button" aria-label="适配模型视图" title="适配视图" onClick={fitView}>
           <Scan size={16} aria-hidden="true" />
         </button>
+        </> : null}
         {allowFullscreen ? (
           <button
             ref={fullscreenButtonRef}
@@ -494,8 +497,8 @@ export function PlantUmlViewport({ svgMarkup, allowFullscreen = false }: { svgMa
             <Maximize2 size={16} aria-hidden="true" />
           </button>
         ) : null}
-      </div>
-      <div
+      </div> : null}
+      {browserTree ? <BrowserModelView key={svgMarkup} tree={browserTree} /> : <div
         className="plantUmlSvgCanvas"
         data-plantuml-svg-canvas
         style={{
@@ -505,7 +508,7 @@ export function PlantUmlViewport({ svgMarkup, allowFullscreen = false }: { svgMa
           height: intrinsicSize ? intrinsicSize.height * transform.scale : undefined
         }}
         dangerouslySetInnerHTML={{ __html: svgMarkup }}
-      />
+      />}
       {isFullscreen && typeof document !== 'undefined' ? createPortal(
         <div
           className="aiTeacherPlantUmlBackdrop"
@@ -542,7 +545,7 @@ export function PlantUmlViewport({ svgMarkup, allowFullscreen = false }: { svgMa
             </header>
             <div className="aiTeacherPlantUmlBody">
               <div className="aiTeacherPlantUmlCanvas">
-                <PlantUmlViewport svgMarkup={svgMarkup} />
+                <PlantUmlViewport svgMarkup={svgMarkup} browserTree={browserTree} />
               </div>
             </div>
           </section>

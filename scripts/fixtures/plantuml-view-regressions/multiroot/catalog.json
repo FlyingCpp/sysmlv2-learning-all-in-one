@@ -1,0 +1,1733 @@
+{
+  "schemaVersion": "multiroot-design-cases/v1",
+  "status": "DESIGN_FIXTURES_NOT_RENDERER_ACCEPTANCE",
+  "rootCounts": [
+    1,
+    2,
+    3,
+    8,
+    9,
+    16,
+    17,
+    32,
+    33
+  ],
+  "provenance": "结构、动作、状态、消息语法沿用项目已通过官方 Validator 的标准视图最小样例；边界用例由本设计构造。",
+  "cases": [
+    {
+      "id": "GeneralView-1",
+      "file": "GeneralView.sysml",
+      "viewName": "MultiGeneralView::roots1",
+      "viewKind": "GeneralView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 1,
+      "expectedRootNames": [
+        "Root1"
+      ],
+      "semanticOracle": {
+        "distinctRootIdentity": true
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "GeneralView-2",
+      "file": "GeneralView.sysml",
+      "viewName": "MultiGeneralView::roots2",
+      "viewKind": "GeneralView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 2,
+      "expectedRootNames": [
+        "Root1",
+        "Root2"
+      ],
+      "semanticOracle": {
+        "distinctRootIdentity": true
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "GeneralView-3",
+      "file": "GeneralView.sysml",
+      "viewName": "MultiGeneralView::roots3",
+      "viewKind": "GeneralView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 3,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3"
+      ],
+      "semanticOracle": {
+        "distinctRootIdentity": true
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "GeneralView-8",
+      "file": "GeneralView.sysml",
+      "viewName": "MultiGeneralView::roots8",
+      "viewKind": "GeneralView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 8,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3",
+        "Root4",
+        "Root5",
+        "Root6",
+        "Root7",
+        "Root8"
+      ],
+      "semanticOracle": {
+        "distinctRootIdentity": true
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "GeneralView-9",
+      "file": "GeneralView.sysml",
+      "viewName": "MultiGeneralView::roots9",
+      "viewKind": "GeneralView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 9,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3",
+        "Root4",
+        "Root5",
+        "Root6",
+        "Root7",
+        "Root8",
+        "Root9"
+      ],
+      "semanticOracle": {
+        "distinctRootIdentity": true
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "GeneralView-16",
+      "file": "GeneralView.sysml",
+      "viewName": "MultiGeneralView::roots16",
+      "viewKind": "GeneralView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 16,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3",
+        "Root4",
+        "Root5",
+        "Root6",
+        "Root7",
+        "Root8",
+        "Root9",
+        "Root10",
+        "Root11",
+        "Root12",
+        "Root13",
+        "Root14",
+        "Root15",
+        "Root16"
+      ],
+      "semanticOracle": {
+        "distinctRootIdentity": true
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "GeneralView-17",
+      "file": "GeneralView.sysml",
+      "viewName": "MultiGeneralView::roots17",
+      "viewKind": "GeneralView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 17,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3",
+        "Root4",
+        "Root5",
+        "Root6",
+        "Root7",
+        "Root8",
+        "Root9",
+        "Root10",
+        "Root11",
+        "Root12",
+        "Root13",
+        "Root14",
+        "Root15",
+        "Root16",
+        "Root17"
+      ],
+      "semanticOracle": {
+        "distinctRootIdentity": true
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "GeneralView-32",
+      "file": "GeneralView.sysml",
+      "viewName": "MultiGeneralView::roots32",
+      "viewKind": "GeneralView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 32,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3",
+        "Root4",
+        "Root5",
+        "Root6",
+        "Root7",
+        "Root8",
+        "Root9",
+        "Root10",
+        "Root11",
+        "Root12",
+        "Root13",
+        "Root14",
+        "Root15",
+        "Root16",
+        "Root17",
+        "Root18",
+        "Root19",
+        "Root20",
+        "Root21",
+        "Root22",
+        "Root23",
+        "Root24",
+        "Root25",
+        "Root26",
+        "Root27",
+        "Root28",
+        "Root29",
+        "Root30",
+        "Root31",
+        "Root32"
+      ],
+      "semanticOracle": {
+        "distinctRootIdentity": true
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "GeneralView-33",
+      "file": "GeneralView.sysml",
+      "viewName": "MultiGeneralView::roots33",
+      "viewKind": "GeneralView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 33,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3",
+        "Root4",
+        "Root5",
+        "Root6",
+        "Root7",
+        "Root8",
+        "Root9",
+        "Root10",
+        "Root11",
+        "Root12",
+        "Root13",
+        "Root14",
+        "Root15",
+        "Root16",
+        "Root17",
+        "Root18",
+        "Root19",
+        "Root20",
+        "Root21",
+        "Root22",
+        "Root23",
+        "Root24",
+        "Root25",
+        "Root26",
+        "Root27",
+        "Root28",
+        "Root29",
+        "Root30",
+        "Root31",
+        "Root32",
+        "Root33"
+      ],
+      "semanticOracle": {
+        "distinctRootIdentity": true
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "InterconnectionView-1",
+      "file": "InterconnectionView.sysml",
+      "viewName": "MultiInterconnectionView::roots1",
+      "viewKind": "InterconnectionView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 1,
+      "expectedRootNames": [
+        "Root1"
+      ],
+      "semanticOracle": {
+        "connectionsPerRoot": 1,
+        "crossRootConnections": 0
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "InterconnectionView-2",
+      "file": "InterconnectionView.sysml",
+      "viewName": "MultiInterconnectionView::roots2",
+      "viewKind": "InterconnectionView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 2,
+      "expectedRootNames": [
+        "Root1",
+        "Root2"
+      ],
+      "semanticOracle": {
+        "connectionsPerRoot": 1,
+        "crossRootConnections": 0
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "InterconnectionView-3",
+      "file": "InterconnectionView.sysml",
+      "viewName": "MultiInterconnectionView::roots3",
+      "viewKind": "InterconnectionView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 3,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3"
+      ],
+      "semanticOracle": {
+        "connectionsPerRoot": 1,
+        "crossRootConnections": 0
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "InterconnectionView-8",
+      "file": "InterconnectionView.sysml",
+      "viewName": "MultiInterconnectionView::roots8",
+      "viewKind": "InterconnectionView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 8,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3",
+        "Root4",
+        "Root5",
+        "Root6",
+        "Root7",
+        "Root8"
+      ],
+      "semanticOracle": {
+        "connectionsPerRoot": 1,
+        "crossRootConnections": 0
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "InterconnectionView-9",
+      "file": "InterconnectionView.sysml",
+      "viewName": "MultiInterconnectionView::roots9",
+      "viewKind": "InterconnectionView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 9,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3",
+        "Root4",
+        "Root5",
+        "Root6",
+        "Root7",
+        "Root8",
+        "Root9"
+      ],
+      "semanticOracle": {
+        "connectionsPerRoot": 1,
+        "crossRootConnections": 0
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "InterconnectionView-16",
+      "file": "InterconnectionView.sysml",
+      "viewName": "MultiInterconnectionView::roots16",
+      "viewKind": "InterconnectionView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 16,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3",
+        "Root4",
+        "Root5",
+        "Root6",
+        "Root7",
+        "Root8",
+        "Root9",
+        "Root10",
+        "Root11",
+        "Root12",
+        "Root13",
+        "Root14",
+        "Root15",
+        "Root16"
+      ],
+      "semanticOracle": {
+        "connectionsPerRoot": 1,
+        "crossRootConnections": 0
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "InterconnectionView-17",
+      "file": "InterconnectionView.sysml",
+      "viewName": "MultiInterconnectionView::roots17",
+      "viewKind": "InterconnectionView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 17,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3",
+        "Root4",
+        "Root5",
+        "Root6",
+        "Root7",
+        "Root8",
+        "Root9",
+        "Root10",
+        "Root11",
+        "Root12",
+        "Root13",
+        "Root14",
+        "Root15",
+        "Root16",
+        "Root17"
+      ],
+      "semanticOracle": {
+        "connectionsPerRoot": 1,
+        "crossRootConnections": 0
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "InterconnectionView-32",
+      "file": "InterconnectionView.sysml",
+      "viewName": "MultiInterconnectionView::roots32",
+      "viewKind": "InterconnectionView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 32,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3",
+        "Root4",
+        "Root5",
+        "Root6",
+        "Root7",
+        "Root8",
+        "Root9",
+        "Root10",
+        "Root11",
+        "Root12",
+        "Root13",
+        "Root14",
+        "Root15",
+        "Root16",
+        "Root17",
+        "Root18",
+        "Root19",
+        "Root20",
+        "Root21",
+        "Root22",
+        "Root23",
+        "Root24",
+        "Root25",
+        "Root26",
+        "Root27",
+        "Root28",
+        "Root29",
+        "Root30",
+        "Root31",
+        "Root32"
+      ],
+      "semanticOracle": {
+        "connectionsPerRoot": 1,
+        "crossRootConnections": 0
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "InterconnectionView-33",
+      "file": "InterconnectionView.sysml",
+      "viewName": "MultiInterconnectionView::roots33",
+      "viewKind": "InterconnectionView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 33,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3",
+        "Root4",
+        "Root5",
+        "Root6",
+        "Root7",
+        "Root8",
+        "Root9",
+        "Root10",
+        "Root11",
+        "Root12",
+        "Root13",
+        "Root14",
+        "Root15",
+        "Root16",
+        "Root17",
+        "Root18",
+        "Root19",
+        "Root20",
+        "Root21",
+        "Root22",
+        "Root23",
+        "Root24",
+        "Root25",
+        "Root26",
+        "Root27",
+        "Root28",
+        "Root29",
+        "Root30",
+        "Root31",
+        "Root32",
+        "Root33"
+      ],
+      "semanticOracle": {
+        "connectionsPerRoot": 1,
+        "crossRootConnections": 0
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "ActionFlowView-1",
+      "file": "ActionFlowView.sysml",
+      "viewName": "MultiActionFlowView::roots1",
+      "viewKind": "ActionFlowView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 1,
+      "expectedRootNames": [
+        "Root1"
+      ],
+      "semanticOracle": {
+        "internalSuccessionsPerRoot": 2,
+        "crossRootSuccessions": 0
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "ActionFlowView-2",
+      "file": "ActionFlowView.sysml",
+      "viewName": "MultiActionFlowView::roots2",
+      "viewKind": "ActionFlowView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 2,
+      "expectedRootNames": [
+        "Root1",
+        "Root2"
+      ],
+      "semanticOracle": {
+        "internalSuccessionsPerRoot": 2,
+        "crossRootSuccessions": 0
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "ActionFlowView-3",
+      "file": "ActionFlowView.sysml",
+      "viewName": "MultiActionFlowView::roots3",
+      "viewKind": "ActionFlowView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 3,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3"
+      ],
+      "semanticOracle": {
+        "internalSuccessionsPerRoot": 2,
+        "crossRootSuccessions": 0
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "ActionFlowView-8",
+      "file": "ActionFlowView.sysml",
+      "viewName": "MultiActionFlowView::roots8",
+      "viewKind": "ActionFlowView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 8,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3",
+        "Root4",
+        "Root5",
+        "Root6",
+        "Root7",
+        "Root8"
+      ],
+      "semanticOracle": {
+        "internalSuccessionsPerRoot": 2,
+        "crossRootSuccessions": 0
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "ActionFlowView-9",
+      "file": "ActionFlowView.sysml",
+      "viewName": "MultiActionFlowView::roots9",
+      "viewKind": "ActionFlowView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 9,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3",
+        "Root4",
+        "Root5",
+        "Root6",
+        "Root7",
+        "Root8",
+        "Root9"
+      ],
+      "semanticOracle": {
+        "internalSuccessionsPerRoot": 2,
+        "crossRootSuccessions": 0
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "ActionFlowView-16",
+      "file": "ActionFlowView.sysml",
+      "viewName": "MultiActionFlowView::roots16",
+      "viewKind": "ActionFlowView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 16,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3",
+        "Root4",
+        "Root5",
+        "Root6",
+        "Root7",
+        "Root8",
+        "Root9",
+        "Root10",
+        "Root11",
+        "Root12",
+        "Root13",
+        "Root14",
+        "Root15",
+        "Root16"
+      ],
+      "semanticOracle": {
+        "internalSuccessionsPerRoot": 2,
+        "crossRootSuccessions": 0
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "ActionFlowView-17",
+      "file": "ActionFlowView.sysml",
+      "viewName": "MultiActionFlowView::roots17",
+      "viewKind": "ActionFlowView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 17,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3",
+        "Root4",
+        "Root5",
+        "Root6",
+        "Root7",
+        "Root8",
+        "Root9",
+        "Root10",
+        "Root11",
+        "Root12",
+        "Root13",
+        "Root14",
+        "Root15",
+        "Root16",
+        "Root17"
+      ],
+      "semanticOracle": {
+        "internalSuccessionsPerRoot": 2,
+        "crossRootSuccessions": 0
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "ActionFlowView-32",
+      "file": "ActionFlowView.sysml",
+      "viewName": "MultiActionFlowView::roots32",
+      "viewKind": "ActionFlowView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 32,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3",
+        "Root4",
+        "Root5",
+        "Root6",
+        "Root7",
+        "Root8",
+        "Root9",
+        "Root10",
+        "Root11",
+        "Root12",
+        "Root13",
+        "Root14",
+        "Root15",
+        "Root16",
+        "Root17",
+        "Root18",
+        "Root19",
+        "Root20",
+        "Root21",
+        "Root22",
+        "Root23",
+        "Root24",
+        "Root25",
+        "Root26",
+        "Root27",
+        "Root28",
+        "Root29",
+        "Root30",
+        "Root31",
+        "Root32"
+      ],
+      "semanticOracle": {
+        "internalSuccessionsPerRoot": 2,
+        "crossRootSuccessions": 0
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "ActionFlowView-33",
+      "file": "ActionFlowView.sysml",
+      "viewName": "MultiActionFlowView::roots33",
+      "viewKind": "ActionFlowView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 33,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3",
+        "Root4",
+        "Root5",
+        "Root6",
+        "Root7",
+        "Root8",
+        "Root9",
+        "Root10",
+        "Root11",
+        "Root12",
+        "Root13",
+        "Root14",
+        "Root15",
+        "Root16",
+        "Root17",
+        "Root18",
+        "Root19",
+        "Root20",
+        "Root21",
+        "Root22",
+        "Root23",
+        "Root24",
+        "Root25",
+        "Root26",
+        "Root27",
+        "Root28",
+        "Root29",
+        "Root30",
+        "Root31",
+        "Root32",
+        "Root33"
+      ],
+      "semanticOracle": {
+        "internalSuccessionsPerRoot": 2,
+        "crossRootSuccessions": 0
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "StateTransitionView-1",
+      "file": "StateTransitionView.sysml",
+      "viewName": "MultiStateTransitionView::roots1",
+      "viewKind": "StateTransitionView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 1,
+      "expectedRootNames": [
+        "Root1"
+      ],
+      "semanticOracle": {
+        "explicitTransitionsPerRoot": 1,
+        "crossRootTransitions": 0
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "StateTransitionView-2",
+      "file": "StateTransitionView.sysml",
+      "viewName": "MultiStateTransitionView::roots2",
+      "viewKind": "StateTransitionView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 2,
+      "expectedRootNames": [
+        "Root1",
+        "Root2"
+      ],
+      "semanticOracle": {
+        "explicitTransitionsPerRoot": 1,
+        "crossRootTransitions": 0
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "StateTransitionView-3",
+      "file": "StateTransitionView.sysml",
+      "viewName": "MultiStateTransitionView::roots3",
+      "viewKind": "StateTransitionView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 3,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3"
+      ],
+      "semanticOracle": {
+        "explicitTransitionsPerRoot": 1,
+        "crossRootTransitions": 0
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "StateTransitionView-8",
+      "file": "StateTransitionView.sysml",
+      "viewName": "MultiStateTransitionView::roots8",
+      "viewKind": "StateTransitionView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 8,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3",
+        "Root4",
+        "Root5",
+        "Root6",
+        "Root7",
+        "Root8"
+      ],
+      "semanticOracle": {
+        "explicitTransitionsPerRoot": 1,
+        "crossRootTransitions": 0
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "StateTransitionView-9",
+      "file": "StateTransitionView.sysml",
+      "viewName": "MultiStateTransitionView::roots9",
+      "viewKind": "StateTransitionView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 9,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3",
+        "Root4",
+        "Root5",
+        "Root6",
+        "Root7",
+        "Root8",
+        "Root9"
+      ],
+      "semanticOracle": {
+        "explicitTransitionsPerRoot": 1,
+        "crossRootTransitions": 0
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "StateTransitionView-16",
+      "file": "StateTransitionView.sysml",
+      "viewName": "MultiStateTransitionView::roots16",
+      "viewKind": "StateTransitionView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 16,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3",
+        "Root4",
+        "Root5",
+        "Root6",
+        "Root7",
+        "Root8",
+        "Root9",
+        "Root10",
+        "Root11",
+        "Root12",
+        "Root13",
+        "Root14",
+        "Root15",
+        "Root16"
+      ],
+      "semanticOracle": {
+        "explicitTransitionsPerRoot": 1,
+        "crossRootTransitions": 0
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "StateTransitionView-17",
+      "file": "StateTransitionView.sysml",
+      "viewName": "MultiStateTransitionView::roots17",
+      "viewKind": "StateTransitionView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 17,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3",
+        "Root4",
+        "Root5",
+        "Root6",
+        "Root7",
+        "Root8",
+        "Root9",
+        "Root10",
+        "Root11",
+        "Root12",
+        "Root13",
+        "Root14",
+        "Root15",
+        "Root16",
+        "Root17"
+      ],
+      "semanticOracle": {
+        "explicitTransitionsPerRoot": 1,
+        "crossRootTransitions": 0
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "StateTransitionView-32",
+      "file": "StateTransitionView.sysml",
+      "viewName": "MultiStateTransitionView::roots32",
+      "viewKind": "StateTransitionView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 32,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3",
+        "Root4",
+        "Root5",
+        "Root6",
+        "Root7",
+        "Root8",
+        "Root9",
+        "Root10",
+        "Root11",
+        "Root12",
+        "Root13",
+        "Root14",
+        "Root15",
+        "Root16",
+        "Root17",
+        "Root18",
+        "Root19",
+        "Root20",
+        "Root21",
+        "Root22",
+        "Root23",
+        "Root24",
+        "Root25",
+        "Root26",
+        "Root27",
+        "Root28",
+        "Root29",
+        "Root30",
+        "Root31",
+        "Root32"
+      ],
+      "semanticOracle": {
+        "explicitTransitionsPerRoot": 1,
+        "crossRootTransitions": 0
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "StateTransitionView-33",
+      "file": "StateTransitionView.sysml",
+      "viewName": "MultiStateTransitionView::roots33",
+      "viewKind": "StateTransitionView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 33,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3",
+        "Root4",
+        "Root5",
+        "Root6",
+        "Root7",
+        "Root8",
+        "Root9",
+        "Root10",
+        "Root11",
+        "Root12",
+        "Root13",
+        "Root14",
+        "Root15",
+        "Root16",
+        "Root17",
+        "Root18",
+        "Root19",
+        "Root20",
+        "Root21",
+        "Root22",
+        "Root23",
+        "Root24",
+        "Root25",
+        "Root26",
+        "Root27",
+        "Root28",
+        "Root29",
+        "Root30",
+        "Root31",
+        "Root32",
+        "Root33"
+      ],
+      "semanticOracle": {
+        "explicitTransitionsPerRoot": 1,
+        "crossRootTransitions": 0
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "SequenceView-1",
+      "file": "SequenceView.sysml",
+      "viewName": "MultiSequenceView::roots1",
+      "viewKind": "SequenceView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 1,
+      "expectedRootNames": [
+        "Root1"
+      ],
+      "semanticOracle": {
+        "scenarios": 1,
+        "messagesPerScenario": 2,
+        "sharedGlobalTimeAxis": false
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "SequenceView-2",
+      "file": "SequenceView.sysml",
+      "viewName": "MultiSequenceView::roots2",
+      "viewKind": "SequenceView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 2,
+      "expectedRootNames": [
+        "Root1",
+        "Root2"
+      ],
+      "semanticOracle": {
+        "scenarios": 2,
+        "messagesPerScenario": 2,
+        "sharedGlobalTimeAxis": false
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "SequenceView-3",
+      "file": "SequenceView.sysml",
+      "viewName": "MultiSequenceView::roots3",
+      "viewKind": "SequenceView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 3,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3"
+      ],
+      "semanticOracle": {
+        "scenarios": 3,
+        "messagesPerScenario": 2,
+        "sharedGlobalTimeAxis": false
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "SequenceView-8",
+      "file": "SequenceView.sysml",
+      "viewName": "MultiSequenceView::roots8",
+      "viewKind": "SequenceView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 8,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3",
+        "Root4",
+        "Root5",
+        "Root6",
+        "Root7",
+        "Root8"
+      ],
+      "semanticOracle": {
+        "scenarios": 8,
+        "messagesPerScenario": 2,
+        "sharedGlobalTimeAxis": false
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "SequenceView-9",
+      "file": "SequenceView.sysml",
+      "viewName": "MultiSequenceView::roots9",
+      "viewKind": "SequenceView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 9,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3",
+        "Root4",
+        "Root5",
+        "Root6",
+        "Root7",
+        "Root8",
+        "Root9"
+      ],
+      "semanticOracle": {
+        "scenarios": 9,
+        "messagesPerScenario": 2,
+        "sharedGlobalTimeAxis": false
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "SequenceView-16",
+      "file": "SequenceView.sysml",
+      "viewName": "MultiSequenceView::roots16",
+      "viewKind": "SequenceView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 16,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3",
+        "Root4",
+        "Root5",
+        "Root6",
+        "Root7",
+        "Root8",
+        "Root9",
+        "Root10",
+        "Root11",
+        "Root12",
+        "Root13",
+        "Root14",
+        "Root15",
+        "Root16"
+      ],
+      "semanticOracle": {
+        "scenarios": 16,
+        "messagesPerScenario": 2,
+        "sharedGlobalTimeAxis": false
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "SequenceView-17",
+      "file": "SequenceView.sysml",
+      "viewName": "MultiSequenceView::roots17",
+      "viewKind": "SequenceView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 17,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3",
+        "Root4",
+        "Root5",
+        "Root6",
+        "Root7",
+        "Root8",
+        "Root9",
+        "Root10",
+        "Root11",
+        "Root12",
+        "Root13",
+        "Root14",
+        "Root15",
+        "Root16",
+        "Root17"
+      ],
+      "semanticOracle": {
+        "scenarios": 17,
+        "messagesPerScenario": 2,
+        "sharedGlobalTimeAxis": false
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "SequenceView-32",
+      "file": "SequenceView.sysml",
+      "viewName": "MultiSequenceView::roots32",
+      "viewKind": "SequenceView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 32,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3",
+        "Root4",
+        "Root5",
+        "Root6",
+        "Root7",
+        "Root8",
+        "Root9",
+        "Root10",
+        "Root11",
+        "Root12",
+        "Root13",
+        "Root14",
+        "Root15",
+        "Root16",
+        "Root17",
+        "Root18",
+        "Root19",
+        "Root20",
+        "Root21",
+        "Root22",
+        "Root23",
+        "Root24",
+        "Root25",
+        "Root26",
+        "Root27",
+        "Root28",
+        "Root29",
+        "Root30",
+        "Root31",
+        "Root32"
+      ],
+      "semanticOracle": {
+        "scenarios": 32,
+        "messagesPerScenario": 2,
+        "sharedGlobalTimeAxis": false
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "SequenceView-33",
+      "file": "SequenceView.sysml",
+      "viewName": "MultiSequenceView::roots33",
+      "viewKind": "SequenceView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 33,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3",
+        "Root4",
+        "Root5",
+        "Root6",
+        "Root7",
+        "Root8",
+        "Root9",
+        "Root10",
+        "Root11",
+        "Root12",
+        "Root13",
+        "Root14",
+        "Root15",
+        "Root16",
+        "Root17",
+        "Root18",
+        "Root19",
+        "Root20",
+        "Root21",
+        "Root22",
+        "Root23",
+        "Root24",
+        "Root25",
+        "Root26",
+        "Root27",
+        "Root28",
+        "Root29",
+        "Root30",
+        "Root31",
+        "Root32",
+        "Root33"
+      ],
+      "semanticOracle": {
+        "scenarios": 33,
+        "messagesPerScenario": 2,
+        "sharedGlobalTimeAxis": false
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "BrowserView-1",
+      "file": "BrowserView.sysml",
+      "viewName": "MultiBrowserView::roots1",
+      "viewKind": "BrowserView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 1,
+      "expectedRootNames": [
+        "Root1"
+      ],
+      "semanticOracle": {
+        "distinctRootIdentity": true
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "BrowserView-2",
+      "file": "BrowserView.sysml",
+      "viewName": "MultiBrowserView::roots2",
+      "viewKind": "BrowserView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 2,
+      "expectedRootNames": [
+        "Root1",
+        "Root2"
+      ],
+      "semanticOracle": {
+        "distinctRootIdentity": true
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "BrowserView-3",
+      "file": "BrowserView.sysml",
+      "viewName": "MultiBrowserView::roots3",
+      "viewKind": "BrowserView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 3,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3"
+      ],
+      "semanticOracle": {
+        "distinctRootIdentity": true
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "BrowserView-8",
+      "file": "BrowserView.sysml",
+      "viewName": "MultiBrowserView::roots8",
+      "viewKind": "BrowserView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 8,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3",
+        "Root4",
+        "Root5",
+        "Root6",
+        "Root7",
+        "Root8"
+      ],
+      "semanticOracle": {
+        "distinctRootIdentity": true
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "BrowserView-9",
+      "file": "BrowserView.sysml",
+      "viewName": "MultiBrowserView::roots9",
+      "viewKind": "BrowserView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 9,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3",
+        "Root4",
+        "Root5",
+        "Root6",
+        "Root7",
+        "Root8",
+        "Root9"
+      ],
+      "semanticOracle": {
+        "distinctRootIdentity": true
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "BrowserView-16",
+      "file": "BrowserView.sysml",
+      "viewName": "MultiBrowserView::roots16",
+      "viewKind": "BrowserView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 16,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3",
+        "Root4",
+        "Root5",
+        "Root6",
+        "Root7",
+        "Root8",
+        "Root9",
+        "Root10",
+        "Root11",
+        "Root12",
+        "Root13",
+        "Root14",
+        "Root15",
+        "Root16"
+      ],
+      "semanticOracle": {
+        "distinctRootIdentity": true
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "BrowserView-17",
+      "file": "BrowserView.sysml",
+      "viewName": "MultiBrowserView::roots17",
+      "viewKind": "BrowserView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 17,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3",
+        "Root4",
+        "Root5",
+        "Root6",
+        "Root7",
+        "Root8",
+        "Root9",
+        "Root10",
+        "Root11",
+        "Root12",
+        "Root13",
+        "Root14",
+        "Root15",
+        "Root16",
+        "Root17"
+      ],
+      "semanticOracle": {
+        "distinctRootIdentity": true
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "BrowserView-32",
+      "file": "BrowserView.sysml",
+      "viewName": "MultiBrowserView::roots32",
+      "viewKind": "BrowserView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 32,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3",
+        "Root4",
+        "Root5",
+        "Root6",
+        "Root7",
+        "Root8",
+        "Root9",
+        "Root10",
+        "Root11",
+        "Root12",
+        "Root13",
+        "Root14",
+        "Root15",
+        "Root16",
+        "Root17",
+        "Root18",
+        "Root19",
+        "Root20",
+        "Root21",
+        "Root22",
+        "Root23",
+        "Root24",
+        "Root25",
+        "Root26",
+        "Root27",
+        "Root28",
+        "Root29",
+        "Root30",
+        "Root31",
+        "Root32"
+      ],
+      "semanticOracle": {
+        "distinctRootIdentity": true
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "BrowserView-33",
+      "file": "BrowserView.sysml",
+      "viewName": "MultiBrowserView::roots33",
+      "viewKind": "BrowserView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 33,
+      "expectedRootNames": [
+        "Root1",
+        "Root2",
+        "Root3",
+        "Root4",
+        "Root5",
+        "Root6",
+        "Root7",
+        "Root8",
+        "Root9",
+        "Root10",
+        "Root11",
+        "Root12",
+        "Root13",
+        "Root14",
+        "Root15",
+        "Root16",
+        "Root17",
+        "Root18",
+        "Root19",
+        "Root20",
+        "Root21",
+        "Root22",
+        "Root23",
+        "Root24",
+        "Root25",
+        "Root26",
+        "Root27",
+        "Root28",
+        "Root29",
+        "Root30",
+        "Root31",
+        "Root32",
+        "Root33"
+      ],
+      "semanticOracle": {
+        "distinctRootIdentity": true
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "CrossRootConnection",
+      "file": "CrossRootConnection.sysml",
+      "viewName": "CrossRootConnection::target",
+      "viewKind": "InterconnectionView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 2,
+      "semanticOracle": {
+        "exposedElements": 3,
+        "endpoints": [
+          "a.p",
+          "b.p"
+        ],
+        "connections": 1
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "OverlappingExpose",
+      "file": "OverlappingExpose.sysml",
+      "viewName": "OverlappingExpose::target",
+      "viewKind": "InterconnectionView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 1,
+      "semanticOracle": {
+        "childRepresentationsInSameContext": 1,
+        "duplicateTopLevelChild": false
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "DefinitionAndUsages",
+      "file": "DefinitionAndUsages.sysml",
+      "viewName": "DefinitionAndUsages::target",
+      "viewKind": "GeneralView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 3,
+      "semanticOracle": {
+        "distinctUsageContexts": [
+          "u1",
+          "u2"
+        ],
+        "definitionIsNotInstance": true
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "MixedRequirements",
+      "file": "MixedRequirements.sysml",
+      "viewName": "MixedRequirements::target",
+      "viewKind": "GeneralView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 3,
+      "semanticOracle": {
+        "mustNotTreatSatisfyAsContainment": true
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "LongLabels",
+      "file": "LongLabels.sysml",
+      "viewName": "LongLabels::target",
+      "viewKind": "InterconnectionView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 2,
+      "semanticOracle": {
+        "labelsMustWrap": true
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "CrossRootCycle",
+      "file": "CrossRootCycle.sysml",
+      "viewName": "CrossRootCycle::target",
+      "viewKind": "InterconnectionView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 3,
+      "semanticOracle": {
+        "exposedElements": 6,
+        "connections": 3,
+        "edgeCrossingDoesNotCreateJunction": true
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "SameNameDifferentContext",
+      "file": "SameNameDifferentContext.sysml",
+      "viewName": "SameNameDifferentContext::target",
+      "viewKind": "GeneralView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 2,
+      "semanticOracle": {
+        "sameNameDistinctPaths": [
+          "a.sensor",
+          "b.sensor"
+        ]
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "DeepContainment",
+      "file": "DeepContainment.sysml",
+      "viewName": "DeepContainment::target",
+      "viewKind": "InterconnectionView",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": true,
+      "expectedDisplayRoots": 2,
+      "semanticOracle": {
+        "sourceDepth": 6,
+        "initialDisplayDepth": 2,
+        "noSilentRemoval": true
+      },
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "InvalidSyntax",
+      "file": "InvalidSyntax.sysml",
+      "expectedSyntaxValid": false,
+      "targetCanvasStatus": "UNVERIFIED"
+    },
+    {
+      "id": "InvalidEndpoint",
+      "file": "InvalidEndpoint.sysml",
+      "expectedSyntaxValid": true,
+      "expectedSemanticValid": false,
+      "targetCanvasStatus": "UNVERIFIED"
+    }
+  ]
+}

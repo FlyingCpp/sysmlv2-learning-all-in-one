@@ -7,6 +7,9 @@ ARG SYSML_KERNEL_VERSION=0.59.0
 WORKDIR /app
 COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
 COPY apps/validator ./apps/validator
+COPY packages/sysml-plantuml-service ./packages/sysml-plantuml-service
+COPY --from=node-runtime /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
+RUN node /usr/local/lib/node_modules/npm/bin/npm-cli.js ci --prefix packages/sysml-plantuml-service --omit=dev --no-audit --no-fund
 COPY packages/agent-resource-policy ./packages/agent-resource-policy
 COPY packages/teacher-contract/official-validator-artifacts.json ./packages/teacher-contract/official-validator-artifacts.json
 COPY packages/teacher-contract/official-validator-runtime-artifacts.json ./packages/teacher-contract/official-validator-runtime-artifacts.json
@@ -39,6 +42,7 @@ RUN mkdir -p /app/apps/validator/official/classes \
   && javac -cp "/opt/sysml/sysml/jupyter-sysml-kernel-${SYSML_KERNEL_VERSION}-all.jar" \
     -d /app/apps/validator/official/classes \
     /app/apps/validator/official/src/org/sysmlv2/learning/validator/*.java \
+    /app/packages/sysml-plantuml-service/official/src/org/sysmlv2/learning/validator/*.java \
   && node /app/apps/validator/official/verify-artifact-manifest.js \
     --manifest /app/packages/teacher-contract/official-validator-runtime-artifacts.json \
     --archive /tmp/jupyter-sysml-kernel.zip \
@@ -55,6 +59,7 @@ ARG SYSML_KERNEL_VERSION=0.59.0
 COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
 WORKDIR /app
 COPY --from=builder /app/apps/validator ./apps/validator
+COPY --from=builder /app/packages/sysml-plantuml-service ./packages/sysml-plantuml-service
 COPY --from=builder /app/packages/teacher-contract ./packages/teacher-contract
 COPY --from=builder /app/packages/agent-resource-policy ./packages/agent-resource-policy
 COPY --from=builder /opt/sysml /opt/sysml
