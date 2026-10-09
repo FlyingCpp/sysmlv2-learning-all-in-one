@@ -238,7 +238,9 @@ function protocolStatusForStage(protocol, reasoningPolicy) {
 
 function contextCapabilityForAlias(aliasReference, aliasesById, aliasesByRuntimeName, deployments, legacyGroups) {
   const configuredAlias = aliasesById.get(aliasReference) || aliasesByRuntimeName.get(aliasReference);
-  const litellmAlias = String(configuredAlias?.litellmAlias || aliasReference).trim();
+  // 策略以legacyAliasId(modelName)引用旧modelGroups；与executionProtocolForAlias一致地映射回运行时名称。
+  const legacyGroupName = [...legacyGroups.keys()].find((modelName) => legacyAliasId(modelName) === aliasReference);
+  const litellmAlias = String(configuredAlias?.litellmAlias || legacyGroupName || aliasReference).trim();
   const memberDeployments = configuredAlias
     ? (configuredAlias.members || [])
       .map((member) => deployments.get(String(member?.deploymentId || '')))
