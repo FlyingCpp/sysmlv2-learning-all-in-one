@@ -146,6 +146,19 @@ assert.equal(ambiguous.stages.main.protocolStatus, 'ambiguous');
 assert.equal(validateModelCapabilitySnapshot(ambiguous).ok, false,
   '同一Alias混用不同Provider协议时不得冻结为可执行Run。');
 
+const legacyGroups = modelCapabilitySnapshotFromLiteLlmVersion({
+  versionId: 'default-litellm-config-v1',
+  checksum: `sha256:${'a'.repeat(64)}`,
+  config: {
+    schemaVersion: 1,
+    modelGroups: [{ modelName: 'ai-teacher-fast', deployments: [{ provider: 'deepseek', model: 'deepseek/deepseek-v4-flash', enabled: true }] }]
+  }
+}, { main: 'legacy_alias_cbbcacfb63512c9d581239c5' }, { main: 'disabled' });
+assert.equal(legacyGroups.stages.main.alias, 'ai-teacher-fast',
+  '策略中的legacyAliasId必须解析回LiteLLM运行时名称，不能把ID当作模型名发送。');
+assert.equal(legacyGroups.stages.main.aliasId, 'legacy_alias_cbbcacfb63512c9d581239c5');
+assert.equal(validateModelCapabilitySnapshot(legacyGroups).ok, true);
+
 console.log('AI Teacher model capability snapshot tests passed.');
 
 function providerAwareConfig() {
